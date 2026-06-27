@@ -6,13 +6,13 @@ from src.interfaces.sqlite_repository import SQLiteProductRepository
 @pytest.fixture
 def repo():
     # Setup: Utiliza um arquivo temporário para não sujar o banco de produção
-    db_path = "test_estoque.db"
+    db_path = "data/test_estoque.db"
     repository = SQLiteProductRepository(db_path=db_path)
     yield repository
     
     # Teardown: Limpeza do banco de dados de teste após execução
     if os.path.exists(db_path):
-        os.remove(db_path)
+        if os.path.exists(db_path): os.remove(db_path)
 
 def test_repository_save_and_get(repo):
     p = Product(id="KPC-300", name="Macarrão 500g", quantity=50)

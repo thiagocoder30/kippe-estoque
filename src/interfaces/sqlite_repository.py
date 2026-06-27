@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from src.domain.product import Product
 
 class SQLiteProductRepository:
-    def __init__(self, db_path: str = "estoque_producao.db"):
+    def __init__(self, db_path: str = "data/estoque_producao.db"):
         self.db_path = db_path
         self._init_db()
 

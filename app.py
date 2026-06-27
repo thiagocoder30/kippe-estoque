@@ -3,7 +3,7 @@ from src.interfaces.sqlite_repository import SQLiteProductRepository
 from src.use_cases.manage_stock import ManageStockUseCase
 
 app = Flask(__name__)
-repo = SQLiteProductRepository("estoque_producao.db")
+repo = SQLiteProductRepository("data/estoque_producao.db")
 uc = ManageStockUseCase(repository=repo)
 
 @app.route('/')

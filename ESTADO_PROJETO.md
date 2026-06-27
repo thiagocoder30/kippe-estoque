@@ -8,14 +8,14 @@
 ## 2. Status Executivo
 * **Programa Atual:** PROGRAMA A (Foundation)
 * **Gate Alvo:** GATE A - Foundation Ready
-* **Última Entrega:** Sprint A001 (Architecture & Testing Framework)
+* **Última Entrega:** Sprint A002 (Core Refactoring & Topology Alignment)
 
 ## 3. Diretórios e Artefatos Essenciais
+* `data/` - (Fronteira de isolamento de persistência de dados físicos)
 * `docs/architecture/MANIFESTO.md` - (Constituição do Sistema)
 * `docs/ROADMAP.md` - (Planejamento de Capacidades)
-* `install/sprints/` - (Motor de Integração Contínua)
+* `install/sprints/` - (Motor de Integração Contínua limpo e arquivado)
 * `install/lib/testing.sh` - (Orquestrador de Qualidade Integrada)
-* `reports/logs/` - (Rastreabilidade de Execução Local)
 
 ## 4. Próxima Ação Requerida
-* **Sprint A002 (Refatoração Core):** Integrar e refatorar o código-fonte desenvolvido na prototipação inicial para dentro das diretrizes estritas do nosso novo framework estrutural.
+* **Sprint A003 (Eventos/Observabilidade):** Implementar um mecanismo de log unificado na aplicação Python. Isso garantirá que todas as rejeições da regra de negócio (ex: tentativa de dar baixa sem lote, FEFO violation) sejam gravadas em log institucional (`reports/logs/app.log`), saindo da caixa-preta e facilitando o trace da operação.

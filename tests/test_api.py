@@ -5,7 +5,7 @@ import os
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
-    repo.db_path = "test_api_flask.db"
+    repo.db_path = "data/test_api_flask.db"
     repo._init_db()
     
     with repo._get_connection() as conn:
@@ -15,8 +15,8 @@ def client():
     with app.test_client() as client:
         yield client
         
-    if os.path.exists("test_api_flask.db"):
-        os.remove("test_api_flask.db")
+    if os.path.exists("data/test_api_flask.db"):
+        os.remove("data/test_api_flask.db")
 
 def test_api_create_and_list(client):
     res_post = client.post('/api/produto', json={'id': 'SR-71', 'name': 'Pão de Forma', 'quantity': 5})

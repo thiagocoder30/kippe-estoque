@@ -6,7 +6,7 @@ from src.use_cases.manage_stock import ManageStockUseCase
 
 @pytest.fixture
 def use_case():
-    db_path = "test_usecase.db"
+    db_path = "data/test_usecase.db"
     repo = SQLiteProductRepository(db_path=db_path)
     # Limpa base para testes
     with repo._get_connection() as conn:

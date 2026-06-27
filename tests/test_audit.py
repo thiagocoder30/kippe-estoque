@@ -5,7 +5,7 @@ import os
 
 @pytest.fixture
 def repo():
-    db = "test_audit.db"
+    db = "data/test_audit.db"
     repo = SQLiteProductRepository(db)
     yield repo
     if os.path.exists(db):
