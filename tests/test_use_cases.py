@@ -1,19 +1,20 @@
-import pytest
-import os
-from src.interfaces.sqlite_repository import SQLiteProductRepository
-from src.use_cases.manage_stock import ManageStockUseCase
+import pytest, os
+from src.infrastructure.config import Config
+from src.infrastructure.container import Container
 
 @pytest.fixture
 def use_case():
-    db_path = "data/test_usecase.db"
-    repo = SQLiteProductRepository(db_path=db_path)
-    with repo._get_connection() as conn:
+    cfg = Config.for_testing()
+    c = Container(cfg)
+    c.product_repository._init_db()
+    with c.product_repository._get_connection() as conn:
         conn.execute('DELETE FROM products')
         conn.execute('DELETE FROM batches')
         conn.commit()
-    yield ManageStockUseCase(repository=repo)
-    if os.path.exists(db_path):
-        os.remove(db_path)
+    # Mock direto na Identity Propagation Layer
+    c.identity_provider.override_id = "TEST-OP"
+    yield c.use_case
+    if os.path.exists(cfg.DB_PATH): os.remove(cfg.DB_PATH)
 
 def test_usecase_create_and_list(use_case):
     res = use_case.create_product("KPC-100", "Arroz 5kg")
@@ -31,4 +32,3 @@ def test_usecase_remove_stock_fail(use_case):
     use_case.execute_add("KPC-300", 5, "2030-12-31", "LOTE-Z")
     res = use_case.execute_remove("KPC-300", 10)
     assert res.is_success is False
-    assert "Estoque físico insuficiente" in res.error

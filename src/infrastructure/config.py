@@ -3,26 +3,22 @@ import os
 class Config:
     """
     Resolution Layer para configurações de ambiente.
-    Remove todos os hardcodes da plataforma e centraliza a injeção.
+    Injeta chaves criptográficas para governança de sessões seguras.
     """
     def __init__(self):
-        # Ambiente (development, testing, production)
         self.ENV = os.environ.get("KIPPE_ENV", "development")
-        
-        # Persistência
         self.DB_PATH = os.environ.get("KIPPE_DB_PATH", "data/estoque_producao.db")
-        
-        # Observabilidade
         self.LOG_PATH = os.environ.get("KIPPE_LOG_PATH", "reports/logs/app.log")
-        
-        # Rede / Bind
         self.HOST = os.environ.get("KIPPE_HOST", "0.0.0.0")
         self.PORT = int(os.environ.get("KIPPE_PORT", 5000))
+        
+        # 12-Factor Secret Management
+        self.SECRET_KEY = os.environ.get("KIPPE_SECRET_KEY", "9xW_institutional_secure_fallback_core_key_#71")
 
     @classmethod
     def for_testing(cls):
-        """Factory para forçar ambiente de teste de forma estrita."""
         os.environ["KIPPE_ENV"] = "testing"
         os.environ["KIPPE_DB_PATH"] = "data/test_strict.db"
         os.environ["KIPPE_LOG_PATH"] = "data/test_strict.log"
+        os.environ["KIPPE_SECRET_KEY"] = "test-crypto-key-signature"
         return cls()

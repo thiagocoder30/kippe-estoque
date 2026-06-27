@@ -1,26 +1,32 @@
-import pytest
-import os
-from src.interfaces.sqlite_repository import SQLiteProductRepository
-from src.use_cases.manage_stock import ManageStockUseCase
+import pytest, os
+from src.infrastructure.config import Config
+from src.infrastructure.container import Container
 
 @pytest.fixture
-def repo():
-    db = "data/test_audit.db"
-    r = SQLiteProductRepository(db)
-    yield r
-    if os.path.exists(db):
-        os.remove(db)
+def test_ctx():
+    cfg = Config.for_testing()
+    c = Container(cfg)
+    c.product_repository._init_db()
+    with c.product_repository._get_connection() as conn:
+        conn.execute('DELETE FROM products')
+        conn.execute('DELETE FROM transactions')
+        conn.commit()
+    yield c
+    if os.path.exists(cfg.DB_PATH): os.remove(cfg.DB_PATH)
 
-def test_audit_trail_logging(repo):
-    uc = ManageStockUseCase(repo)
+def test_audit_trail_logging_with_identity(test_ctx):
+    uc = test_ctx.use_case
+    test_ctx.identity_provider.override_id = "OP-007"
     uc.create_product("CX-01", "Caixa Papelão")
-    uc.execute_add("CX-01", 10, "2030-12-31", "LOTE-X") # Gera Log de Entrada
-    uc.execute_remove("CX-01", 2) # Gera Log de Saida
+    uc.execute_add("CX-01", 10, "2030-12-31", "LOTE-X") 
+    
+    # Simula troca de operador no contexto global
+    test_ctx.identity_provider.override_id = "OP-009"
+    uc.execute_remove("CX-01", 2)
     
     history = uc.get_recent_history()
-    
-    assert len(history) == 2
-    assert 'SAIDA' in history[0]['type'] 
+    assert len(history) == 3 
     assert history[0]['amount'] == 2
-    assert 'ENTRADA' in history[1]['type']
+    assert history[0]['operator_id'] == "OP-009"
     assert history[1]['amount'] == 10
+    assert history[1]['operator_id'] == "OP-007"

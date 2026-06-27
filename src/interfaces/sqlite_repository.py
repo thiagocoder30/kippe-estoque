@@ -27,7 +27,8 @@ class SQLiteProductRepository:
                     product_id TEXT NOT NULL,
                     type TEXT NOT NULL,
                     amount INTEGER NOT NULL,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    operator_id TEXT NOT NULL DEFAULT 'SYSTEM'
                 )
             ''')
             conn.execute('''
@@ -39,6 +40,13 @@ class SQLiteProductRepository:
                     PRIMARY KEY (product_id, batch_code)
                 )
             ''')
+            
+            # Migration Segura: Adiciona coluna operator_id se o banco legado já existir
+            cursor = conn.execute("PRAGMA table_info(transactions)")
+            columns = [info['name'] for info in cursor.fetchall()]
+            if 'operator_id' not in columns:
+                conn.execute("ALTER TABLE transactions ADD COLUMN operator_id TEXT NOT NULL DEFAULT 'SYSTEM'")
+                
             conn.commit()
 
     def save(self, product: Product) -> None:
@@ -58,9 +66,10 @@ class SQLiteProductRepository:
                 ''', (product.id, batch_code, data['exp'], data['qty']))
             conn.commit()
 
-    def log_transaction(self, product_id: str, trans_type: str, amount: int) -> None:
+    def log_transaction(self, product_id: str, trans_type: str, amount: int, operator_id: str) -> None:
         with self._get_connection() as conn:
-            conn.execute('INSERT INTO transactions (product_id, type, amount) VALUES (?, ?, ?)', (product_id, trans_type, amount))
+            conn.execute('INSERT INTO transactions (product_id, type, amount, operator_id) VALUES (?, ?, ?, ?)', 
+                         (product_id, trans_type, amount, operator_id))
             conn.commit()
 
     def get_by_id(self, product_id: str) -> Optional[Product]:
@@ -85,8 +94,9 @@ class SQLiteProductRepository:
 
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
+            # Integração Visual: Retorna o Operator ID para a interface
             rows = conn.execute('''
-                SELECT t.id, t.type, t.amount, datetime(t.timestamp, 'localtime') as data, p.name 
+                SELECT t.id, t.type, t.amount, datetime(t.timestamp, 'localtime') as data, p.name, t.operator_id 
                 FROM transactions t
                 JOIN products p ON t.product_id = p.id
                 ORDER BY t.id DESC LIMIT ?
