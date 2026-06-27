@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kippe-Estoque Core</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #eef2f5; margin: 0; padding: 15px; color: #333; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 10px; cursor: pointer; color: white; transition: 0.2s; }
+        .btn:active { transform: scale(0.98); }
+        .btn-blue { background: #007bff; }
+        .btn-green { background: #28a745; }
+        .btn-red { background: #dc3545; }
+        input { width: 100%; padding: 12px; margin: 5px 0 15px; border: 1px solid #dcdcdc; border-radius: 8px; box-sizing: border-box; font-size:16px; background: #f9f9f9;}
+        #reader { width: 100%; border-radius: 12px; overflow: hidden; margin-bottom: 10px; border: none; }
+        .estoque-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .estoque-item:last-child { border-bottom: none; }
+        .badge { background: #007bff; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2 style="margin:0; color:#1a1a1a;">Kippe-Estoque</h2>
+        <small style="color:#666;">Sistema de Alta Performance</small>
+    </div>
+
+    <div class="card">
+        <button class="btn btn-blue" onclick="startScanner()">📷 Iniciar Leitor de Código</button>
+        <div id="reader"></div>
+    </div>
+
+    <div class="card" id="manual-entry">
+        <h3 style="margin-top:0;">Operação de Caixa</h3>
+        <input type="text" id="sku" placeholder="SKU do Produto LIDO" readonly>
+        <input type="text" id="nome" placeholder="Nome (Apenas para novos cadastros)">
+        <input type="number" id="qtd" placeholder="Quantidade para movimentar" value="1">
+        
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-green" onclick="processarTransacao('+')">+ Entrada</button>
+            <button class="btn btn-red" onclick="processarTransacao('-')">- Saída</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0;">Inventário Vivo</h3>
+        <button class="btn" style="background:#6c757d;" onclick="carregarEstoque()">🔄 Atualizar Lista</button>
+        <div id="lista-estoque" style="margin-top: 15px;"></div>
+    </div>
+
+    <script>
+        let html5QrcodeScanner;
+
+        function startScanner() {
+            if(html5QrcodeScanner) return;
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            
+            // Configurado para câmera traseira (environment) com alta taxa de quadros (fps)
+            html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 15, qrbox: {width: 250, height: 150} }, 
+            (decodedText) => {
+                document.getElementById('sku').value = decodedText;
+                // Feedback tátil no celular se suportado
+                if (navigator.vibrate) navigator.vibrate(100); 
+                html5QrcodeScanner.stop();
+                html5QrcodeScanner = null;
+                verificarCadastro(decodedText);
+            },
+            (err) => { /* ignora erros de frame vazio */ }).catch(err => console.error(err));
+        }
+
+        async function verificarCadastro(sku) {
+            const res = await fetch(`/api/produto/${sku}`);
+            if(res.status === 404) {
+                document.getElementById('nome').focus();
+                alert("Novo Código Identificado! Digite o nome da mercadoria para cadastra-la.");
+            } else {
+                const data = await res.json();
+                document.getElementById('nome').value = data.name;
+                document.getElementById('qtd').focus();
+            }
+        }
+
+        async function processarTransacao(operacao) {
+            const sku = document.getElementById('sku').value;
+            const nome = document.getElementById('nome').value;
+            const qtd = parseInt(document.getElementById('qtd').value) || 0;
+
+            if(!sku || qtd <= 0) return alert("Erro: SKU e Quantidade (>0) são obrigatórios.");
+
+            // Cadastro Automático On-The-Fly se não existir
+            let resCheck = await fetch(`/api/produto/${sku}`);
+            if(resCheck.status === 404) {
+                if(!nome) return alert("Para o primeiro registro, o NOME é obrigatório.");
+                await fetch('/api/produto', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: sku, name: nome, quantity: 0})
+                });
+            }
+
+            // Executa o Domínio Core (Use Cases)
+            const endpoint = operacao === '+' ? '/api/entrada' : '/api/saida';
+            const resMov = await fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: sku, amount: qtd})
+            });
+
+            const data = await resMov.json();
+            if(resMov.ok) {
+                document.getElementById('sku').value = '';
+                document.getElementById('nome').value = '';
+                document.getElementById('qtd').value = '1';
+                carregarEstoque();
+            } else {
+                alert("Rejeição Core: " + data.error);
+            }
+        }
+
+        async function carregarEstoque() {
+            const res = await fetch('/api/produtos');
+            const produtos = await res.json();
+            let html = '';
+            produtos.forEach(p => {
+                html += `<div class="estoque-item">
+                            <span><b>${p.name}</b> <br><small style="color:#888">${p.id}</small></span>
+                            <span class="badge">${p.quantity} un</span>
+                         </div>`;
+            });
+            document.getElementById('lista-estoque').innerHTML = html;
+        }
+
+        carregarEstoque();
+    </script>
+</body>
+</html>
