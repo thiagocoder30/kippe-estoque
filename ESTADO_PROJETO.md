@@ -1,22 +1,18 @@
 # 🌐 KIPPE PLATFORM: Institutional Retail Operations
-
 ## 1. Visão Estratégica Global
 * **Propósito:** Plataforma institucional de operações para o varejo de alto giro.
 * **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
-* **Maturidade Atual do Sistema:** Nível 3 (Corporativo) - Contratos Congelados.
-
+* **Maturidade Atual do Sistema:** Nível 3 (Corporativo).
 ## 2. Status Executivo
 * **Programa Atual:** PROGRAMA C (Inventory)
 * **Gates Transpostos:**
   * [ GATE A - FOUNDATION READY ] ✅
   * [ GATE B - SECURITY READY ] ✅
   * [ GATE B.1 - ARCHITECTURE FREEZE ] ✅
-* **Última Entrega:** Sprint A005.4 (Architecture Freeze & Inventory Domain Design - INV000)
-
+* **Última Entrega:** Sprint INV001.1 (Aggregate Observability Contract)
 ## 3. Diretórios e Artefatos Essenciais
-* \`docs/architecture/FROZEN_CONTRACTS.md\` -> (Mural de Imutabilidade Estrutural)
-* \`docs/architecture/INV000-INVENTORY-DESIGN.md\` -> (Especificação Conceitual do Domínio C)
-* \`src/infrastructure/container.py\` -> (Container de Dependências Estabilizado)
-
+* `src/use_cases/manage_stock.py` -> (Regras de negócio com observabilidade rigorosa)
+* `src/domain/product.py` -> (Aggregate Root blindado)
+* `docs/checkpoints/` -> (Scorecards arquiteturais mantidos)
 ## 4. Próxima Ação Requerida
-* **Sprint INV001 (Product Catalog & Base Models):** Iniciar a codificação das capacidades mercantis básicas do catálogo. Mapear a estrutura física do Produto estendendo as validações para abarcar Unidades de Medida e Status de Comercialização, amarrando o modelo puro ao repositório de persistência SQLite protegido.
+* **Sprint INV002 (Categories & Product Classification):** Com as Invariantes do Agregado funcionando e auditáveis através da camada de observabilidade congelada, podemos expandir o modelo e introduzir a ramificação estrutural de Classificações Mercantis.
