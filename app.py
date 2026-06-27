@@ -35,6 +35,19 @@ def me():
         return jsonify({'authenticated': True, 'operator': {'id': op_id, 'name': session.get('operator_name', 'Test Agent'), 'role': session.get('operator_role', 'OPERADOR')}})
     return jsonify({'authenticated': False}), 200
 
+
+@app.route('/api/categorias', methods=['GET'])
+def get_categorias():
+    return jsonify([{'id': c.id, 'name': c.name, 'parent_id': c.parent_id} for c in container.category_use_case.list_all()])
+@app.route('/api/categoria', methods=['POST'])
+def create_categoria():
+    if not _has_valid_session(): return jsonify({'error': 'Operador não autenticado.'}), 401
+    data = request.json or {}
+    res = container.category_use_case.create_category(data.get('id'), data.get('name'), data.get('parent_id'))
+    if res.is_success: return jsonify({'message': 'OK'}), 201
+    if "Autorização negada" in res.error: return jsonify({"error": res.error}), 403
+    return jsonify({'error': res.error}), 400
+
 @app.route('/api/produtos', methods=['GET'])
 def get_produtos():
     return jsonify([{'id': p.id, 'name': p.name, 'quantity': p.quantity} for p in container.use_case.list_all()])
@@ -56,7 +69,7 @@ def get_picking_info(sku):
 def create_produto():
     if not _has_valid_session(): return jsonify({'error': 'Operador não autenticado.'}), 401
     data = request.json or {}
-    res = container.use_case.create_product(data.get('id'), data.get('name'))
+    res = container.use_case.create_product(data.get('id'), data.get('name'), data.get('unit_of_measure', 'un'), data.get('status', 'ATIVO'), data.get('category_id'))
     return (jsonify({'message': 'OK'}), 201) if res.is_success else (jsonify({'error': res.error}), 400)
 
 @app.route('/api/entrada', methods=['POST'])

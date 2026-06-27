@@ -9,10 +9,10 @@
   * [ GATE A - FOUNDATION READY ] ✅
   * [ GATE B - SECURITY READY ] ✅
   * [ GATE B.1 - ARCHITECTURE FREEZE ] ✅
-* **Última Entrega:** Sprint INV001.1 (Aggregate Observability Contract)
+* **Última Entrega:** Sprint INV002.1 (Runner Path Resolution & Categories)
 ## 3. Diretórios e Artefatos Essenciais
-* `src/use_cases/manage_stock.py` -> (Regras de negócio com observabilidade rigorosa)
-* `src/domain/product.py` -> (Aggregate Root blindado)
-* `docs/checkpoints/` -> (Scorecards arquiteturais mantidos)
+* `src/domain/category.py` -> (Entidade Hierárquica Mercantil)
+* `src/use_cases/manage_categories.py` -> (Use Case de Classificação e Regras de Negócio)
+* `docs/checkpoints/ARCHITECTURE_SCORECARD-INV002.1.md` -> (Métrica de Qualidade)
 ## 4. Próxima Ação Requerida
-* **Sprint INV002 (Categories & Product Classification):** Com as Invariantes do Agregado funcionando e auditáveis através da camada de observabilidade congelada, podemos expandir o modelo e introduzir a ramificação estrutural de Classificações Mercantis.
+* **Sprint INV003 (Batch & Lot Management):** Desintegrar o dicionário interno em memória do Agregado de Produto, formalizando o Lote (`Batch/Lot`) como uma entidade independente da persistência. Essencial para garantir as invariantes de data de validade antes da ativação do motor FEFO nativo (INV004).
