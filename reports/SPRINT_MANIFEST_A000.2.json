@@ -1,0 +1,13 @@
+{
+  "platform": "KIPPE PLATFORM",
+  "framework_version": "1.0.0",
+  "program": "A",
+  "sprint": "A000.2",
+  "version": "1.0.0",
+  "status": "SUCCESS",
+  "repository": "kippe-estoque",
+  "branch": "main",
+  "commit": "241a6ba",
+  "generated_at": "2026-06-27T11:36:34-0300",
+  "next_sprint": "A001"
+}

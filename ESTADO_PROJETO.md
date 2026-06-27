@@ -1,17 +1,20 @@
-# 📦 Kippe-Estoque Core: Master Roadmap Institucional
+# 🌐 KIPPE PLATFORM: Institutional Retail Operations
 
-## 1. Visão Geral
-* **Objetivo:** Controle logístico WMS, prevenção de rupturas e falhas sanitárias.
-* **Arquitetura:** Clean Architecture, Algoritmo FEFO no Core, RESTful API (Flask).
-* **Ambiente:** Termux Server (Galaxy A50) + Client HTML5.
+## 1. Visão Estratégica Global
+* **Propósito:** Plataforma institucional de operações para o varejo de alto giro.
+* **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
+* **Maturidade Atual do Sistema:** Nível 1 (Funcional) caminhando para Nível 2.
 
-## 2. Roadmap de Engenharia (Sprints)
-* [x] Sprints 001 a 007: Core O(1), Repositório SQLite, API Web, Scanner HTML5 e Audit Trail.
+## 2. Status Executivo
+* **Programa Atual:** PROGRAMA A (Foundation)
+* **Gate Alvo:** GATE A - Foundation Ready
+* **Última Entrega:** Sprint A000.2 (Governance & Manifesto)
 
-### FASE 4: Governança & Segurança Logística (Atual)
-* [x] **Sprint 008 (V2):** FEFO Institucional. Adicionado controle estrito de `Lotes` e Aba de Reposição (Pick-List), gerando rotas autônomas de retirada de depósito baseadas na data de vencimento.
-* [ ] **Sprint 009:** Autenticação de Operador (Sistema de PIN numérico no Audit Trail).
+## 3. Diretórios e Artefatos Essenciais
+* `docs/architecture/MANIFESTO.md` - (Constituição do Sistema)
+* `docs/ROADMAP.md` - (Planejamento de Capacidades)
+* `install/sprints/` - (Motor de Integração Contínua)
+* `reports/logs/` - (Rastreabilidade de Instalação Local)
 
-### FASE 5: Inteligência de Negócio & Relatórios (A Fazer)
-* [ ] **Sprint 010:** Dashboard Analítico (Alerta de ruptura de estoque).
-* [ ] **Sprint 011:** Exportação de Dados (CSV das movimentações).
+## 4. Próxima Ação Requerida
+* **Sprint A001 (Arquitetura):** Integrar o módulo de Testes (`install/tests/`) ao framework de fundação, garantindo que toda Sprint entregue já venha acompanhada de sua validação automática, pavimentando o caminho sólido para o Gate A.
