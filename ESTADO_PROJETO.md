@@ -1,29 +1,29 @@
 # Estado do Projeto: Kippe-Estoque Core
 
 ## 1. Visão Geral e Contexto
-* **Objetivo:** Sistema de alta performance para supermercados de bairro (giro rápido).
+* **Objetivo:** Sistema de alta performance (Nível Institucional) para controle logístico de alto volume.
 * **Ambiente de Execução:** Termux (Galaxy A50).
-* **Stack:** Python, Pytest, Bash Automation, SQLite, CLI Interativa.
+* **Stack:** Python, Pytest, Bash Automation, SQLite, Integração Nativa Termux-API.
 
 ## 2. Arquitetura Atual (Clean Architecture)
-* **Domain:** `Product` Entity, `Result` Pattern.
-* **Use Cases:** `ManageStockUseCase` orquestrador, operando com Injeção de Dependência.
-* **Interfaces (Adapters):** Repositório SQLite idempotente.
-* **Controller/UI:** Interface CLI iterativa acoplada no `main.py`.
+* **Domain:** `Product`, `Result`.
+* **Use Cases:** `ManageStockUseCase`.
+* **Interfaces (Adapters):** - `SQLiteProductRepository` (Persistência)
+  - `TermuxBarcodeScanner` (Integração com Câmera do Dispositivo).
+* **Controller/UI:** CLI operando como PDV/Coletor de Dados com suporte a automação de fluxo de leitura.
 
 ## 3. Arquivos Implementados e Status
-* [x] `src/domain/*` (Entities & Patterns)
-* [x] `src/interfaces/*` (SQLite Repository & Protocol)
-* [x] `src/use_cases/manage_stock.py` (Orquestração Refatorada)
-* [x] `main.py` (CLI REPL Interativa)
-* [x] `tests/*` (100% de cobertura nos fluxos críticos)
+* [x] `src/domain/*` & `src/use_cases/*`
+* [x] `src/interfaces/product_repository.py` & `sqlite_repository.py`
+* [x] `src/interfaces/barcode_scanner.py` & `termux_scanner.py`
+* [x] `main.py` (CLI Avançada com Auto-Detecção de Cadastro via Scanner)
+* [x] `tests/*` (Mocks de Hardware isolados da CI local)
 
 ## 4. Último Commit Válido Rastreável
-* **Sprint 004:** Implementação da Injeção de Dependência e CLI principal interativa.
+* **Sprint 005:** Integração de Hardware via Câmera (Termux-API Scanner).
 
 ## 5. Próximo Passo Imediato
-* Executar o `main.py` localmente no Termux para testar de forma interativa.
-* Estruturar a funcionalidade de Leitura de Código de Barras via Câmera do Android integrando ao Termux-API para automatizar a leitura dos SKUs (opcional antes da web) OU avançarmos para construir a camada Web (Flask).
+* Validar no terreno: Executar o `main.py`, selecionar a opção 4 e utilizar a câmera do Android para ler o código de um produto físico para cadastro/movimentação em tempo real.
 
 ## 6. Bloqueios ou Alucinações Conhecidas
-* Nenhum no momento.
+* Nenhum. Mocking injetado com sucesso para evitar congelamento nos testes automatizados.
