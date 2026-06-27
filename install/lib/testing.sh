@@ -6,9 +6,11 @@ kippe::test_environment() {
     echo "  -> Validating test dependencies..."
     if ! command -v python &> /dev/null; then
         kippe::error "Python environment not found. Halting."
+        exit 1
     fi
     if ! python -m pytest --version &> /dev/null; then
         kippe::error "Pytest not found. Halting."
+        exit 1
     fi
 }
 
@@ -21,11 +23,13 @@ kippe::test_run_core() {
     if [[ -d "${KIPPE_ROOT}/tests" ]]; then
         if ! python -m pytest "${KIPPE_ROOT}/tests/" -v > "${test_log}" 2>&1; then
             cat "${test_log}"
-            kippe::error "Core Domain Tests FAILED. Architecture violation detected. Rollback required."
+            kippe::error "Core Domain Tests FAILED. Architecture violation detected. Halting pipeline."
+            # FIX: O exit 1 garante que o CI/CD pare IMEDIATAMENTE e não commite lixo.
+            exit 1
         fi
         echo "  -> Core Domain Tests PASSED. Log saved to reports/logs."
     else
-        echo "  -> No tests/ directory found yet. Skipping core domain validation."
+        echo "  -> No tests/ directory found yet. Skipping validation."
     fi
 }
 
