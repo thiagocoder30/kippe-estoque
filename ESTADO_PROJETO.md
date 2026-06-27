@@ -5,16 +5,16 @@
 * **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
 * **Maturidade Atual do Sistema:** Nível 2 (Profissional).
 
-## 2. Status Executivo
+## 2. Status Executive
 * **Programa Atual:** PROGRAMA B (Identity & Security)
-* **Gate Transposto:** [ GATE A - FOUNDATION READY ] ✅ (Estabilizado pós-compatibilidade)
-* **Última Entrega:** Sprint A005.1 (IoC Container Compatibility Layer)
+* **Gate Alvo:** GATE B - Security Ready
+* **Última Entrega:** Sprint A005.2 (Security Migration Bridge)
 
 ## 3. Diretórios e Artefatos Essenciais
-* `data/` - (Fronteira de persistência SQLite)
-* `docs/architecture/` - (Manifesto, ADR-001 e Modelos de Confiança)
-* `src/infrastructure/container.py` - (IoC Container com Compatibility Layer Ativa)
-* `reports/logs/` - (Logs de infraestrutura e aplicação unificados)
+* `data/` - (Fronteira de persistência SQLite local)
+* `src/infrastructure/config.py` - (12-Factor App Config)
+* `app.py` - (API com Security Context Resolution Layer para ambiente de testes)
+* `reports/logs/` - (Logs físicos com contrato de persistência garantido)
 
 ## 4. Próxima Ação Requerida
-* **Sprint SEC002 (AuthN & Session Middleware):** Com o contêiner estabilizado e tolerante a múltiplas gerações de código, podemos prosseguir com segurança para a proteção das rotas HTTP no Flask, estabelecendo o ciclo de vida das sessões dos operadores através de tokens efêmeros.
+* **Sprint SEC003 (Nominal Audit Trail):** Com a ponte de compatibilidade reestabelecida e a suíte de testes operando 100% verde, podemos avançar para vincular nominalmente o `operator_id` gerado por esse ecossistema de sessões direto na persistência da tabela `transactions` do banco SQLite, quebrando definitivamente o anonimato operacional.
