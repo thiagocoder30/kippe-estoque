@@ -89,3 +89,4 @@ kippe::framework_version() {
 
 }
 source "${KIPPE_ROOT}/install/lib/testing.sh"
+source "${KIPPE_ROOT}/install/lib/validation.sh"

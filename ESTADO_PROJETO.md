@@ -5,16 +5,16 @@
 * **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
 * **Maturidade Atual do Sistema:** Nível 2 (Profissional).
 
-## 2. Status Executive
+## 2. Status Executivo
 * **Programa Atual:** PROGRAMA B (Identity & Security)
 * **Gate Alvo:** GATE B - Security Ready
-* **Última Entrega:** Sprint A005.2 (Security Migration Bridge)
+* **Última Entrega:** Sprint A005.3 (Sprint Runner Hardening Layer)
 
 ## 3. Diretórios e Artefatos Essenciais
 * `data/` - (Fronteira de persistência SQLite local)
-* `src/infrastructure/config.py` - (12-Factor App Config)
-* `app.py` - (API com Security Context Resolution Layer para ambiente de testes)
-* `reports/logs/` - (Logs físicos com contrato de persistência garantido)
+* `src/infrastructure/` - (IoC, Config 12-Factor, Logger Determinístico)
+* `install/lib/validation.sh` - (NOVO: Preflight Syntax Validator Engine)
+* `reports/logs/` - (Cofre imutável de rastreabilidade física de execução)
 
 ## 4. Próxima Ação Requerida
-* **Sprint SEC003 (Nominal Audit Trail):** Com a ponte de compatibilidade reestabelecida e a suíte de testes operando 100% verde, podemos avançar para vincular nominalmente o `operator_id` gerado por esse ecossistema de sessões direto na persistência da tabela `transactions` do banco SQLite, quebrando definitivamente o anonimato operacional.
+* **Sprint SEC003 (Nominal Audit Trail):** Com a infraestrutura técnica estabilizada e a camada de execução de scripts completamente blindada contra falhas de Heredoc/EOF, podemos avançar com segurança máxima para amarrar a autoria nominal (`operator_id`) a cada transação do WMS FEFO.
