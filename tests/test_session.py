@@ -18,7 +18,7 @@ def test_env():
     container.product_repository._init_db()
     
     # Injeta operador de teste criptografado
-    container.auth_use_case.register("2000", "Caixa Chão Loja", "4321", "OPERADOR")
+    container.auth_use_case.register("2000", "Caixa Chão Loja", "4321", "GERENTE")
     
     app.config['TESTING'] = True
     app.secret_key = cfg.SECRET_KEY

@@ -13,6 +13,7 @@ def use_case():
         conn.commit()
     # Mock direto na Identity Propagation Layer
     c.identity_provider.override_id = "TEST-OP"
+    c.identity_provider.override_role = "GERENTE"
     yield c.use_case
     if os.path.exists(cfg.DB_PATH): os.remove(cfg.DB_PATH)
 

@@ -11,8 +11,10 @@ class ManageStockUseCase:
         self.identity = identity_provider
 
     def _get_op(self) -> str:
-        """Resolve a identidade automaticamente (Dependency Inversion)."""
         return self.identity.get_current_operator_id() if self.identity else 'SYSTEM'
+
+    def _get_role(self) -> str:
+        return self.identity.get_current_operator_role() if self.identity else 'SYSTEM'
 
     def _log_info(self, msg: str):
         if self.logger: self.logger.info(msg)
@@ -22,6 +24,13 @@ class ManageStockUseCase:
 
     def create_product(self, product_id: str, name: str) -> Result[None, str]:
         op_id = self._get_op()
+        op_role = self._get_role()
+        
+        # RBAC GATE: Cadastro de novos produtos requer privilégios gerenciais
+        if op_role not in ["GERENTE", "SYSTEM"]:
+            self._log_warn(f"RBAC Block: Operador [{op_id}] tentou cadastrar SKU [{product_id}] sem privilégios.")
+            return Result.fail("Autorização negada: Apenas GERENTES podem cadastrar novos SKUs.")
+
         if self.repository.get_by_id(product_id):
             self._log_warn(f"Cadastro Bloqueado: SKU [{product_id}] já existe. Operador: [{op_id}]")
             return Result.fail("Produto já cadastrado.")

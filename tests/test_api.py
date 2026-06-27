@@ -25,7 +25,7 @@ def client():
 
 def test_api_create_and_list(client):
     # Passa o header de segurança de teste para simular o operador logado de forma limpa
-    headers = {"X-Test-Operator-Override": "SYSTEM-TEST-AGENT"}
+    headers = {"X-Test-Operator-Override": "SYSTEM-TEST-AGENT", "X-Test-Role-Override": "GERENTE"}
     
     res_post = client.post('/api/produto', json={'id': 'SR-71', 'name': 'Pão de Forma'}, headers=headers)
     assert res_post.status_code == 201
@@ -38,7 +38,7 @@ def test_api_create_and_list(client):
     assert res_get.json[0]['quantity'] == 5
 
 def test_api_stock_movement(client):
-    headers = {"X-Test-Operator-Override": "SYSTEM-TEST-AGENT"}
+    headers = {"X-Test-Operator-Override": "SYSTEM-TEST-AGENT", "X-Test-Role-Override": "GERENTE"}
     
     client.post('/api/produto', json={'id': 'SR-72', 'name': 'Leite'}, headers=headers)
     client.post('/api/entrada', json={'id': 'SR-72', 'amount': 10, 'expiration_date': '2030-12-31', 'batch_code': 'LT1'}, headers=headers)

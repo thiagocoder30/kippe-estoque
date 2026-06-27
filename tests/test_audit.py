@@ -17,6 +17,7 @@ def test_ctx():
 def test_audit_trail_logging_with_identity(test_ctx):
     uc = test_ctx.use_case
     test_ctx.identity_provider.override_id = "OP-007"
+    test_ctx.identity_provider.override_role = "GERENTE"
     uc.create_product("CX-01", "Caixa Papelão")
     uc.execute_add("CX-01", 10, "2030-12-31", "LOTE-X") 
     

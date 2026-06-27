@@ -1,5 +1,6 @@
 from typing import Protocol
 
 class IdentityProvider(Protocol):
-    """Contrato arquitetural para resolução de Identidade de Contexto."""
+    """Contrato arquitetural para resolução de Identidade e Nível de Acesso (RBAC)."""
     def get_current_operator_id(self) -> str: ...
+    def get_current_operator_role(self) -> str: ...

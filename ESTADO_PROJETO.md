@@ -8,12 +8,12 @@
 ## 2. Status Executivo
 * **Programa Atual:** PROGRAMA B (Identity & Security)
 * **Gate Alvo:** GATE B - Security Ready
-* **Última Entrega:** Sprint SEC003.1 (Identity Propagation Layer)
+* **Última Entrega:** Sprint SEC004 (RBAC Gate Control)
 
 ## 3. Diretórios e Artefatos Essenciais
-* `src/infrastructure/identity.py` - (Nominal Context Resolver / Propagation Layer)
-* `src/infrastructure/container.py` - (IoC Injetando Dependência de Contexto automaticamente)
-* `src/use_cases/` - (Domínio agnóstico à infraestrutura web, resolvendo autoria via interface)
+* `src/use_cases/` - (Core Domain com Gatekeepers RBAC)
+* `src/infrastructure/identity.py` - (Context Resolver consciente de Role/Nível de Acesso)
+* `install/lib/validation.sh` - (Runner Execution Safety Layer)
 
 ## 4. Próxima Ação Requerida
-* **Sprint SEC004 (RBAC Gate Control):** Com a propagação de identidade operando de forma coesa (e os testes passando limpos), vamos estender a autoridade do Domínio de Estoque. Ações destrutivas passarão a consultar não apenas *quem* é o operador, mas *qual* é o seu `operator_role` (OPERADOR vs. GERENTE).
+* **Sprint SEC005 (UI Access Control):** Com o núcleo lógico bloqueando transações proibidas, precisamos refletir essas restrições visualmente. O *Frontend* (UI POS) deve consumir o `operator_role` da sessão e ocultar/desabilitar botões gerenciais para os Operadores, melhorando a UX e prevenindo chamadas HTTP desnecessárias.
