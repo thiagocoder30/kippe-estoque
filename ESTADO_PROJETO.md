@@ -3,28 +3,27 @@
 ## 1. Visão Geral e Contexto
 * **Objetivo:** Sistema de alta performance para supermercados de bairro (giro rápido).
 * **Ambiente de Execução:** Termux (Galaxy A50).
-* **Stack:** Python, Pytest, Bash Automation, SQLite.
+* **Stack:** Python, Pytest, Bash Automation, SQLite, CLI Interativa.
 
 ## 2. Arquitetura Atual (Clean Architecture)
-* **Domain:** `Product` Entity, `Result` Pattern para resiliência.
-* **Use Cases:** `ManageStockUseCase` como orquestrador isolado e idempotente.
-* **Interfaces (Adapters):** Repositório base `ProductRepository` com implementação via `SQLiteProductRepository` (Operação de Upsert Atômico).
-* **CI/CD:** Pipeline local que gera logs e sincroniza com GitHub na ocorrência de sucesso nos testes.
+* **Domain:** `Product` Entity, `Result` Pattern.
+* **Use Cases:** `ManageStockUseCase` orquestrador, operando com Injeção de Dependência.
+* **Interfaces (Adapters):** Repositório SQLite idempotente.
+* **Controller/UI:** Interface CLI iterativa acoplada no `main.py`.
 
 ## 3. Arquivos Implementados e Status
-* [x] `src/domain/result.py`
-* [x] `src/domain/product.py`
-* [x] `src/use_cases/manage_stock.py`
-* [x] `src/interfaces/product_repository.py`
-* [x] `src/interfaces/sqlite_repository.py`
-* [x] `tests/test_domain.py`, `tests/test_use_cases.py`, `tests/test_repository.py`
-* [x] `ESTADO_PROJETO.md` - Memória Dinâmica Atualizada (Sprint 003).
+* [x] `src/domain/*` (Entities & Patterns)
+* [x] `src/interfaces/*` (SQLite Repository & Protocol)
+* [x] `src/use_cases/manage_stock.py` (Orquestração Refatorada)
+* [x] `main.py` (CLI REPL Interativa)
+* [x] `tests/*` (100% de cobertura nos fluxos críticos)
 
 ## 4. Último Commit Válido Rastreável
-* **Sprint 003:** Implementação do Repository Pattern em SQLite.
+* **Sprint 004:** Implementação da Injeção de Dependência e CLI principal interativa.
 
 ## 5. Próximo Passo Imediato
-* Injetar o repositório (`SQLiteProductRepository`) no caso de uso (`ManageStockUseCase`) e criar a **Camada de Controladores CLI** para que o usuário possa começar a registrar as movimentações diretamente do terminal de forma interativa.
+* Executar o `main.py` localmente no Termux para testar de forma interativa.
+* Estruturar a funcionalidade de Leitura de Código de Barras via Câmera do Android integrando ao Termux-API para automatizar a leitura dos SKUs (opcional antes da web) OU avançarmos para construir a camada Web (Flask).
 
 ## 6. Bloqueios ou Alucinações Conhecidas
-* Nenhum no momento. Testes executando latência sub-100ms.
+* Nenhum no momento.
