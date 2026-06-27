@@ -6,15 +6,16 @@
 * **Maturidade Atual do Sistema:** Nível 2 (Profissional).
 
 ## 2. Status Executivo
-* **Programa Atual:** PROGRAMA A (Foundation)
-* **Gate Alvo:** GATE A - Foundation Ready
-* **Última Entrega:** Sprint A004 (Configuration & Environments)
+* **Programa Atual:** PROGRAMA B (Identity & Security)
+* **Gate Transposto:** [ GATE A - FOUNDATION READY ] ✅
+* **Última Entrega:** Sprint A005 (IoC Dependency Injection Container)
 
 ## 3. Diretórios e Artefatos Essenciais
-* `data/` - (Fronteira de persistência SQLite)
-* `docs/architecture/MANIFESTO.md` - (Constituição do Sistema)
-* `src/infrastructure/config.py` - (12-Factor App Configuration Layer)
-* `.env.example` - (Gabarito de Ambientes)
+* `data/` - (Fronteira de persistência SQLite determinística)
+* `docs/architecture/MANIFESTO.md` - (Constituição da Plataforma)
+* `src/infrastructure/config.py` - (12-Factor App Environment Layer)
+* `src/infrastructure/container.py` - (Dependency Injection IoC Engine)
+* `reports/logs/` - (Audit Trails e Observabilidade de Plataforma)
 
 ## 4. Próxima Ação Requerida
-* **Sprint A005 (Dependency Injection Container):** A configuração agora está extraída, mas a injeção em `app.py` continua manual (`repo = ...`, `uc = ...`). Vamos institucionalizar o "Bootstrapping" do core implementando um Contêiner de Injeção de Dependências puro, nos aproximando do almejado GATE A.
+* **GATE A APPROVED.** Iniciar **Programa B (Identity & Security)** com a **Sprint SEC001 (Identidade e Autenticação)**. A fundação imutável agora exigirá controle de quem está utilizando os Handlers (APIs). Precisamos introduzir rastreabilidade de Operador via PIN numérico para garantir auditoria nominal no chão de loja.
