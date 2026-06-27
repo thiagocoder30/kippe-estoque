@@ -7,15 +7,14 @@
 
 ## 2. Status Executivo
 * **Programa Atual:** PROGRAMA B (Identity & Security)
-* **Gate Transposto:** [ GATE A - FOUNDATION READY ] ✅
-* **Última Entrega:** Sprint A005 (IoC Dependency Injection Container)
+* **Gate Alvo:** GATE B - Security Ready
+* **Última Entrega:** Sprint SEC000 (Security Architecture & Threat Model)
 
 ## 3. Diretórios e Artefatos Essenciais
-* `data/` - (Fronteira de persistência SQLite determinística)
-* `docs/architecture/MANIFESTO.md` - (Constituição da Plataforma)
-* `src/infrastructure/config.py` - (12-Factor App Environment Layer)
-* `src/infrastructure/container.py` - (Dependency Injection IoC Engine)
-* `reports/logs/` - (Audit Trails e Observabilidade de Plataforma)
+* `data/` - (Fronteira de persistência SQLite)
+* `docs/architecture/` - (Manifesto e ADRs de Segurança)
+* `src/infrastructure/` - (IoC, Configuração 12-Factor, Logger)
+* `reports/logs/` - (Observabilidade e CI)
 
 ## 4. Próxima Ação Requerida
-* **GATE A APPROVED.** Iniciar **Programa B (Identity & Security)** com a **Sprint SEC001 (Identidade e Autenticação)**. A fundação imutável agora exigirá controle de quem está utilizando os Handlers (APIs). Precisamos introduzir rastreabilidade de Operador via PIN numérico para garantir auditoria nominal no chão de loja.
+* **Sprint SEC001 (Operator Entity & Identity Repository):** Codificar a entidade `Operator` no Core Domain e preparar o banco de dados (`operators` table) para armazenar credenciais com hash criptográfico (bcrypt/sha256), estabelecendo a fundação técnica da identidade no sistema.
