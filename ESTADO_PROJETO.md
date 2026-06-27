@@ -7,14 +7,14 @@
 
 ## 2. Status Executivo
 * **Programa Atual:** PROGRAMA B (Identity & Security)
-* **Gate Alvo:** GATE B - Security Ready
-* **Última Entrega:** Sprint SEC000 (Security Architecture & Threat Model)
+* **Gate Transposto:** [ GATE A - FOUNDATION READY ] ✅ (Estabilizado pós-compatibilidade)
+* **Última Entrega:** Sprint A005.1 (IoC Container Compatibility Layer)
 
 ## 3. Diretórios e Artefatos Essenciais
 * `data/` - (Fronteira de persistência SQLite)
-* `docs/architecture/` - (Manifesto e ADRs de Segurança)
-* `src/infrastructure/` - (IoC, Configuração 12-Factor, Logger)
-* `reports/logs/` - (Observabilidade e CI)
+* `docs/architecture/` - (Manifesto, ADR-001 e Modelos de Confiança)
+* `src/infrastructure/container.py` - (IoC Container com Compatibility Layer Ativa)
+* `reports/logs/` - (Logs de infraestrutura e aplicação unificados)
 
 ## 4. Próxima Ação Requerida
-* **Sprint SEC001 (Operator Entity & Identity Repository):** Codificar a entidade `Operator` no Core Domain e preparar o banco de dados (`operators` table) para armazenar credenciais com hash criptográfico (bcrypt/sha256), estabelecendo a fundação técnica da identidade no sistema.
+* **Sprint SEC002 (AuthN & Session Middleware):** Com o contêiner estabilizado e tolerante a múltiplas gerações de código, podemos prosseguir com segurança para a proteção das rotas HTTP no Flask, estabelecendo o ciclo de vida das sessões dos operadores através de tokens efêmeros.
