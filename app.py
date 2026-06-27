@@ -1,10 +1,18 @@
+import os
 from flask import Flask, jsonify, request, render_template
+from src.infrastructure.config import Config
 from src.interfaces.sqlite_repository import SQLiteProductRepository
 from src.use_cases.manage_stock import ManageStockUseCase
+from src.infrastructure.logger_adapter import FileLogger
+
+# Inicializa a camada de resolução de ambiente
+cfg = Config()
 
 app = Flask(__name__)
-repo = SQLiteProductRepository("data/estoque_producao.db")
-uc = ManageStockUseCase(repository=repo)
+# Injeta as dependências via Config
+repo = SQLiteProductRepository(cfg.DB_PATH)
+sys_logger = FileLogger(cfg.LOG_PATH)
+uc = ManageStockUseCase(repository=repo, logger=sys_logger)
 
 @app.route('/')
 def index(): return render_template('index.html')
@@ -47,4 +55,6 @@ def remove_stock():
 def get_historico(): return jsonify(uc.get_recent_history())
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Controle de debug estrito baseado no ambiente
+    is_dev = (cfg.ENV == 'development')
+    app.run(host=cfg.HOST, port=cfg.PORT, debug=is_dev)
