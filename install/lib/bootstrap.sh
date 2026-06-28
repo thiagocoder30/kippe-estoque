@@ -1,92 +1,74 @@
 #!/usr/bin/env bash
-#
-# ============================================================
-# KIPPE PLATFORM
-# Institutional Installation Framework
-# ------------------------------------------------------------
-# Module  : bootstrap.sh
-# Version : 1.0.0
-# Status  : Stable
-# ============================================================
-
 set -Eeuo pipefail
-
-if [[ -n "${KIPPE_BOOTSTRAP_LOADED:-}" ]]; then
-    return 0 2>/dev/null || exit 0
-fi
-
-readonly KIPPE_BOOTSTRAP_LOADED=1
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="${SCRIPT_DIR}"
-
-FRAMEWORK_VERSION="1.0.0"
-
-readonly FRAMEWORK_VERSION
-readonly LIB_DIR
-
-load_module() {
-    local module="$1"
-
-    if [[ ! -f "${LIB_DIR}/${module}" ]]; then
-        echo "[KIPPE] ERROR: Missing module: ${module}" >&2
+# -----------------------------------------------------------------------------
+# Repository Root Resolution & Framework Init
+# -----------------------------------------------------------------------------
+export KIPPE_ROOT="${KIPPE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+readonly FRAMEWORK_VERSION="1.0.0"
+kippe::init() {
+    local lib_dir="${KIPPE_ROOT}/install/lib"
+    
+    if [[ ! -f "${lib_dir}/testing.sh" ]] || [[ ! -f "${lib_dir}/validation.sh" ]]; then
+        echo "[ERROR] Falha crítica de inicialização: Bibliotecas core não encontradas em ${lib_dir}."
         exit 1
     fi
-
-    # shellcheck source=/dev/null
-    source "${LIB_DIR}/${module}"
+    
+    source "${lib_dir}/testing.sh"
+    source "${lib_dir}/validation.sh"
+    
+    echo "  -> Bootstrap: KIPPE_ROOT resolved to [${KIPPE_ROOT}]"
 }
-
-load_module terminal.sh
-load_module logger.sh
-load_module filesystem.sh
-load_module validation.sh
-load_module git.sh
-load_module markdown.sh
-load_module checkpoint.sh
-load_module manifest.sh
-load_module export.sh
-load_module utils.sh
-load_module common.sh
-load_module banner.sh
-
-kippe::init() {
-
-    export KIPPE_FRAMEWORK_VERSION="${FRAMEWORK_VERSION}"
-
-    export KIPPE_ROOT="$(
-        git rev-parse --show-toplevel 2>/dev/null \
-        || pwd
-    )"
-
-    export KIPPE_INSTALL="${KIPPE_ROOT}/install"
-
-    export KIPPE_LIB="${KIPPE_INSTALL}/lib"
-
-    export KIPPE_LOG_DIR="/sdcard/Download/KIPPE/logs"
-
-    export KIPPE_REPORT_DIR="/sdcard/Download/KIPPE/reports"
-
-    export KIPPE_EXPORT_DIR="/sdcard/Download/KIPPE/exports"
-
-    export KIPPE_CHECKPOINT_DIR="/sdcard/Download/KIPPE/checkpoints"
-
-    mkdir -p \
-        "${KIPPE_LOG_DIR}" \
-        "${KIPPE_REPORT_DIR}" \
-        "${KIPPE_EXPORT_DIR}" \
-        "${KIPPE_CHECKPOINT_DIR}"
-
-    kippe::logger_init
-
-    kippe::log INFO "Framework ${FRAMEWORK_VERSION} initialized"
-
+kippe::init_environment() {
+    export KIPPE_LOG_DIR="${KIPPE_ROOT}/reports/logs"
+    mkdir -p "${KIPPE_LOG_DIR}"
 }
-
-kippe::framework_version() {
-
-    echo "${FRAMEWORK_VERSION}"
-
+kippe::banner_program() {
+    echo -e "\n============================================================"
+    echo -e " KIPPE PLATFORM - PROGRAM $1"
+    echo -e " SPRINT $2: $3"
+    echo -e "============================================================\n"
 }
-source "${KIPPE_ROOT}/install/lib/testing.sh"
-source "${KIPPE_ROOT}/install/lib/validation.sh"
+kippe::step() {
+    echo -e "\n[Step $1/$2] $3"
+}
+kippe::success() {
+    echo -e "\n[SUCCESS] $1"
+}
+kippe::error() {
+    echo -e "\n[ERROR] $1"
+}
+kippe::banner_finish() {
+    echo -e "\n------------------------------------------------------------"
+    echo -e " SPRINT EXECUTION FINISHED"
+    echo -e "------------------------------------------------------------"
+}
+kippe::on_error() {
+    echo -e "\n[CRITICAL FATAL] Execution failed at line $1"
+    exit 1
+}
+kippe::checkpoint_create() {
+    local id="$1"
+    local version="$2"
+    local sprint="$3"
+    local status="$4"
+    mkdir -p "${KIPPE_ROOT}/docs/checkpoints"
+    echo "${id}|${version}|${sprint}|${status}|$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${KIPPE_ROOT}/docs/checkpoints/CHK-${id}.txt"
+}
+kippe::manifest_create() {
+    local sprint="$1"
+    local program="$2"
+    local version="$3"
+    local status="$4"
+    local next_sprint="$5"
+    mkdir -p "${KIPPE_ROOT}/reports"
+    cat <<EOF > "${KIPPE_ROOT}/reports/SPRINT_MANIFEST_${sprint}.json"
+{
+  "sprint": "${sprint}",
+  "program": "${program}",
+  "version": "${version}",
+  "status": "${status}",
+  "next_sprint": "${next_sprint}",
+  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+}

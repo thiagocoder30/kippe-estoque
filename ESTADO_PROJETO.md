@@ -4,15 +4,15 @@
 * **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
 * **Maturidade Atual do Sistema:** Nível 3 (Corporativo).
 ## 2. Status Executivo
-* **Programa Atual:** PROGRAMA C (Inventory)
+* **Programa Atual:** INFRASTRUCTURE / PROGRAM C (Inventory)
 * **Gates Transpostos:**
   * [ GATE A - FOUNDATION READY ] ✅
   * [ GATE B - SECURITY READY ] ✅
   * [ GATE B.1 - ARCHITECTURE FREEZE ] ✅
-* **Última Entrega:** Sprint INV003.1 (Typing Contract Stabilization)
+  * [ GATE INFRA - RUNNER HARDENED ] ✅
+* **Última Entrega:** Sprint INF001 (Bootstrap Resilience & Path Hardening)
 ## 3. Diretórios e Artefatos Essenciais
-* `install/lib/validation.sh` -> (Quality Gate com validação AST via compileall)
-* `src/domain/batch.py` -> (Entidade com contrato de tipagem estabilizado)
-* `docs/checkpoints/ARCHITECTURE_SCORECARD-INV003.1.md` -> (Scorecard de Conformidade)
+* `install/lib/bootstrap.sh` -> (Carregador agnóstico de ambiente consolidado)
+* `docs/checkpoints/ARCHITECTURE_SCORECARD-INF001.md` -> (Scorecard de Infra)
 ## 4. Próxima Ação Requerida
-* **Sprint INV004 (FEFO Allocation Engine):** Com a estrutura do Lote validada e suportada por um ecossistema de compilação rigoroso, prosseguiremos para a construção do motor mercadológico central da plataforma: a baixa automatizada FEFO (First Expiring, First Out).
+* **Sprint INV004 (FEFO Allocation Engine):** Com a falha de infraestrutura superada, a esteira de domínio volta a operar. Avançar com a injeção do Serviço de Domínio (FEFO Policy) para a orquestração do Aggregate de Produto.
