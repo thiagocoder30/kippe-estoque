@@ -38,14 +38,14 @@ class ManageStockUseCase:
         self.repository.log_transaction(product_id, 'CRIACAO DE PRODUTO', 0, op_id)
         self._log_info(f"Produto Criado: SKU [{product_id}] - {name} ({unit_of_measure}/{status}). Operador: [{op_id}]")
         return Result.ok(None)
-    def execute_add(self, product_id: str, amount: int, expiration_date: str, batch_code: str) -> Result[None, str]:
+    def execute_add(self, product_id: str, amount: int, expiration_date: str, batch_code: str, manufacturing_date: str = '', supplier: str = 'PADRAO') -> Result[None, str]:
         op_id = self._get_op()
         product = self.repository.get_by_id(product_id)
         if not product: 
             self._log_warn(f"Entrada Bloqueada: SKU [{product_id}] não encontrado. Operador: [{op_id}]")
             return Result.fail("Produto não encontrado.")
             
-        res = product.add_stock(amount, expiration_date, batch_code)
+        res = product.add_stock(amount, expiration_date, batch_code, manufacturing_date, supplier)
         if res.is_success:
             self.repository.save(product)
             self.repository.log_transaction(product_id, f'ENTRADA (Lote {batch_code})', amount, op_id)

@@ -4,17 +4,14 @@
 * **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
 * **Maturidade Atual do Sistema:** Nível 3 (Corporativo).
 ## 2. Status Executivo
-* **Programa Atual:** INFRASTRUCTURE / PROGRAM C (Inventory)
+* **Programa Atual:** PROGRAMA C (Inventory)
 * **Gates Transpostos:**
-  * [ GATE A - FOUNDATION READY ] ✅
-  * [ GATE B - SECURITY READY ] ✅
-  * [ GATE B.1 - ARCHITECTURE FREEZE ] ✅
-  * [ GATE INFRA - RUNNER HARDENED ] ✅
+  * [ GATE A / B / B.1 ] ✅
   * [ GATE INFRA - SAFE REFACTOR ] ✅
-* **Última Entrega:** Sprint INF002 (Native Refactoring Engine & Snapshots)
+* **Última Entrega:** Sprint INV006 (Stock Reservation Lifecycle)
 ## 3. Diretórios e Artefatos Essenciais
-* `install/lib/refactor_engine.py` -> (Motor Python para mutações de código AST-Aware com auto-rollback)
-* `src/interfaces/sqlite_repository.py` -> (Repositório unificado e livre de falhas textuais)
-* `docs/checkpoints/ARCHITECTURE_SCORECARD-INF002.md` -> (Métrica de Qualidade)
+* `src/domain/reservation.py` -> (Lifecycle gerencial com Time-To-Live / TTL)
+* `src/interfaces/sqlite_reservation_repository.py` -> (Separação de Persistência via SRP)
+* `install/lib/refactor_engine.py` -> (Motor responsável pela evolução cirúrgica da plataforma)
 ## 4. Próxima Ação Requerida
-* **Sprint INV006 (Inventory Adjustment Engine):** O ambiente está blindado contra mutações perigosas. Proceder para a expansão do Domínio com o orquestrador de Inventário Físico e Ajustes Contábeis de Estoque.
+* **Sprint INV007 (Warehouse Locations):** Com os estoques protegidos logicamente e com validade de bloqueio estrita, passamos para a dimensão espacial: mapeamento do endereço físico (Rua, Corredor, Prateleira), fundamental para a rota de Picking baseada em FEFO.
