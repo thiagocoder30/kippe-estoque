@@ -3,8 +3,8 @@
 **Projeto:** KIPPE PLATFORM
 **Versão:** 1.3.0-frozen
 **Programa Atual:** C — Inventory
-**Sprint Atual:** INV011 (Cycle Count Engine)
-**Próxima Sprint:** INV012 — Inventory Ledger
+**Sprint Atual:** INV013 (Inventory Snapshots)
+**Próxima Sprint:** INV014 — Warehouse Analytics
 **Nível do Programa:** 2 — Profissional
 
 ## Programas
@@ -15,11 +15,11 @@
 
 ## Governança e Qualidade
 * **Gate Atual:** C.3 — Logistics
-* **Progresso do Roadmap:** 12/20 Sprints
+* **Progresso do Roadmap:** 14/20 Sprints
 * **Arquitetura:** Frozen (SafeRefactor Engine Active)
 * **Semantic Validator Gate:** PASS
 * **AST Gate:** PASS
-* **Regression Suite:** 57/57 PASS (0 Falhas)
-* **Último Commit:** fe982c0
-* **Último Checkpoint:** CHK-049
+* **Regression Suite:** 61/61 PASS (0 Falhas)
+* **Último Commit:** fe75f25
+* **Último Checkpoint:** CHK-051
 * **Status Operacional:** STABLE
