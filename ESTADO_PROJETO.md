@@ -3,8 +3,8 @@
 **Projeto:** KIPPE PLATFORM
 **Versão:** 1.3.0-frozen
 **Programa Atual:** C — Inventory
-**Sprint Atual:** INF006.1 (Recovery & Path Freeze)
-**Próxima Sprint:** INV009 — Stock Transfers
+**Sprint Atual:** INV009 (Stock Transfers)
+**Próxima Sprint:** INV010 — Physical Inventory Adjustments
 **Nível do Programa:** 2 — Profissional
 
 ## Programas
@@ -15,11 +15,11 @@
 
 ## Governança e Qualidade
 * **Gate Atual:** C.2 — Warehouse
-* **Progresso do Roadmap:** 45%
+* **Progresso do Roadmap:** 10/20 Sprints
 * **Arquitetura:** Frozen (SafeRefactor Engine Active)
 * **Semantic Validator Gate:** PASS
 * **AST Gate:** PASS
-* **Regression Suite:** 46/46 PASS (0 Falhas)
-* **Último Commit:** 80989b6
-* **Último Checkpoint:** CHK-046
-* **Status Operacional:** FRAMEWORK FROZEN
+* **Regression Suite:** 49/49 PASS (0 Falhas)
+* **Último Commit:** ed38bd2
+* **Último Checkpoint:** CHK-047
+* **Status Operacional:** STABLE
