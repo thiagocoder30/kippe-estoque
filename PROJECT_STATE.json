@@ -2,15 +2,17 @@
   "program": "C",
   "program_name": "Inventory",
   "maturity": 2,
-  "current_sprint": "INF005.2 (Row Hotfix)",
+  "gate": "C.2",
+  "gate_name": "Warehouse",
+  "current_sprint": "INF006.1 (Recovery & Path Freeze)",
   "next_sprint": "INV009 — Stock Transfers",
-  "roadmap_progress": "9/20",
-  "framework_version": "1.2.0-gov",
+  "roadmap_progress": "45%",
+  "framework_version": "1.3.0-frozen",
   "tests": {
-    "passed": 49,
+    "passed": 46,
     "failed": 0
   },
-  "status": "STABLE",
-  "last_commit": "d15314d",
-  "last_checkpoint": "CHK-044"
+  "status": "FRAMEWORK FROZEN",
+  "last_commit": "80989b6",
+  "last_checkpoint": "CHK-046"
 }

@@ -1,24 +1,26 @@
 # 🗺️ KIPPE PLATFORM - Master Roadmap
-
-## PROGRAM C: INVENTORY (Nível 2 - Profissional)
-**Status:** Em Andamento (9/20 Sprints)
-
-### Fase 1: Fundação do Domínio (Concluída)
-- [x] INV001 - Product Aggregate Root
-- [x] INV001.1 - Observability Contract
-- [x] INV002.1 - Categories & Classification
-- [x] INV003.1 - Batch Management Entity
-- [x] INV004.4 - FEFO Policy Engine & Retention
-- [x] INV005.2 - Inventory Reservation Engine
-- [x] INV006 - Stock Reservation Lifecycle
-- [x] INV007 - Warehouse Locations (Endereçamento Físico)
-- [x] INV008.2 - Multiple Warehouses Isolation
-
-### Fase 2: Gestão Física e Movimentação (Atual)
-- [x] INV009 - Stock Transfers (Remanejamento entre Armazéns)
-- [ ] INV010 - Physical Inventory Adjustments (Inventário Rotativo e Perdas)
-- [ ] INV011 - Negative Stock Policies
-- [ ] INV012 - Replenishment Engine (Ponto de Reposição)
-
-### Fase 3: Escala Logística (Futuro)
-- [ ] INV013 à INV020 - (Curva ABC, Giro de Estoque, Dashboards, KPIs, Encerramento)
+## PROGRAMA C: Inventory
+**Objetivo:** Plataforma institucional de gestão física e lógica para operações de varejo de alto giro.
+**Maturidade Atual:** Nível 2 (Profissional)
+**Gate Atual:** C.2 (Warehouse)
+**Status:** Em desenvolvimento
+### Sprints
+✓ INV001 - Product Aggregate Root
+✓ INV002 - Categories & Classification
+✓ INV003 - Batch Management Entity
+✓ INV004 - FEFO Policy Engine & Retention
+✓ INV005 - Inventory Reservation Engine
+✓ INV006 - Stock Reservation Lifecycle
+✓ INV007 - Warehouse Locations
+✓ INV008 - Multiple Warehouses Isolation
+➡ INV009 - Stock Transfers
+○ INV010 - Physical Inventory Adjustments
+○ INV011 - Negative Stock Policies
+○ INV012 - Replenishment Engine
+### Gates de Maturidade (Programa C)
+* **Gate C.0 (Foundation):** Estruturas básicas de dados e agregados. (Concluído)
+* **Gate C.1 (Core Inventory):** Lotes, FEFO e Reservas lógicas. (Concluído)
+* **Gate C.2 (Warehouse):** Múltiplas Plantas e Transferências. (Em Andamento)
+* **Gate C.3 (Logistics):** Reposição, inventário rotativo e quebras.
+* **Gate C.4 (Analytics):** Curva ABC e Dashboards de giro.
+* **Gate C.5 (Institutional Ready):** Auditoria contábil completa.

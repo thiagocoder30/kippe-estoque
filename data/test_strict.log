@@ -1,6 +1,0 @@
-2026-06-28 11:09:13 | INFO | Produto Criado: SKU [KPC-100] - Arroz 5kg (un/ATIVO). Operador: [TEST-OP]
-2026-06-28 11:09:14 | INFO | Produto Criado: SKU [KPC-200] - Feijão (un/ATIVO). Operador: [TEST-OP]
-2026-06-28 11:09:14 | INFO | Entrada Registrada: SKU [KPC-200] | Lote [LOTE-Y] | Qtd: 5. Operador: [TEST-OP]
-2026-06-28 11:09:14 | INFO | Produto Criado: SKU [KPC-300] - Açúcar (un/ATIVO). Operador: [TEST-OP]
-2026-06-28 11:09:14 | INFO | Entrada Registrada: SKU [KPC-300] | Lote [LOTE-Z] | Qtd: 5. Operador: [TEST-OP]
-2026-06-28 11:09:14 | WARNING | Saída Rejeitada pelo Domínio: SKU [KPC-300] - Estoque físico insuficiente.. Operador: [TEST-OP]
