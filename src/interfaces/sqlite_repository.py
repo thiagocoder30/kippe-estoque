@@ -110,11 +110,12 @@ class SQLiteProductRepository:
             batch_rows = conn.execute('SELECT * FROM batches WHERE product_id = ?', (product_id,)).fetchall()
             batches_dict = {}
             for row in batch_rows:
-                batches_dict[row['batch_code']] = Batch(
-                    code=row['batch_code'], product_id=row['product_id'], quantity=row['quantity'],
-                    expiration_date=row['expiration_date'], warehouse_id=row.get('warehouse_id', 'WH-PADRAO'),
-                    location_id=row.get('location_id', ''), manufacturing_date=row['manufacturing_date'],
-                    supplier=row['supplier'], status=row['status'], traceability_id=row['traceability_id']
+                row_dict = dict(row)
+                batches_dict[row_dict['batch_code']] = Batch(
+                    code=row_dict['batch_code'], product_id=row_dict['product_id'], quantity=row_dict['quantity'],
+                    expiration_date=row_dict['expiration_date'], warehouse_id=row_dict.get('warehouse_id', 'WH-PADRAO'),
+                    location_id=row_dict.get('location_id', ''), manufacturing_date=row_dict['manufacturing_date'],
+                    supplier=row_dict['supplier'], status=row_dict['status'], traceability_id=row_dict['traceability_id']
                 )
             product = Product(
                 id=prod_row['id'], name=prod_row['name'], quantity=prod_row['quantity'], 
@@ -132,11 +133,12 @@ class SQLiteProductRepository:
                 batch_rows = conn.execute('SELECT * FROM batches WHERE product_id = ? ORDER BY expiration_date', (row['id'],)).fetchall()
                 batches_dict = {}
                 for b in batch_rows:
-                    batches_dict[b['batch_code']] = Batch(
-                        code=b['batch_code'], product_id=b['product_id'], quantity=b['quantity'],
-                        expiration_date=b['expiration_date'], warehouse_id=b.get('warehouse_id', 'WH-PADRAO'),
-                        location_id=b.get('location_id', ''), manufacturing_date=b['manufacturing_date'],
-                        supplier=b['supplier'], status=b['status'], traceability_id=b['traceability_id']
+                    b_dict = dict(b)
+                    batches_dict[b_dict['batch_code']] = Batch(
+                        code=b_dict['batch_code'], product_id=b_dict['product_id'], quantity=b_dict['quantity'],
+                        expiration_date=b_dict['expiration_date'], warehouse_id=b_dict.get('warehouse_id', 'WH-PADRAO'),
+                        location_id=b_dict.get('location_id', ''), manufacturing_date=b_dict['manufacturing_date'],
+                        supplier=b_dict['supplier'], status=b_dict['status'], traceability_id=b_dict['traceability_id']
                     )
                 product = Product(
                     id=row['id'], name=row['name'], quantity=row['quantity'], 
@@ -155,4 +157,4 @@ class SQLiteProductRepository:
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute('SELECT t.id, t.type, t.amount, datetime(t.timestamp, \'localtime\') as data, p.name, t.operator_id FROM transactions t JOIN products p ON t.product_id = p.id ORDER BY t.id DESC LIMIT ?', (limit,)).fetchall()
-            return [dict(row) as data for row in rows]
+            return [dict(row) for row in rows]

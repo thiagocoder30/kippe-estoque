@@ -1,4 +1,35 @@
 #!/usr/bin/env bash
+#
+# ============================================================
+# KIPPE PLATFORM
+# INFRASTRUCTURE HARDENING
+# SPRINT INF005: MANDATORY GOVERNANCE PIPELINE CONTRACT
+# ============================================================
+
+set -Eeuo pipefail
+
+export KIPPE_ROOT="${KIPPE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "${KIPPE_ROOT}"
+
+source install/lib/bootstrap.sh
+source install/lib/testing.sh
+source install/lib/validation.sh
+
+kippe::init
+kippe::init_environment
+
+trap 'kippe::on_error ${LINENO}' ERR
+
+TOTAL_STEPS=5
+
+kippe::banner_program \
+    "INF" \
+    "INF005" \
+    "Mandatory Governance Pipeline Contract"
+
+kippe::step 1 ${TOTAL_STEPS} "Upgrading Platform Framework with Machine-Readable JSON State Engine..."
+cat << "KIPPE_HUNK" > "${KIPPE_ROOT}/install/lib/bootstrap.sh"
+#!/usr/bin/env bash
 set -Eeuo pipefail
 
 # -----------------------------------------------------------------------------
@@ -138,3 +169,65 @@ EOF
     echo -e " Status:            ${system_status}"
     echo -e "=============================================\n"
 }
+KIPPE_HUNK
+
+kippe::step 2 ${TOTAL_STEPS} "Enforcing Master ROADMAP.md Realignment..."
+cat << "KIPPE_HUNK" > "${KIPPE_ROOT}/ROADMAP.md"
+# 🗺️ KIPPE PLATFORM - Master Roadmap
+
+## PROGRAM C: INVENTORY (Nível 2 - Profissional)
+**Status:** Em Andamento (9/20 Sprints)
+
+### Fase 1: Fundação do Domínio (Concluída)
+- [x] INV001 - Product Aggregate Root
+- [x] INV001.1 - Observability Contract
+- [x] INV002.1 - Categories & Classification
+- [x] INV003.1 - Batch Management Entity
+- [x] INV004.4 - FEFO Policy Engine & Retention
+- [x] INV005.2 - Inventory Reservation Engine
+- [x] INV006 - Stock Reservation Lifecycle
+- [x] INV007 - Warehouse Locations (Endereçamento Físico)
+- [x] INV008.2 - Multiple Warehouses Isolation
+
+### Fase 2: Gestão Física e Movimentação (Atual)
+- [x] INV009 - Stock Transfers (Remanejamento entre Armazéns)
+- [ ] INV010 - Physical Inventory Adjustments (Inventário Rotativo e Perdas)
+- [ ] INV011 - Negative Stock Policies
+- [ ] INV012 - Replenishment Engine (Ponto de Reposição)
+
+### Fase 3: Escala Logística (Futuro)
+- [ ] INV013 à INV020 - (Curva ABC, Giro de Estoque, Dashboards, KPIs, Encerramento)
+KIPPE_HUNK
+
+kippe::step 3 ${TOTAL_STEPS} "Executing Preflight Semantic Validator & AST Check..."
+# Recarrega o bootstrap atualizado em memória
+source "${KIPPE_ROOT}/install/lib/bootstrap.sh"
+# Dispara a cadeia de Validação Semântica (INF004) e AST Gate
+kippe::validate_script_syntax "${BASH_SOURCE[0]}"
+
+kippe::step 4 ${TOTAL_STEPS} "Running Complete Testing Regression Matrix..."
+kippe::test_execute_all
+
+kippe::step 5 ${TOTAL_STEPS} "Sealing Governance Pipeline Contract..."
+# Limpeza de artefatos de testes
+rm -f data/test_*.db data/test_*.log data/test_*.db-journal 2>/dev/null || true
+
+kippe::checkpoint_create "042" "1.2.0-gov" "INF005" "SUCCESS"
+kippe::manifest_create "INF005" "INF" "1.2.0-gov" "SUCCESS" "INV010"
+
+# Invocação do novo contrato compulsório de Governança
+# Parametrização rígida: ID | NOME | Nível Número | Nível Texto | Sprint Atual | Próxima | Progresso | Pass | Fail | Status
+kippe::governance_sync \
+    "C" \
+    "Inventory" \
+    "2" \
+    "Profissional" \
+    "INF005 (Gov Engine)" \
+    "INV010 — Physical Inventory Adjustments" \
+    "9/20" \
+    "49" \
+    "0" \
+    "STABLE"
+
+exit 0
+

@@ -1,0 +1,16 @@
+{
+  "program": "C",
+  "program_name": "Inventory",
+  "maturity": 2,
+  "current_sprint": "INF005.2 (Row Hotfix)",
+  "next_sprint": "INV009 — Stock Transfers",
+  "roadmap_progress": "9/20",
+  "framework_version": "1.2.0-gov",
+  "tests": {
+    "passed": 49,
+    "failed": 0
+  },
+  "status": "STABLE",
+  "last_commit": "d15314d",
+  "last_checkpoint": "CHK-044"
+}

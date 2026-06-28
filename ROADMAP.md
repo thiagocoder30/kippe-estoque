@@ -1,8 +1,7 @@
 # 🗺️ KIPPE PLATFORM - Master Roadmap
 
 ## PROGRAM C: INVENTORY (Nível 2 - Profissional)
-**Status:** Em Andamento (6/20 Sprints)
-**Gate Atual:** C.1 (Core Domain Operational)
+**Status:** Em Andamento (9/20 Sprints)
 
 ### Fase 1: Fundação do Domínio (Concluída)
 - [x] INV001 - Product Aggregate Root
@@ -12,12 +11,14 @@
 - [x] INV004.4 - FEFO Policy Engine & Retention
 - [x] INV005.2 - Inventory Reservation Engine
 - [x] INV006 - Stock Reservation Lifecycle
+- [x] INV007 - Warehouse Locations (Endereçamento Físico)
+- [x] INV008.2 - Multiple Warehouses Isolation
 
 ### Fase 2: Gestão Física e Movimentação (Atual)
-- [ ] INV007 - Warehouse Locations (Endereçamento Físico)
-- [ ] INV008 - Inventory Transactions Ledger (Trilha de Auditoria)
-- [ ] INV009 - Inventory Valuation (Custos e FIFO Contábil)
-- [ ] INV010 - Physical Inventory Adjustments (Inventário Rotativo)
+- [x] INV009 - Stock Transfers (Remanejamento entre Armazéns)
+- [ ] INV010 - Physical Inventory Adjustments (Inventário Rotativo e Perdas)
+- [ ] INV011 - Negative Stock Policies
+- [ ] INV012 - Replenishment Engine (Ponto de Reposição)
 
 ### Fase 3: Escala Logística (Futuro)
-- [ ] INV011 à INV020 - (Reabastecimento, Multi-Warehouse, Dashboards, KPIs)
+- [ ] INV013 à INV020 - (Curva ABC, Giro de Estoque, Dashboards, KPIs, Encerramento)
