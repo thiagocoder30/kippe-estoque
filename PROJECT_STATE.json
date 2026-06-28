@@ -4,15 +4,15 @@
   "maturity": 2,
   "gate": "C.4",
   "gate_name": "Analytics",
-  "current_sprint": "INV014 (Warehouse Analytics)",
-  "next_sprint": "INV015 — Replenishment Engine",
-  "roadmap_progress": "15/20 Sprints",
+  "current_sprint": "INV015 (Replenishment Engine)",
+  "next_sprint": "INV016 — Negative Stock Policies",
+  "roadmap_progress": "16/20 Sprints",
   "framework_version": "1.3.0-frozen",
   "tests": {
-    "passed": 63,
+    "passed": 66,
     "failed": 0
   },
   "status": "STABLE",
-  "last_commit": "ff0bde7",
-  "last_checkpoint": "CHK-052"
+  "last_commit": "37ab918",
+  "last_checkpoint": "CHK-053"
 }
