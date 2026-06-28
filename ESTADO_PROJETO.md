@@ -10,9 +10,9 @@
   * [ GATE B - SECURITY READY ] ✅
   * [ GATE B.1 - ARCHITECTURE FREEZE ] ✅
   * [ GATE INFRA - RUNNER HARDENED ] ✅
-* **Última Entrega:** Sprint INV004.4 (Legacy FEFO Contract Migration)
+* **Última Entrega:** Sprint INV005.2 (Repository Contract Reintegration)
 ## 3. Diretórios e Artefatos Essenciais
-* `tests/` -> (Suíte de testes totalmente refatorada e alinhada ao Domain Model)
-* `docs/checkpoints/ARCHITECTURE_SCORECARD-INV004.4.md` -> (Métrica de Qualidade)
+* `src/interfaces/sqlite_repository.py` -> (Repositório unificado estável contendo dados contratuais de Categorias e Reservas)
+* `docs/checkpoints/ARCHITECTURE_SCORECARD-INV005.2.md` -> (Métrica de Qualidade)
 ## 4. Próxima Ação Requerida
-* **Sprint INV005 (FIFO Policy Engine):** Com a base de testes expurgada de contratos legados conflitantes e a política FEFO em operação plena, avançaremos para o motor FIFO, viabilizando o gerenciamento logístico de categorias de bens duráveis.
+* **Sprint INV006 (Inventory Adjustment Engine):** Com a persistência finalmente pacificada e integrada de forma retrocompatível, avançamos com segurança corporativa para o motor de Ajustes Físicos de Inventário Rotativo, gerando auditorias detalhadas para avarias de doca e quebras físicas.
