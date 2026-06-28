@@ -51,7 +51,7 @@ class SQLiteProductRepository:
                 CREATE TABLE IF NOT EXISTS batches (
                     product_id TEXT NOT NULL, batch_code TEXT NOT NULL, expiration_date TEXT NOT NULL, quantity INTEGER NOT NULL,
                     manufacturing_date TEXT DEFAULT '', supplier TEXT DEFAULT 'PADRAO', status TEXT DEFAULT 'ATIVO', traceability_id TEXT DEFAULT '',
-                    location_id TEXT DEFAULT '', warehouse_id TEXT DEFAULT 'WH-PADRAO',
+                    location_id TEXT DEFAULT '', warehouse_id TEXT DEFAULT 'WH-PADRAO', cost_per_unit REAL NOT NULL DEFAULT 0.0,
                     PRIMARY KEY (product_id, batch_code)
                 )
             ''')
@@ -62,11 +62,13 @@ class SQLiteProductRepository:
                 )
             ''')
             
-            # Migração retroativa segura para DBs antigos
+            # Migrações retroativas
             cursor = conn.execute("PRAGMA table_info(products)")
-            columns = [info['name'] for info in cursor.fetchall()]
-            if 'allow_negative_stock' not in columns:
+            if 'allow_negative_stock' not in [info['name'] for info in cursor.fetchall()]:
                 conn.execute("ALTER TABLE products ADD COLUMN allow_negative_stock INTEGER NOT NULL DEFAULT 0")
+            cursor = conn.execute("PRAGMA table_info(batches)")
+            if 'cost_per_unit' not in [info['name'] for info in cursor.fetchall()]:
+                conn.execute("ALTER TABLE batches ADD COLUMN cost_per_unit REAL NOT NULL DEFAULT 0.0")
             conn.commit()
     def save_category(self, category: Category) -> None:
         with self._get_connection() as conn:
@@ -97,9 +99,9 @@ class SQLiteProductRepository:
             conn.execute('DELETE FROM batches WHERE product_id = ?', (product.id,))
             for batch_code, batch in product.batches.items():
                 conn.execute('''
-                    INSERT INTO batches (product_id, batch_code, expiration_date, quantity, manufacturing_date, supplier, status, traceability_id, location_id, warehouse_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (product.id, batch.code, batch.expiration_date, batch.quantity, batch.manufacturing_date, batch.supplier, batch.status, batch.traceability_id, batch.location_id, batch.warehouse_id))
+                    INSERT INTO batches (product_id, batch_code, expiration_date, quantity, manufacturing_date, supplier, status, traceability_id, location_id, warehouse_id, cost_per_unit) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (product.id, batch.code, batch.expiration_date, batch.quantity, batch.manufacturing_date, batch.supplier, batch.status, batch.traceability_id, batch.location_id, batch.warehouse_id, float(batch.cost_per_unit)))
             conn.commit()
     def get_by_id(self, product_id: str) -> Optional[Product]:
         with self._get_connection() as conn:
@@ -109,12 +111,13 @@ class SQLiteProductRepository:
             batch_rows = conn.execute('SELECT * FROM batches WHERE product_id = ?', (product_id,)).fetchall()
             batches_dict = {}
             for row in batch_rows:
-                row_dict = dict(row)
-                batches_dict[row_dict['batch_code']] = Batch(
-                    code=row_dict['batch_code'], product_id=row_dict['product_id'], quantity=row_dict['quantity'],
-                    expiration_date=row_dict['expiration_date'], warehouse_id=row_dict.get('warehouse_id', 'WH-PADRAO'),
-                    location_id=row_dict.get('location_id', ''), manufacturing_date=row_dict['manufacturing_date'],
-                    supplier=row_dict['supplier'], status=row_dict['status'], traceability_id=row_dict['traceability_id']
+                r_dict = dict(row)
+                batches_dict[r_dict['batch_code']] = Batch(
+                    code=r_dict['batch_code'], product_id=r_dict['product_id'], quantity=r_dict['quantity'],
+                    expiration_date=r_dict['expiration_date'], warehouse_id=r_dict.get('warehouse_id', 'WH-PADRAO'),
+                    location_id=r_dict.get('location_id', ''), manufacturing_date=r_dict['manufacturing_date'],
+                    supplier=r_dict['supplier'], status=r_dict['status'], traceability_id=r_dict['traceability_id'],
+                    cost_per_unit=float(r_dict.get('cost_per_unit', 0.0))
                 )
             product = Product(
                 id=prod_row['id'], name=prod_row['name'], quantity=prod_row['quantity'], 
@@ -137,7 +140,8 @@ class SQLiteProductRepository:
                         code=b_dict['batch_code'], product_id=b_dict['product_id'], quantity=b_dict['quantity'],
                         expiration_date=b_dict['expiration_date'], warehouse_id=b_dict.get('warehouse_id', 'WH-PADRAO'),
                         location_id=b_dict.get('location_id', ''), manufacturing_date=b_dict['manufacturing_date'],
-                        supplier=b_dict['supplier'], status=b_dict['status'], traceability_id=b_dict['traceability_id']
+                        supplier=b_dict['supplier'], status=b_dict['status'], traceability_id=b_dict['traceability_id'],
+                        cost_per_unit=float(b_dict.get('cost_per_unit', 0.0))
                     )
                 product = Product(
                     id=row['id'], name=row['name'], quantity=row['quantity'], 
