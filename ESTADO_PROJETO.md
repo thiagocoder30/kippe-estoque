@@ -4,15 +4,17 @@
 * **Governança:** Planejamento orientado a Programas, Domínios, Sprints e Gates.
 * **Maturidade Atual do Sistema:** Nível 3 (Corporativo).
 ## 2. Status Executivo
-* **Programa Atual:** PROGRAMA C (Inventory)
+* **Programa Atual:** INFRASTRUCTURE / PROGRAM C (Inventory)
 * **Gates Transpostos:**
   * [ GATE A - FOUNDATION READY ] ✅
   * [ GATE B - SECURITY READY ] ✅
   * [ GATE B.1 - ARCHITECTURE FREEZE ] ✅
   * [ GATE INFRA - RUNNER HARDENED ] ✅
-* **Última Entrega:** Sprint INV005.2 (Repository Contract Reintegration)
+  * [ GATE INFRA - SAFE REFACTOR ] ✅
+* **Última Entrega:** Sprint INF002 (Native Refactoring Engine & Snapshots)
 ## 3. Diretórios e Artefatos Essenciais
-* `src/interfaces/sqlite_repository.py` -> (Repositório unificado estável contendo dados contratuais de Categorias e Reservas)
-* `docs/checkpoints/ARCHITECTURE_SCORECARD-INV005.2.md` -> (Métrica de Qualidade)
+* `install/lib/refactor_engine.py` -> (Motor Python para mutações de código AST-Aware com auto-rollback)
+* `src/interfaces/sqlite_repository.py` -> (Repositório unificado e livre de falhas textuais)
+* `docs/checkpoints/ARCHITECTURE_SCORECARD-INF002.md` -> (Métrica de Qualidade)
 ## 4. Próxima Ação Requerida
-* **Sprint INV006 (Inventory Adjustment Engine):** Com a persistência finalmente pacificada e integrada de forma retrocompatível, avançamos com segurança corporativa para o motor de Ajustes Físicos de Inventário Rotativo, gerando auditorias detalhadas para avarias de doca e quebras físicas.
+* **Sprint INV006 (Inventory Adjustment Engine):** O ambiente está blindado contra mutações perigosas. Proceder para a expansão do Domínio com o orquestrador de Inventário Físico e Ajustes Contábeis de Estoque.
