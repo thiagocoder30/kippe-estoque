@@ -2,17 +2,17 @@
   "program": "C",
   "program_name": "Inventory",
   "maturity": 2,
-  "gate": "C.3",
-  "gate_name": "Logistics",
-  "current_sprint": "INV013 (Inventory Snapshots)",
-  "next_sprint": "INV014 — Warehouse Analytics",
-  "roadmap_progress": "14/20 Sprints",
+  "gate": "C.4",
+  "gate_name": "Analytics",
+  "current_sprint": "INV014 (Warehouse Analytics)",
+  "next_sprint": "INV015 — Replenishment Engine",
+  "roadmap_progress": "15/20 Sprints",
   "framework_version": "1.3.0-frozen",
   "tests": {
-    "passed": 61,
+    "passed": 63,
     "failed": 0
   },
   "status": "STABLE",
-  "last_commit": "fe75f25",
-  "last_checkpoint": "CHK-051"
+  "last_commit": "ff0bde7",
+  "last_checkpoint": "CHK-052"
 }

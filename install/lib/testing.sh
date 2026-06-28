@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# KIPPE PLATFORM TESTING MODULE
+set -Eeuo pipefail
 kippe::test_execute_all() {
-    echo "  -> Executing Core Regression Suite..."
+    echo "  -> Executing Core Regression Suite with Unified PYTHONPATH..."
+    # Garante de forma irreversível a localização correta dos pacotes de domínio
     export PYTHONPATH="${KIPPE_ROOT}"
-    if ! python3 -m pytest -q "${KIPPE_ROOT}/tests/"; then
-        kippe::error "Regression Suite FAILED. Broken Domain Contracts detected."
-        exit 1
-    fi
-    echo "  -> Regression Suite: 100% PASSED"
+    python3 -m pytest -q "${KIPPE_ROOT}/tests/"
 }
