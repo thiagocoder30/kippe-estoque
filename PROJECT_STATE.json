@@ -4,15 +4,15 @@
   "maturity": 2,
   "gate": "C.3",
   "gate_name": "Logistics",
-  "current_sprint": "INV010 (Physical Inventory Adjustments)",
-  "next_sprint": "INV011 — Cycle Count",
-  "roadmap_progress": "11/20 Sprints",
+  "current_sprint": "INV011 (Cycle Count Engine)",
+  "next_sprint": "INV012 — Inventory Ledger",
+  "roadmap_progress": "12/20 Sprints",
   "framework_version": "1.3.0-frozen",
   "tests": {
-    "passed": 53,
+    "passed": 57,
     "failed": 0
   },
   "status": "STABLE",
-  "last_commit": "5116bc3",
-  "last_checkpoint": "CHK-048"
+  "last_commit": "fe982c0",
+  "last_checkpoint": "CHK-049"
 }
