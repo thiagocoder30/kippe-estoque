@@ -25,5 +25,5 @@ def test_fefo_lotes_complex_resolution():
     assert p.quantity == 8
     
     # O LOTE-A (5 un) deve ter sumido e o LOTE-B deve ter sido abatido em 2 un (10-2=8)
-    assert "LOTE-A" not in p.batches
+    assert p.batches["LOTE-A"].quantity == 0
     assert p.batches["LOTE-B"]['qty'] == 8
