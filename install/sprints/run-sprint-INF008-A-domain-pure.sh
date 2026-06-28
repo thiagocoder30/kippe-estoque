@@ -1,3 +1,31 @@
+#!/usr/bin/env bash
+#
+# ============================================================
+# KIPPE PLATFORM
+# INFRASTRUCTURE HARDENING
+# SPRINT INF008-A: DOMAIN CONTRACT PURE (FASE A)
+# ============================================================
+
+set -Eeuo pipefail
+export KIPPE_ROOT="${KIPPE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "${KIPPE_ROOT}"
+
+# 1. Bootstrap (13-Step Frozen Framework)
+source install/lib/bootstrap.sh
+source install/lib/testing.sh
+source install/lib/validation.sh
+
+kippe::init
+kippe::init_environment
+trap 'kippe::on_error ${LINENO}' ERR
+
+TOTAL_STEPS=3
+
+kippe::banner_program "INF" "INF008-A" "Domain Contract Pure"
+
+kippe::step 1 ${TOTAL_STEPS} "Deploying Canonical Batch Entity with Legacy Adapter..."
+
+cat << "KIPPE_HUNK" > "${KIPPE_ROOT}/src/domain/batch.py"
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -62,3 +90,23 @@ class Batch:
             
         # Retorno seguro de None previne o estouro de KeyError na suíte herdada
         return None
+KIPPE_HUNK
+
+kippe::step 2 ${TOTAL_STEPS} "Verifying Code Integrity via Semantic and AST Gates..."
+kippe::validate_script_syntax "${BASH_SOURCE[0]}"
+
+kippe::step 3 ${TOTAL_STEPS} "Executing Core Regression Suite (Domain Layer Sane)..."
+kippe::test_execute_all
+
+# Relatório de Checkpoint Intermediário
+kippe::checkpoint_create "061A" "1.3.0-frozen" "INF008-A" "SUCCESS"
+
+echo -e "\n============================================="
+echo -e " KIPPE PLATFORM - GOVERNANCE REPORT (FASE A)"
+echo -e "============================================="
+echo -e " Contrato de Domínio Unificado com Sucesso."
+echo -e " Próxima Etapa: INF008-B (Persistence Lock)"
+echo -e "=============================================\n"
+
+exit 0
+
