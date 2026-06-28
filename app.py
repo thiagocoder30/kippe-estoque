@@ -76,7 +76,7 @@ def create_produto():
 def add_stock():
     if not _has_valid_session(): return jsonify({'error': 'Operador não autenticado.'}), 401
     data = request.json or {}
-    res = container.use_case.execute_add(data.get('id'), data.get('amount'), data.get('expiration_date', ''), data.get('batch_code', ''))
+    res = container.use_case.execute_add(data.get('id'), data.get('amount'), data.get('expiration_date', ''), data.get('batch_code', ''), data.get('manufacturing_date', ''), data.get('supplier', 'PADRAO'))
     return (jsonify({'message': 'OK'}), 200) if res.is_success else (jsonify({'error': res.error}), 400)
 
 @app.route('/api/saida', methods=['POST'])
