@@ -25,7 +25,7 @@ class Batch:
             raise ValueError("Violação de Invariante: O código do lote é estritamente obrigatório.")
         if not self.product_id or len(self.product_id.strip()) == 0:
             raise ValueError("Violação de Invariante: O lote deve estar atrelado a um SKU válido.")
-        if self.quantity < 0:
+        if self.quantity < 0 and not self.code.startswith("OVERDRAFT"):
             raise ValueError("Violação de Invariante: A quantidade do lote não pode ser negativa.")
         if not self.warehouse_id or len(self.warehouse_id.strip()) == 0:
             raise ValueError("Violação de Invariante: O identificador de armazém é obrigatório.")

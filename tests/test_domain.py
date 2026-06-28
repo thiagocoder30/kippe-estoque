@@ -26,4 +26,4 @@ def test_remove_stock_fail_insufficient():
     res = p.remove_stock(50)
     assert res.is_success is False
     assert p.quantity == 20
-    assert "Estoque físico insuficiente." in res.error
+    assert "Política de Estoque Negativo DESATIVADA" in res.error

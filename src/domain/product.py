@@ -14,7 +14,8 @@ class Product:
     batches: Dict[str, Batch] = field(default_factory=dict)  
     unit_of_measure: str = "un"  
     status: str = "ATIVO"
-    category_id: Optional[str] = None  
+    category_id: Optional[str] = None
+    allow_negative_stock: bool = False  
 
     @property
     def available_quantity(self) -> int:
@@ -56,18 +57,31 @@ class Product:
             self.batches[batch_code] = new_batch
         return Result.ok(None)
 
-    def remove_stock(self, amount: int) -> Result[None, str]:
-        if self.status == "INATIVO":
+    def remove_stock(self, amount: int, operation_type: str = "DEFAULT", warehouse_id: str = "WH-PADRAO") -> Result[None, str]:
+        from src.domain.result import Result
+        
+        if getattr(self, 'status', "ATIVO") == "INATIVO":
             return Result.fail("Operação Rejeitada: Bloqueio de catálogo. SKU suspenso para movimentações.")
-        if amount <= 0: return Result.fail("Quantidade inválida.")
-        if self.quantity < amount: return Result.fail("Estoque físico insuficiente.")
-
+        if amount <= 0: 
+            return Result.fail("Quantidade inválida.")
+        from src.domain.services.fefo_selector import FEFOSelector
         eligible_batches = [b for b in FEFOSelector.get_eligible_batches(self.batches) if b.quantity > 0]
         
         available_valid_qty = sum(b.quantity for b in eligible_batches)
+        
+        # Árvore de Decisão de Exceções
         if available_valid_qty < amount:
-            return Result.fail("Estoque insuficiente de lotes válidos (vencidos são bloqueados para saída).")
+            has_expired_stock = self.quantity >= amount and available_valid_qty < amount
             
+            if has_expired_stock:
+                return Result.fail("Estoque insuficiente de lotes válidos.")
+                
+            if not getattr(self, 'allow_negative_stock', False):
+                return Result.fail(f"Estoque insuficiente. Política de Estoque Negativo DESATIVADA para o SKU {self.id}.")
+                
+            if operation_type == "TRANSFER":
+                return Result.fail("Transferências logísticas não podem gerar saldo negativo.")
+        # Execução Segura da Baixa
         remaining = amount
         for batch in eligible_batches:
             if remaining == 0: break
@@ -77,7 +91,18 @@ class Product:
             else:
                 remaining -= batch.quantity
                 batch.quantity = 0
-
+        # Geração do Lote Virtual (Overdraft) autorizado pela árvore acima
+        if remaining > 0:
+            overdraft_code = f"OVERDRAFT-{warehouse_id}"
+            if overdraft_code in self.batches:
+                self.batches[overdraft_code].quantity -= remaining
+            else:
+                from src.domain.batch import Batch
+                self.batches[overdraft_code] = Batch(
+                    code=overdraft_code, product_id=self.id, quantity=-remaining,
+                    expiration_date="2099-12-31", warehouse_id=warehouse_id, location_id="VIRTUAL"
+                )
+            remaining = 0
         self.quantity -= amount
         return Result.ok(None)
         
