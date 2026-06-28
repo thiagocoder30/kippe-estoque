@@ -1,0 +1,26 @@
+2026-06-27 12:08:37,829 | INFO | Produto Criado: SKU [SR-71] - Pão de Forma
+2026-06-27 12:08:37,869 | INFO | Entrada Registrada: SKU [SR-71] | Lote [LT01] | Qtd: 5
+2026-06-27 12:08:37,926 | INFO | Produto Criado: SKU [SR-72] - Leite
+2026-06-27 12:08:37,951 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT1] | Qtd: 10
+2026-06-27 12:08:37,973 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT2] | Qtd: 5
+2026-06-27 12:08:38,095 | INFO | Test Info Message
+2026-06-27 12:08:38,096 | WARNING | Test Warning Message
+2026-06-27 12:08:38,281 | WARNING | Entrada Bloqueada: SKU [SKU-FANTASMA] não encontrado.
+2026-06-27 12:11:31,086 | INFO | Produto Criado: SKU [SR-71] - Pão de Forma
+2026-06-27 12:11:31,125 | INFO | Entrada Registrada: SKU [SR-71] | Lote [LT01] | Qtd: 5
+2026-06-27 12:11:31,187 | INFO | Produto Criado: SKU [SR-72] - Leite
+2026-06-27 12:11:31,209 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT1] | Qtd: 10
+2026-06-27 12:11:31,229 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT2] | Qtd: 5
+2026-06-27 12:11:31,345 | INFO | Test Info Message
+2026-06-27 12:11:31,346 | WARNING | Test Warning Message
+2026-06-27 12:11:31,499 | WARNING | Entrada Bloqueada: SKU [SKU-FANTASMA] não encontrado.
+2026-06-27 12:15:43 | INFO | Produto Criado: SKU [SR-71] - Pão de Forma
+2026-06-27 12:15:43 | INFO | Entrada Registrada: SKU [SR-71] | Lote [LT01] | Qtd: 5
+2026-06-27 12:15:43 | INFO | Produto Criado: SKU [SR-72] - Leite
+2026-06-27 12:15:43 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT1] | Qtd: 10
+2026-06-27 12:15:43 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT2] | Qtd: 5
+2026-06-27 12:21:46 | INFO | Produto Criado: SKU [SR-71] - Pão de Forma
+2026-06-27 12:21:46 | INFO | Entrada Registrada: SKU [SR-71] | Lote [LT01] | Qtd: 5
+2026-06-27 12:21:46 | INFO | Produto Criado: SKU [SR-72] - Leite
+2026-06-27 12:21:46 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT1] | Qtd: 10
+2026-06-27 12:21:46 | INFO | Entrada Registrada: SKU [SR-72] | Lote [LT2] | Qtd: 5
