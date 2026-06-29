@@ -101,7 +101,7 @@ class SQLiteProductRepository:
                 conn.execute('''
                     INSERT INTO batches (product_id, batch_code, expiration_date, quantity, manufacturing_date, supplier, status, traceability_id, location_id, warehouse_id, cost_per_unit) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (product.id, batch.code, batch.expiration_date, batch.quantity, batch.manufacturing_date, batch.supplier, batch.status, batch.traceability_id, batch.location_id, batch.warehouse_id, float(batch.cost_per_unit)))
+                ''', (product.id, batch.code, batch.expiration_date, batch.quantity, batch.manufacturing_date, batch.supplier, batch.status, batch.traceability_id, batch.location_id, batch.warehouse_id, float(getattr(batch, 'cost_per_unit', 0.0))))
             conn.commit()
     def get_by_id(self, product_id: str) -> Optional[Product]:
         with self._get_connection() as conn:

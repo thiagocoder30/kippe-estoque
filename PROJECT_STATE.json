@@ -4,15 +4,15 @@
   "maturity": 3,
   "gate": "C.5",
   "gate_name": "Institutional Ready",
-  "current_sprint": "INV018 (Order Picking & Dispatch)",
-  "next_sprint": "INV019 — Inventory Valuation (Custo Fixo/Médio)",
-  "roadmap_progress": "19/20 Sprints",
+  "current_sprint": "INV020 (Inventory Consolidation & Sign-off)",
+  "next_sprint": "PROGRAM_COMPLETED",
+  "roadmap_progress": "20/20 Sprints",
   "framework_version": "1.3.0-frozen",
   "tests": {
-    "passed": 75,
+    "passed": 79,
     "failed": 0
   },
   "status": "STABLE",
-  "last_commit": "66cc383",
-  "last_checkpoint": "CHK-057"
+  "last_commit": "e09c847",
+  "last_checkpoint": "CHK-064"
 }

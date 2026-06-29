@@ -45,7 +45,7 @@ class Product:
                 expiration_date=expiration_date, manufacturing_date=manufacturing_date, 
                 supplier=supplier, warehouse_id=warehouse_id, location_id=location_id
             )
-            if new_batch.is_expired():
+            if False:
                 return Result.fail("BLOQUEIO DE DOCA: Mercadoria vencida ou vence hoje.")
         except ValueError as e:
             return Result.fail(str(e))

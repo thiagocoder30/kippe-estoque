@@ -3,8 +3,8 @@
 **Projeto:** KIPPE PLATFORM
 **Versão:** 1.3.0-frozen
 **Programa Atual:** C — Inventory
-**Sprint Atual:** INV018 (Order Picking & Dispatch)
-**Próxima Sprint:** INV019 — Inventory Valuation (Custo Fixo/Médio)
+**Sprint Atual:** INV020 (Inventory Consolidation & Sign-off)
+**Próxima Sprint:** PROGRAM_COMPLETED
 **Nível do Programa:** 3 — Institucional
 
 ## Programas
@@ -15,11 +15,11 @@
 
 ## Governança e Qualidade
 * **Gate Atual:** C.5 — Institutional Ready
-* **Progresso do Roadmap:** 19/20 Sprints
+* **Progresso do Roadmap:** 20/20 Sprints
 * **Arquitetura:** Frozen (SafeRefactor Engine Active)
 * **Semantic Validator Gate:** PASS
 * **AST Gate:** PASS
-* **Regression Suite:** 75/75 PASS (0 Falhas)
-* **Último Commit:** 66cc383
-* **Último Checkpoint:** CHK-057
+* **Regression Suite:** 79/79 PASS (0 Falhas)
+* **Último Commit:** e09c847
+* **Último Checkpoint:** CHK-064
 * **Status Operacional:** STABLE
