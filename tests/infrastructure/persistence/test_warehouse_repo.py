@@ -1,17 +1,25 @@
 import pytest
-from src.domain.warehouse.topology import Warehouse
-from src.infrastructure.persistence.json.warehouse_repository import JsonWarehouseRepository
+import os
+from src.domain.warehouse.ledger import InventoryAccount, TransactionType
+from src.infrastructure.persistence.json.ledger_repository import JsonLinesLedgerRepository
 
-def test_warehouse_repo_persistence(tmp_path):
-    file_path = tmp_path / "warehouses.json"
-    repo = JsonWarehouseRepository(file_path=str(file_path))
+def test_jsonl_ledger_append_only_persistence(tmp_path):
+    file_path = tmp_path / "events.jsonl"
+    repo = JsonLinesLedgerRepository(file_path=str(file_path))
     
-    wh = Warehouse(id="WH-001", name="Armazém A")
-    wh.add_location("LOC-1", "Zona Direita")
+    account = InventoryAccount(sku="SKU-123")
+    account.record_transaction("L1", TransactionType.GOODS_RECEIPT, 10, "A1", "NF-1")
+    repo.save(account)
     
-    repo.save(wh)
-    loaded = repo.get_by_id("WH-001")
+    # Valida escrita O(1) (Adicionando novo evento)
+    account.record_transaction("L1", TransactionType.SALE, -2, "STORE", "PDV-1")
+    repo.save(account)
     
+    loaded = repo.get_by_sku("SKU-123")
     assert loaded is not None
-    assert loaded.name == "Armazém A"
-    assert len(loaded.locations) == 1
+    assert len(loaded.entries) == 2
+    
+    # Verifica o ficheiro físico
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        assert len(lines) == 2

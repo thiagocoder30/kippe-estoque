@@ -1,11 +1,10 @@
 import sys
 import argparse
-from src.infrastructure.persistence.json.ledger_repository import JsonLedgerRepository
+from src.infrastructure.persistence.json.ledger_repository import JsonLinesLedgerRepository
 from src.application.warehouse.query_service import InventoryQueryService
 from src.security.exceptions import NotFoundException
 
 def print_ficha(view):
-    # Cores ANSI para UX de terminal
     C_RESET = '\033[0m'
     C_BOLD = '\033[1m'
     C_CYAN = '\033[96m'
@@ -41,7 +40,7 @@ def main():
     parser.add_argument("sku", help="Código SKU ou EAN do produto")
     args = parser.parse_args()
 
-    repo = JsonLedgerRepository()
+    repo = JsonLinesLedgerRepository()
     svc = InventoryQueryService(repo)
 
     try:
