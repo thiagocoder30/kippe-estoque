@@ -4,6 +4,7 @@ from .balance import BalanceEngine, BalanceProjection
 from .smart_sheet import SkuSmartSheet, SmartSheetBuilder
 from .replenishment import ReplenishmentEngine, ReplenishmentSuggestion
 from .divergence import DivergenceEvent, TrustScore, InventoryRealitySnapshot, DivergenceEngine, TrustScoreEngine, InventoryRealityEngine
+from .movement import MovementEvent, MovementType, DualStockView, MovementEngine
 
 __all__ = [
     "Warehouse", "StorageLocation", "InventoryAccount", "LedgerEntry", 
@@ -11,5 +12,6 @@ __all__ = [
     "SkuSmartSheet", "SmartSheetBuilder",
     "ReplenishmentEngine", "ReplenishmentSuggestion",
     "DivergenceEvent", "TrustScore", "InventoryRealitySnapshot", 
-    "DivergenceEngine", "TrustScoreEngine", "InventoryRealityEngine"
+    "DivergenceEngine", "TrustScoreEngine", "InventoryRealityEngine",
+    "MovementEvent", "MovementType", "DualStockView", "MovementEngine"
 ]
