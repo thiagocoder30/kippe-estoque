@@ -23,12 +23,18 @@ class LedgerEntry:
     quantity: int
     location_id: str
     reference_document: str
-    metadata: Dict[str, Any] = field(default_factory=dict) # Suporte a Validade, Fornecedor, OCR
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class InventoryAccount:
+    """
+    Aggregate Root do Inventário.
+    Mantém o histórico completo (entries) para cálculos de domínio e 
+    eventos pendentes (_uncommitted_events) para persistência O(1).
+    """
     sku: str
     entries: List[LedgerEntry] = field(default_factory=list)
+    _uncommitted_events: List[LedgerEntry] = field(default_factory=list, repr=False)
 
     def record_transaction(self, batch_id: str, tx_type: TransactionType, quantity: int, location_id: str, reference_document: str, metadata: dict = None) -> LedgerEntry:
         if quantity == 0:
@@ -52,4 +58,11 @@ class InventoryAccount:
             metadata=metadata or {}
         )
         self.entries.append(entry)
+        self._uncommitted_events.append(entry) # Regista a intenção de gravação
         return entry
+
+    def get_uncommitted_events(self) -> List[LedgerEntry]:
+        return self._uncommitted_events.copy()
+
+    def clear_uncommitted_events(self) -> None:
+        self._uncommitted_events.clear()
