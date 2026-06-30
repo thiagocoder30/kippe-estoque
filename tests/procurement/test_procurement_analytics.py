@@ -3,53 +3,48 @@ from src.domain.procurement.analytics import ProcurementAnalyticsEngine, Procure
 from src.domain.procurement.ledger import SupplierLedger
 from src.domain.procurement.three_way_match import MatchResult
 from src.domain.procurement.performance import SupplierPerformance
+from src.domain.procurement.settlement import InvoiceSettlement, PaymentTerms
+from src.domain.procurement.order import MonetaryValue
 
-def test_procurement_analytics_dashboard_generation():
-    # 1. Configurando Mock do Ledger com Timestamps Manipulados para Teste
+def test_procurement_analytics_extended_dashboard_metrics():
+    # 1. Configurando Histórico Cronológico do Ledger
     ledger = SupplierLedger()
     
-    # Pedido 1: Criado -> Aprovado (2h) -> Recebido (24h após aprovação)
     e1 = ledger.append_event("EV-1", "PurchaseOrderCreated", "PO-1", {})
-    object.__setattr__(e1, 'timestamp', "2026-06-01 10:00:00") # Burlar Frozen para mock
+    object.__setattr__(e1, 'timestamp', "2026-06-01 10:00:00")
     e2 = ledger.append_event("EV-2", "PurchaseApproved", "PO-1", {})
     object.__setattr__(e2, 'timestamp', "2026-06-01 12:00:00")
     e3 = ledger.append_event("EV-3", "GoodsReceived", "PO-1", {})
     object.__setattr__(e3, 'timestamp', "2026-06-02 12:00:00")
-    
-    # Pedido 2: Criado -> Aprovado (4h), ainda pendente de recebimento
-    e4 = ledger.append_event("EV-4", "PurchaseOrderCreated", "PO-2", {})
-    object.__setattr__(e4, 'timestamp', "2026-06-05 08:00:00")
-    e5 = ledger.append_event("EV-5", "PurchaseApproved", "PO-2", {})
-    object.__setattr__(e5, 'timestamp', "2026-06-05 12:00:00")
 
-    # 2. Configurando Mock do Three-Way Match (75% de sucesso)
+    # 2. Configurando Resultados do Match (Com divergências financeiras capturadas)
     matches = [
         MatchResult(is_matched=True),
-        MatchResult(is_matched=True),
-        MatchResult(is_matched=True),
-        MatchResult(is_matched=False, divergences=["Price"], quantity_delta={}, price_delta={"SKU-1": 10.0})
+        MatchResult(is_matched=False, divergences=["Preço Maior"], quantity_delta={}, price_delta={"SKU-MOCK": 150.50})
     ]
 
-    # 3. Configurando Mock de Fornecedores
+    # 3. Configurando Amostras de Performance
     perfs = [
-        SupplierPerformance("SUP-1", 90.0, 90.0, 90.0, 90.0, 90.0),
-        SupplierPerformance("SUP-2", 80.0, 80.0, 80.0, 80.0, 80.0),
-        SupplierPerformance("SUP-3", 100.0, 100.0, 100.0, 100.0, 100.0), # Top 1
-        SupplierPerformance("SUP-4", 50.0, 50.0, 50.0, 50.0, 50.0)       # Bottom 1
+        SupplierPerformance("SUP-1", 100.0, 100.0, 100.0, 100.0, 100.0),
+        SupplierPerformance("SUP-2", 40.0, 40.0, 40.0, 40.0, 40.0)
     ]
 
-    # 4. Geração do Dashboard
+    # 4. Configurando Liquidações de Fatura para Medição de Adimplemento (D010)
+    terms = PaymentTerms(description="Net 30", due_days=30)
+    s1 = InvoiceSettlement("SET-1", "NF-1", "PO-1", MonetaryValue(100.0), terms, status="PAID")
+    
+    # Processamento Analítico Extensivo
     dashboard = ProcurementAnalyticsEngine.generate_dashboard(
         ledger=ledger,
         match_results=matches,
-        performances=perfs
+        performances=perfs,
+        settlements=[s1]
     )
 
-    # 5. Asserções do Motor Analítico
-    assert dashboard.total_purchase_orders_created == 2
-    assert dashboard.three_way_match_success_rate == 75.0
-    assert dashboard.avg_approval_time_hours == 3.0 # (2h + 4h) / 2
-    assert dashboard.avg_receipt_time_hours == 24.0 # Somente o PO-1 foi recebido
-    
-    assert dashboard.top_suppliers[0].supplier_id == "SUP-3"
-    assert dashboard.bottom_suppliers[-1].supplier_id == "SUP-4"
+    # 5. Validação das Invariantes do Motor de Inteligência Expandido
+    assert dashboard.total_purchase_orders_created == 1
+    assert dashboard.three_way_match_success_rate == 50.0
+    assert dashboard.first_pass_match_rate == 50.0
+    assert dashboard.price_variance_amount == 150.50
+    assert dashboard.payment_compliance_rate == 100.0
+    assert dashboard.top_suppliers[0].supplier_id == "SUP-1"

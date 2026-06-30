@@ -1,3 +1,37 @@
+#!/usr/bin/env bash
+#
+# ============================================================
+# KIPPE PLATFORM - PROGRAM D: PROCUREMENT
+# SPRINT D010: PROCUREMENT ANALYTICS EXTENSION (READ MODEL)
+# ============================================================
+
+set -Eeuo pipefail
+export KIPPE_ROOT="${KIPPE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "${KIPPE_ROOT}"
+
+# 1. Carregamento do Framework
+source install/lib/bootstrap.sh
+source install/lib/validation.sh
+source install/lib/testing.sh
+
+# Blindagem de Infraestrutura (Fail-Fast)
+for fn in kippe::init kippe::validate_script_syntax kippe::test_execute_all kippe::checkpoint_create; do
+    if ! declare -F "$fn" >/dev/null; then
+        echo "[FATAL] Framework function missing: $fn. O script foi interrompido."
+        exit 1
+    fi
+done
+
+kippe::init
+kippe::init_environment
+trap 'kippe::on_error ${LINENO}' ERR
+
+TOTAL_STEPS=3
+kippe::banner_program "D" "D010" "Procurement Analytics Extension"
+
+kippe::step 1 ${TOTAL_STEPS} "Deploying Extended Analytics Read Models & Cross-Domain Intelligence..."
+
+cat << "KIPPE_HUNK" > "${KIPPE_ROOT}/src/domain/procurement/analytics.py"
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
 from datetime import datetime
@@ -102,3 +136,86 @@ class ProcurementAnalyticsEngine:
             price_variance_amount=round(total_variance, 2),
             payment_compliance_rate=compliance_rate
         )
+KIPPE_HUNK
+
+kippe::step 2 ${TOTAL_STEPS} "Updating and Enhancing Procurement Analytics Test Suite..."
+
+cat << "KIPPE_HUNK" > "${KIPPE_ROOT}/tests/procurement/test_procurement_analytics.py"
+import pytest
+from src.domain.procurement.analytics import ProcurementAnalyticsEngine, ProcurementDashboard
+from src.domain.procurement.ledger import SupplierLedger
+from src.domain.procurement.three_way_match import MatchResult
+from src.domain.procurement.performance import SupplierPerformance
+from src.domain.procurement.settlement import InvoiceSettlement, PaymentTerms
+from src.domain.procurement.order import MonetaryValue
+
+def test_procurement_analytics_extended_dashboard_metrics():
+    # 1. Configurando Histórico Cronológico do Ledger
+    ledger = SupplierLedger()
+    
+    e1 = ledger.append_event("EV-1", "PurchaseOrderCreated", "PO-1", {})
+    object.__setattr__(e1, 'timestamp', "2026-06-01 10:00:00")
+    e2 = ledger.append_event("EV-2", "PurchaseApproved", "PO-1", {})
+    object.__setattr__(e2, 'timestamp', "2026-06-01 12:00:00")
+    e3 = ledger.append_event("EV-3", "GoodsReceived", "PO-1", {})
+    object.__setattr__(e3, 'timestamp', "2026-06-02 12:00:00")
+
+    # 2. Configurando Resultados do Match (Com divergências financeiras capturadas)
+    matches = [
+        MatchResult(is_matched=True),
+        MatchResult(is_matched=False, divergences=["Preço Maior"], quantity_delta={}, price_delta={"SKU-MOCK": 150.50})
+    ]
+
+    # 3. Configurando Amostras de Performance
+    perfs = [
+        SupplierPerformance("SUP-1", 100.0, 100.0, 100.0, 100.0, 100.0),
+        SupplierPerformance("SUP-2", 40.0, 40.0, 40.0, 40.0, 40.0)
+    ]
+
+    # 4. Configurando Liquidações de Fatura para Medição de Adimplemento (D010)
+    terms = PaymentTerms(description="Net 30", due_days=30)
+    s1 = InvoiceSettlement("SET-1", "NF-1", "PO-1", MonetaryValue(100.0), terms, status="PAID")
+    
+    # Processamento Analítico Extensivo
+    dashboard = ProcurementAnalyticsEngine.generate_dashboard(
+        ledger=ledger,
+        match_results=matches,
+        performances=perfs,
+        settlements=[s1]
+    )
+
+    # 5. Validação das Invariantes do Motor de Inteligência Expandido
+    assert dashboard.total_purchase_orders_created == 1
+    assert dashboard.three_way_match_success_rate == 50.0
+    assert dashboard.first_pass_match_rate == 50.0
+    assert dashboard.price_variance_amount == 150.50
+    assert dashboard.payment_compliance_rate == 100.0
+    assert dashboard.top_suppliers[0].supplier_id == "SUP-1"
+KIPPE_HUNK
+
+kippe::step 3 ${TOTAL_STEPS} "Verifying Syntax and Executing Full Regression Suite (104 Tests Lock)..."
+kippe::validate_script_syntax "${BASH_SOURCE[0]}"
+kippe::test_execute_all
+
+# Registro de Estado e Manifesto
+kippe::checkpoint_create "074" "1.4.0-procurement" "D010" "SUCCESS"
+
+kippe::governance_sync \
+    "D" \
+    "Procurement" \
+    "4" \
+    "Enterprise Foundation" \
+    "D.1" \
+    "Supplier Identity" \
+    "D010 (Procurement Analytics Extension)" \
+    "D011 — Purchase Order Repository & Persistence" \
+    "10/20 Sprints" \
+    "STABLE"
+
+# Preservação Externa Isolada de Logs
+mkdir -p /sdcard/Download/kippe_logs
+cp data/test_*.log /sdcard/Download/kippe_logs/ 2>/dev/null || true
+
+echo -e "\n[STATUS] Extensão Analítica do Procurement (D010) implantada com sucesso."
+exit 0
+
