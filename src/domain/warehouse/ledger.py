@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List
+from typing import List, Dict, Any
 from src.security.exceptions import BusinessRuleViolation
 
 class TransactionType(Enum):
@@ -15,34 +15,25 @@ class TransactionType(Enum):
 
 @dataclass(frozen=True)
 class LedgerEntry:
-    """
-    Value Object Imutável.
-    Representa um evento único na linha do tempo do estoque.
-    O saldo não mora aqui; aqui moram os fatos matemáticos.
-    """
     id: str
     timestamp: str
     sku: str
     batch_id: str
     transaction_type: TransactionType
-    quantity: int  # Positivo (+) para entradas, Negativo (-) para saídas
+    quantity: int
     location_id: str
     reference_document: str
+    metadata: Dict[str, Any] = field(default_factory=dict) # Suporte a Validade, Fornecedor, OCR
 
 @dataclass
 class InventoryAccount:
-    """
-    Aggregate Root do Inventário.
-    Atua como uma "Conta Bancária" para um SKU específico.
-    """
     sku: str
     entries: List[LedgerEntry] = field(default_factory=list)
 
-    def record_transaction(self, batch_id: str, tx_type: TransactionType, quantity: int, location_id: str, reference_document: str) -> LedgerEntry:
+    def record_transaction(self, batch_id: str, tx_type: TransactionType, quantity: int, location_id: str, reference_document: str, metadata: dict = None) -> LedgerEntry:
         if quantity == 0:
             raise BusinessRuleViolation("A quantidade de uma transação no Ledger não pode ser zero.")
             
-        # Garante a direção matemática do fluxo baseado no tipo de transação
         if tx_type in [TransactionType.SALE, TransactionType.TRANSFER_OUT] and quantity > 0:
             raise BusinessRuleViolation(f"Transações do tipo {tx_type.value} exigem quantidades negativas.")
             
@@ -57,7 +48,8 @@ class InventoryAccount:
             transaction_type=tx_type,
             quantity=quantity,
             location_id=location_id,
-            reference_document=reference_document
+            reference_document=reference_document,
+            metadata=metadata or {}
         )
         self.entries.append(entry)
         return entry
