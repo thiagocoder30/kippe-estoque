@@ -1,13 +1,13 @@
 from src.infrastructure.persistence.json.purchase_order_repository import JsonPurchaseOrderRepository
 from src.infrastructure.persistence.json.supplier_repository import JsonSupplierRepository
+from src.infrastructure.observability.ndjson_audit import NDJSONAuditLogger
 from src.application.procurement.use_cases import CreatePurchaseOrderUseCase, ApprovePurchaseOrderUseCase
+from src.application.middleware.decorators import UseCaseAuditDecorator
 
 class Bootstrap:
     """
-    Composition Root: Instancia a Aplicação.
-    Centraliza a Injeção de Dependências (DI). 
-    A Camada de Apresentação utiliza o Bootstrap para obter os Casos de Uso
-    sem precisar conhecer as implementações de Infraestrutura.
+    Composition Root Consolidado.
+    Monta os Repositórios, os Use Cases Puros e injeta os Decorators Transversais.
     """
     def __init__(self, use_memory: bool = False):
         if use_memory:
@@ -19,12 +19,19 @@ class Bootstrap:
             self.po_repo = JsonPurchaseOrderRepository()
             self.sup_repo = JsonSupplierRepository()
 
-        # Injeção de Casos de Uso (Application Layer)
-        self.create_po_uc = CreatePurchaseOrderUseCase(self.po_repo, self.sup_repo)
-        self.approve_po_uc = ApprovePurchaseOrderUseCase(self.po_repo)
+        # Portas Transversais (Infra)
+        self.audit_port = NDJSONAuditLogger()
 
-    def get_create_po_use_case(self) -> CreatePurchaseOrderUseCase:
+        # Instanciação Pura (Core)
+        base_create_uc = CreatePurchaseOrderUseCase(self.po_repo, self.sup_repo)
+        base_approve_uc = ApprovePurchaseOrderUseCase(self.po_repo)
+
+        # Envolvimento Transversal (Decorators)
+        self.create_po_uc = UseCaseAuditDecorator(base_create_uc, "CREATE_PO", self.audit_port)
+        self.approve_po_uc = UseCaseAuditDecorator(base_approve_uc, "APPROVE_PO", self.audit_port)
+
+    def get_create_po_use_case(self):
         return self.create_po_uc
 
-    def get_approve_po_use_case(self) -> ApprovePurchaseOrderUseCase:
+    def get_approve_po_use_case(self):
         return self.approve_po_uc
