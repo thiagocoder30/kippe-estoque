@@ -6,6 +6,7 @@ from .replenishment import ReplenishmentEngine, ReplenishmentSuggestion
 from .divergence import DivergenceEvent, TrustScore, InventoryRealitySnapshot, DivergenceEngine, TrustScoreEngine, InventoryRealityEngine
 from .movement import MovementEvent, MovementType, DualStockView, MovementEngine
 from .receiving import ReceivingEvent, EvaluatedBatch, BatchIntelligenceEngine, ReceivingEngine
+from .operational_truth import ActionPriority, OperationalInsight, OperationalTruthEngine
 
 __all__ = [
     "Warehouse", "StorageLocation", "InventoryAccount", "LedgerEntry", 
@@ -15,5 +16,6 @@ __all__ = [
     "DivergenceEvent", "TrustScore", "InventoryRealitySnapshot", 
     "DivergenceEngine", "TrustScoreEngine", "InventoryRealityEngine",
     "MovementEvent", "MovementType", "DualStockView", "MovementEngine",
-    "ReceivingEvent", "EvaluatedBatch", "BatchIntelligenceEngine", "ReceivingEngine"
+    "ReceivingEvent", "EvaluatedBatch", "BatchIntelligenceEngine", "ReceivingEngine",
+    "ActionPriority", "OperationalInsight", "OperationalTruthEngine"
 ]
