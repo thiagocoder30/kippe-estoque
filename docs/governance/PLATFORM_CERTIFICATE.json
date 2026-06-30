@@ -1,0 +1,12 @@
+{
+  "document_type": "Platform Certificate",
+  "issuer": "KIPPE Governance Engine",
+  "granted_to_modules": [
+    "Program D: Procurement",
+    "Program C: Legacy Inventory"
+  ],
+  "architectural_clearance": true,
+  "readiness_for_next_program": "APPROVED",
+  "next_target": "Program E: Warehouse & Inventory",
+  "issued_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
