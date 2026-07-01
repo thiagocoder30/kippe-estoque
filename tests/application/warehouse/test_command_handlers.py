@@ -16,6 +16,8 @@ class InMemoryLedgerRepo(InventoryAccountRepository):
         self.accounts[account.sku] = account
     def get_by_sku(self, sku: str) -> InventoryAccount:
         return self.accounts.get(sku)
+    def get_all(self):
+        return list(self.accounts.values())
 
 @pytest.fixture
 def bus_and_repo():
