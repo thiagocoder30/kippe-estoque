@@ -1,3 +1,28 @@
+#!/usr/bin/env bash
+#
+# ============================================================
+# KIPPE PLATFORM - PROGRAM E: WAREHOUSE & INVENTORY
+# SPRINT E020.1: CERTIFICATION PATH RESOLUTION FIX
+# ============================================================
+
+set -Eeuo pipefail
+export KIPPE_ROOT="${KIPPE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "${KIPPE_ROOT}"
+
+source install/lib/bootstrap.sh
+source install/lib/validation.sh
+source install/lib/testing.sh
+
+kippe::init
+kippe::init_environment
+trap 'kippe::on_error ${LINENO}' ERR
+
+TOTAL_STEPS=2
+kippe::banner_program "E" "E020.1" "Certification Path Resolution Fix"
+
+kippe::step 1 ${TOTAL_STEPS} "Injecting Git-based Root Discovery into Certification CLI..."
+
+cat << "KIPPE_HUNK" > "${KIPPE_ROOT}/src/presentation/cli/warehouse_cli.py"
 import sys
 import os
 import argparse
@@ -154,3 +179,15 @@ def main():
 
 if __name__ == "__main__":
     main()
+KIPPE_HUNK
+
+kippe::step 2 ${TOTAL_STEPS} "Verifying Syntax and Executing Platform Regression..."
+kippe::validate_script_syntax "${BASH_SOURCE[0]}"
+kippe::test_execute_all
+
+# Registro de Estado e Manifesto
+kippe::checkpoint_create "120" "1.5.0-platform" "E020.1" "SUCCESS"
+
+echo -e "\n[STATUS] Certification Path Resoltion Fix aplicada! O motor descobre agora a raiz dinamicamente."
+exit 0
+
