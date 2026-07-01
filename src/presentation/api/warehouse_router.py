@@ -13,6 +13,10 @@ class WarehouseAPIRouter:
         self.query_service = query_service
         self.command_bus = command_bus
 
+    # ==========================================
+    # READ SIDE (GET)
+    # ==========================================
+    
     def get_sku(self, sku: str) -> Tuple[int, Dict[str, Any]]:
         try:
             view = self.query_service.get_sku_view(sku)
@@ -33,10 +37,13 @@ class WarehouseAPIRouter:
         except NotFoundException as e:
             return 404, {"error": str(e)}
         except Exception as e:
-            # Nunca engolir exceções em modo desenvolvimento
             print("\n\033[91m[API INTERNAL ERROR]\033[0m")
             traceback.print_exc()
             return 500, {"error": "Erro interno do servidor.", "details": str(e)}
+
+    # ==========================================
+    # WRITE SIDE (POST)
+    # ==========================================
 
     def post_receive_goods(self, payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         try:
@@ -66,5 +73,17 @@ class WarehouseAPIRouter:
             )
             self.command_bus.dispatch(cmd)
             return 201, {"message": "Transferência para loja registada."}
+        except Exception as e:
+            return 400, {"error": str(e)}
+
+    def post_register_adjustment(self, payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        try:
+            cmd = RegisterAdjustmentCommand(
+                sku=payload["sku"], quantity=payload["quantity"],
+                batch_code=payload["batch_code"], divergence_type=payload["divergence_type"],
+                reason=payload["reason"], operator=payload["operator"]
+            )
+            self.command_bus.dispatch(cmd)
+            return 201, {"message": "Divergência/Ajuste registado com sucesso."}
         except Exception as e:
             return 400, {"error": str(e)}
