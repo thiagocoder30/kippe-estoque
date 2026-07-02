@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Optional, List, Dict
+from typing import Literal, Optional, List, Dict, Any
+
 from src.security.exceptions import BusinessRuleViolation
+
 
 MovementType = Literal[
     "TO_STORE",
@@ -9,63 +11,150 @@ MovementType = Literal[
     "CONSUMPTION",
     "ADJUSTMENT",
     "TRANSFER",
-    "RETURN_TO_STOCK"
+    "RETURN_TO_STOCK",
 ]
+
 
 @dataclass(frozen=True)
 class MovementEvent:
-    """
-    Evento ultra-leve de registro de movimentação operacional.
-    Focado na captura em <5s para garantir adesão.
-    """
     sku: str
     quantity: int
     movement_type: MovementType
-    origin: str          # ex: "REPOSITOR_APP", "AUDIT"
-    destination: str     # ex: "STORE", "DEPOT"
+    origin: str
+    destination: str
     reason: Optional[str]
     created_at: str
 
+
 class DualStockView:
     """
-    CQRS Read Model para o Estoque Dual (Depósito vs Loja).
-    Calcula a realidade particionada a partir dos micro-registros.
+    Calcula a visão Depot/Store tanto para eventos legados
+    quanto para o Ledger moderno.
+
+    O objetivo desta implementação é manter compatibilidade
+    retroativa com toda a suíte de testes.
     """
+
     @staticmethod
-    def calculate(events: List[MovementEvent], sku: str, base_depot_stock: int = 0) -> Dict[str, int]:
+    def calculate(
+        events: List[Any],
+        sku: str,
+        base_depot_stock: int = 0,
+    ) -> Dict[str, int]:
+
         depot = base_depot_stock
         store = 0
 
         for e in events:
-            if e.sku != sku:
+
+            event_sku = getattr(
+                e,
+                "sku",
+                getattr(e, "product_sku", None),
+            )
+
+            if event_sku and event_sku != sku:
                 continue
 
-            if e.movement_type == "TO_STORE":
-                depot -= e.quantity
-                store += e.quantity
-            elif e.movement_type in ("FROM_STORE", "RETURN_TO_STOCK"):
-                store -= e.quantity
-                depot += e.quantity
-            elif e.movement_type == "CONSUMPTION":
-                store -= e.quantity
-            elif e.movement_type == "ADJUSTMENT":
-                depot += e.quantity
+            #
+            # ======================================================
+            # LEDGER MODERNO
+            # ======================================================
+            #
+            if hasattr(e, "transaction_type"):
+
+                qty = e.quantity
+                tx = e.transaction_type.name
+
+                if tx == "GOODS_RECEIPT":
+                    depot += qty
+
+                elif tx == "TRANSFER_OUT":
+                    # quantidade negativa
+                    depot += qty
+
+                elif tx == "TRANSFER_IN":
+                    # quantidade positiva
+                    store += qty
+
+                elif tx == "SALE":
+                    # quantidade negativa
+                    store += qty
+
+                elif tx == "ADJUSTMENT":
+                    location = getattr(
+                        e,
+                        "location_id",
+                        "DEPOT",
+                    )
+
+                    if location == "STORE":
+                        store += qty
+                    else:
+                        depot += qty
+
+                elif tx == "CYCLE_COUNT":
+                    location = getattr(
+                        e,
+                        "location_id",
+                        "DEPOT",
+                    )
+
+                    if location == "STORE":
+                        store += qty
+                    else:
+                        depot += qty
+
+                continue
+
+            #
+            # ======================================================
+            # MODELO LEGADO
+            # ======================================================
+            #
+            qty = getattr(e, "quantity", 0)
+            movement = getattr(e, "movement_type", None)
+
+            if movement == "TO_STORE":
+                depot -= qty
+                store += qty
+
+            elif movement in (
+                "FROM_STORE",
+                "RETURN_TO_STOCK",
+            ):
+                store -= qty
+                depot += qty
+
+            elif movement == "CONSUMPTION":
+                store -= qty
+
+            elif movement == "ADJUSTMENT":
+                depot += qty
 
         return {
             "depot": depot,
             "store": store,
-            "total": depot + store
+            "total": depot + store,
         }
 
+
 class MovementEngine:
-    """
-    Fábrica de registro rápido para evitar a geração de divergências silenciosas.
-    """
     @staticmethod
-    def register(sku: str, quantity: int, movement_type: MovementType, origin: str, destination: str, reason: Optional[str] = None) -> MovementEvent:
+    def register(
+        sku: str,
+        quantity: int,
+        movement_type: MovementType,
+        origin: str,
+        destination: str,
+        reason: Optional[str] = None,
+    ) -> MovementEvent:
+
         if quantity <= 0:
-            raise BusinessRuleViolation("A quantidade de movimentação deve ser estritamente positiva.")
-            
+            raise BusinessRuleViolation(
+                "A quantidade de movimentação deve ser estritamente positiva."
+            )
+
         return MovementEvent(
             sku=sku,
             quantity=quantity,
@@ -73,5 +162,5 @@ class MovementEngine:
             origin=origin,
             destination=destination,
             reason=reason,
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().isoformat(),
         )

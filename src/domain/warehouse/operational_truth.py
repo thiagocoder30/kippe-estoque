@@ -1,63 +1,75 @@
 from dataclasses import dataclass
-from typing import Literal, Dict
+from enum import Enum
+from typing import Optional, Any
 
-ActionPriority = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+
+class ActionPriority(str, Enum):
+    LOW = "LOW"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
 
 @dataclass(frozen=True)
 class OperationalInsight:
-    """O único artefato que o operador humano precisa ler."""
-    sku: str
-    title: str
-    message: str
     priority: ActionPriority
+    reason: str
     suggested_action: str
 
+
 class OperationalTruthEngine:
-    """
-    Motor de Compressão de Decisão.
-    Consome matemática complexa (E006-E009) e emite diretrizes táticas simplificadas.
-    """
+
+    ACTION_REASON = {
+        ActionPriority.LOW: "OK",
+        ActionPriority.HIGH: "BLOQUEIO PARCIAL",
+        ActionPriority.CRITICAL: "RISCO CRÍTICO"
+    }
+
     @staticmethod
     def evaluate(
         sku: str,
-        stock_total: int,
-        divergence_penalty: float, # 0.0 (sem penalidade) a 1.0 (alta penalidade)
-        trust_score: float,        # 0.0 (não confiável) a 1.0 (confiável)
-        inbound_risk: float        # 0.0 (baixo risco) a 1.0 (alto risco na origem)
+        stock_total: float,
+        divergence_penalty: float,
+        trust_score: float,
+        inbound_risk: float,
+        account: Optional[Any] = None  # compatível com query_service
     ) -> OperationalInsight:
-        
-        # O cálculo funde a confiabilidade da história (trust), 
-        # do presente (divergência) e do passado (origem)
-        risk = (
-            ((1.0 - trust_score) * 0.4) +
-            (divergence_penalty * 0.4) +
-            (inbound_risk * 0.2)
+
+        # -----------------------------
+        # RISK SCORE
+        # -----------------------------
+        risk_score = (
+            divergence_penalty * 0.35 +
+            (1 - trust_score) * 0.35 +
+            inbound_risk * 0.30
         )
 
-        # Matriz de Decisão Operacional
-        if risk > 0.8:
-            priority = "CRITICAL"
-            action = "PARALISAR COMPRAS. AUDITORIA IMEDIATA EXIGIDA."
-        elif risk > 0.5:
-            priority = "HIGH"
-            action = "VERIFICAR FÍSICO ANTES DE QUALQUER NOVA MOVIMENTAÇÃO."
-        elif risk > 0.3:
-            priority = "MEDIUM"
-            action = "MONITORIZAR SKU. PRECISÃO EM QUEDA."
+        # -----------------------------
+        # PRIORIDADE
+        # -----------------------------
+        if risk_score < 0.3:
+            priority = ActionPriority.LOW
+        elif risk_score < 0.7:
+            priority = ActionPriority.HIGH
         else:
-            priority = "LOW"
-            action = "OPERAÇÃO NORMAL."
+            priority = ActionPriority.CRITICAL
 
-        # Intervenção de Reposição Saudável (apenas se o risco for suportável)
-        if stock_total < 10 and risk < 0.5:
-            action = "CRIAR ORDEM DE REPOSIÇÃO (BAIXO RISCO OPERACIONAL)."
-        elif stock_total < 10 and risk >= 0.5:
-            action = "ESTOQUE BAIXO, MAS RISCO ALTO. AUDITAR ANTES DE COMPRAR."
+        # -----------------------------
+        # CONTEXTO INSTITUCIONAL DE ESTOQUE
+        # -----------------------------
+        if priority == ActionPriority.LOW:
+            if stock_total <= 10:
+                suggested_action = "CRIAR ORDEM DE REPOSIÇÃO"
+            else:
+                suggested_action = "OPERAÇÃO NORMAL"
+
+        elif priority == ActionPriority.HIGH:
+            suggested_action = "AUDITAR ANTES DE COMPRAR"
+
+        else:
+            suggested_action = "PARALISAR COMPRAS"
 
         return OperationalInsight(
-            sku=sku,
-            title=f"STATUS {sku}: {priority}",
-            message=f"Nível de Risco Operacional: {round(risk, 2)}",
             priority=priority,
-            suggested_action=action
+            reason=OperationalTruthEngine.ACTION_REASON[priority],
+            suggested_action=suggested_action
         )
