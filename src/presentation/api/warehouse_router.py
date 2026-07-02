@@ -16,7 +16,7 @@ class WarehouseAPIRouter:
     # ==========================================
     # READ SIDE (GET)
     # ==========================================
-    
+
     def get_sku(self, sku: str) -> Tuple[int, Dict[str, Any]]:
         try:
             view = self.query_service.get_sku_view(sku)
@@ -28,10 +28,24 @@ class WarehouseAPIRouter:
                     "depot": view.depot_balance,
                     "store": view.store_balance
                 },
+                "traceability": {
+                    "active_batch": view.active_batch,
+                    "first_expiration_date": view.first_expiration_date,
+                    "primary_supplier": view.primary_supplier,
+                    "last_receipt_date": view.last_receipt_date
+                },
+                "replenishment": {
+                    "needs_purchasing": view.replenishment_needed,
+                    "suggested_quantity": view.suggested_quantity,
+                    "min_stock_reference": view.min_stock,
+                    "ideal_stock_reference": view.ideal_stock
+                },
                 "operational_metrics": {
                     "trust_score": view.trust_score_percentage,
                     "risk_level": view.action_priority,
-                    "recommended_action": view.recommended_action
+                    "recommended_action": view.recommended_action,
+                    "divergence_count": view.divergence_count,
+                    "last_divergence": view.last_divergence
                 }
             }
         except NotFoundException as e:
@@ -87,3 +101,4 @@ class WarehouseAPIRouter:
             return 201, {"message": "Divergência/Ajuste registado com sucesso."}
         except Exception as e:
             return 400, {"error": str(e)}
+
