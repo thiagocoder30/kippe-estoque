@@ -1,0 +1,12 @@
+/* Reset e tipografia base para evitar quebras em diferentes aparelhos Android */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: #f3f4f6;
+    -webkit-tap-highlight-color: transparent; /* Remove piscar azul no toque do Android */
+}
