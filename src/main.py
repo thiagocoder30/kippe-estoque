@@ -52,6 +52,24 @@ bus.register(RegisterAdjustmentCommand, RegisterAdjustmentHandler(repo, catalog)
 warehouse_api = WarehouseAPIRouter(query_service=query_svc, command_bus=bus)
 
 # =========================================================
+# SEED DE DADOS (Popula o banco em memória ao ligar o servidor)
+# =========================================================
+print("\n[INFO] Injetando lote inicial de Detergente Ypê no Ledger em memória...")
+warehouse_api.post_receive_goods({
+    "sku": "789609890001", "quantity": 20, "supplier": "Indústria Ypê",
+    "batch_code": "LOTE-AGORA", "expiration_date": "2027-01-01",
+    "invoice_id": "NF-1001", "operator": "Thiago"
+})
+warehouse_api.post_transfer_to_store({
+    "sku": "789609890001", "quantity": 5, "batch_code": "LOTE-AGORA", "operator": "Repositor"
+})
+warehouse_api.post_register_adjustment({
+    "sku": "789609890001", "quantity": -2, "batch_code": "LOTE-AGORA",
+    "divergence_type": "UNREGISTERED_WITHDRAWAL",
+    "reason": "Perda na prateleira", "operator": "Auditoria"
+})
+
+# =========================================================
 # GATEWAY HTTP NATIVO (Sem dependências externas)
 # =========================================================
 class KippeHTTPGateway(BaseHTTPRequestHandler):
@@ -82,10 +100,8 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
         # 1. Servidor de Arquivos Estáticos (PWA Frontend)
         if self.path.startswith('/web/'):
             try:
-                # Resolve o caminho do arquivo removendo parâmetros de query
                 filepath = self.path.split('?')[0].lstrip('/')
                 
-                # Proteção básica contra path traversal
                 if '..' in filepath:
                     self._write_json_response(403, {"error": "Acesso negado."})
                     return
@@ -140,7 +156,6 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
         self._write_json_response(404, {"error": "Rota de consulta não encontrada."})
 
     def do_POST(self):
-        # Captura e decodificação do corpo da requisição JSON
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
         
@@ -171,7 +186,6 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
 # =========================================================
 def run(port=8000):
     server_address = ('', port)
-    # ThreadingHTTPServer evita travamento de conexões abertas no celular
     httpd = ThreadingHTTPServer(server_address, KippeHTTPGateway)
     print(f"\n\033[92m[OK] KIPPE NATIVE HTTP GATEWAY OPERANDO EM PORTA {port}...\033[0m")
     try:
