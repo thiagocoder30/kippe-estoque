@@ -7,17 +7,28 @@
     
     <link rel="manifest" href="/web/manifest.json">
     <meta name="theme-color" content="#1e3a8a">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
     <link rel="stylesheet" href="/web/css/app.css">
-</head>
-<body>
-    <div style="display: flex; height: 100vh; justify-content: center; align-items: center; flex-direction: column; text-align: center; padding: 20px;">
-        <h1 style="color: #1e3a8a; font-size: 24px; margin-bottom: 10px;">KIPPE PLATFORM</h1>
-        <p style="color: #6b7280; font-size: 14px;">Fundação PWA Ativa. Aguardando Sprint F002 (Operational Dashboard).</p>
-    </div>
+    </head>
+<body class="bg-gray-100 text-gray-900">
+    
+    <header class="bg-blue-900 text-white p-4 shadow-md sticky top-0 z-50">
+        <h1 class="text-xl font-bold tracking-wide">KIPPE PLATFORM</h1>
+    </header>
 
-    <script src="/web/js/app.js"></script>
+    <main class="p-4 relative">
+        <div id="global-loader" class="hidden text-center py-4 text-blue-600 font-bold">
+            Sincronizando...
+        </div>
+
+        <section id="dashboard-view" class="hidden">
+            <h2 id="prodName" class="text-2xl font-black mb-2"></h2>
+            <div class="text-sm text-gray-600">SKU: <span id="prodSku" class="font-mono"></span></div>
+            <div class="text-4xl font-black text-blue-900 mt-4" id="stockTotal"></div>
+        </section>
+    </main>
+
+    <script type="module" src="/web/js/app.js"></script>
 </body>
 </html>
+
