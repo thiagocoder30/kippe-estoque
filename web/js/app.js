@@ -2,10 +2,6 @@ import { APIClient } from './api.js';
 import { UIManager } from './ui.js';
 import { Router } from './router.js';
 
-/**
- * Classe principal de orquestração do KIPPE PWA.
- * Padrão: Facade / Bootstrapper
- */
 class KippeApplication {
     constructor() {
         this.api = new APIClient();
@@ -19,27 +15,30 @@ class KippeApplication {
         this._registerServiceWorker();
         this.router.init();
         
-        // Verificação de saúde da API de forma assíncrona sem bloquear a UI
-        try {
-            const health = await this.api.checkHealth();
-            console.log('[KIPPE] Status da API:', health);
-        } catch (error) {
-            console.warn('[KIPPE] Trabalhando em modo Offline. API inacessível.');
-        }
+        // Vincula a pesquisa operacional do botão de busca
+        this.ui.bindSearchEvent(async (sku) => {
+            this.ui.showLoader();
+            try {
+                const data = await this.api.getSku(sku);
+                this.ui.hideLoader();
+                this.ui.renderDashboard(data);
+            } catch (error) {
+                this.ui.hideLoader();
+                this.ui.showError(error.message || "Erro de rede ou SKU não encontrado.");
+            }
+        });
     }
 
     _registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/web/sw.js')
-                    .then(reg => console.log('[KIPPE] Service Worker Isolado. Escopo:', reg.scope))
-                    .catch(err => console.error('[KIPPE] Falha crítica no Service Worker:', err));
+                    .catch(err => console.error('[KIPPE] Service Worker falhou:', err));
             });
         }
     }
 }
 
-// Inicialização segura após o carregamento do DOM
 document.addEventListener('DOMContentLoaded', () => {
     const app = new KippeApplication();
     app.bootstrap();
