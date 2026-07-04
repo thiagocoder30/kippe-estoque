@@ -13,70 +13,26 @@ from src.application.warehouse.commands import (
 from src.application.warehouse.use_cases.receive_goods import ReceiveGoodsHandler
 from src.application.warehouse.use_cases.transfer_to_store import TransferToStoreHandler
 from src.application.warehouse.use_cases.register_adjustment import RegisterAdjustmentHandler
-from src.domain.warehouse.ledger_repository import InventoryAccountRepository
-from src.domain.warehouse.ledger import InventoryAccount
 
 # =========================================================
-# INFRAESTRUTURA EM MEMÓRIA (Catálogo Dinâmico Inteligente)
+# NOVA INFRAESTRUTURA DE PERSISTÊNCIA (SQLite)
 # =========================================================
-class FakeCatalog:
-    def __init__(self):
-        self.products = {
-            "789609890001": {"description": "Detergente Ypê 500 ml", "brand": "Ypê", "category": "LIMPEZA"}
-        }
+from src.infrastructure.database import SQLiteLedgerRepo, SQLiteCatalog
 
-    def register_product(self, sku, description, category):
-        self.products[sku] = {
-            "description": description.strip() if description else "Produto Não Identificado",
-            "brand": "Genérica",
-            "category": category.strip() if category else "GERAL"
-        }
+# Inicialização do estado apontando para o banco de dados real local
+repo = SQLiteLedgerRepo(db_path="kippe.db")
+catalog = SQLiteCatalog(db_path="kippe.db")
 
-    def get_by_sku(self, sku):
-        data = self.products.get(sku, {"description": "Produto Sem Cadastro", "brand": "N/A", "category": "GERAL"})
-        class Product: pass
-        p = Product()
-        p.description = data["description"]
-        p.brand = data["brand"]
-        p.category = data["category"]
-        return p
-
-class InMemoryLedgerRepo(InventoryAccountRepository):
-    def __init__(self):
-        self.accounts = {}
-    def save(self, account: InventoryAccount) -> None:
-        self.accounts[account.sku] = account
-    def get_by_sku(self, sku: str) -> InventoryAccount:
-        return self.accounts.get(sku)
-    def get_all(self):
-        return list(self.accounts.values())
-
-# Inicialização do estado centralizado
-repo = InMemoryLedgerRepo()
-catalog = FakeCatalog()
 query_svc = InventoryQueryService(ledger_repo=repo, catalog_repo=catalog)
 bus = CommandBus()
 
+# Registro de Handlers no Barramento de Comandos
 bus.register(ReceiveGoodsCommand, ReceiveGoodsHandler(repo, catalog))
 bus.register(TransferToStoreCommand, TransferToStoreHandler(repo, catalog))
 bus.register(RegisterAdjustmentCommand, RegisterAdjustmentHandler(repo, catalog))
 
+# Instância única do Roteador de Fronteira
 warehouse_api = WarehouseAPIRouter(query_service=query_svc, command_bus=bus)
-
-print("\n[INFO] Injetando lote inicial de Detergente Ypê no Ledger em memória...")
-warehouse_api.post_receive_goods({
-    "sku": "789609890001", "quantity": 20, "supplier": "Indústria Ypê",
-    "batch_code": "LOTE-AGORA", "expiration_date": "2027-01-01",
-    "invoice_id": "NF-1001", "operator": "Thiago"
-})
-warehouse_api.post_transfer_to_store({
-    "sku": "789609890001", "quantity": 5, "batch_code": "LOTE-AGORA", "operator": "Repositor"
-})
-warehouse_api.post_register_adjustment({
-    "sku": "789609890001", "quantity": -2, "batch_code": "LOTE-AGORA",
-    "divergence_type": "UNREGISTERED_WITHDRAWAL",
-    "reason": "Perda na prateleira", "operator": "Auditoria"
-})
 
 # =========================================================
 # GATEWAY HTTP NATIVO
@@ -93,6 +49,7 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
         self._set_cors_headers()
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.end_headers()
+        
         response_bytes = json.dumps(body, ensure_ascii=False).encode('utf-8')
         self.wfile.write(response_bytes)
 
@@ -108,6 +65,7 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
                 if '..' in filepath:
                     self._write_json_response(403, {"error": "Acesso negado."})
                     return
+
                 with open(filepath, 'rb') as f:
                     content = f.read()
                 
@@ -165,7 +123,7 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
             return
 
         if self.path == '/api/receive':
-            # Atualiza o catálogo dinâmico em memória com os dados vitais inseridos
+            # Atualiza o catálogo no SQLite
             sku = payload.get("sku")
             description = payload.get("description")
             category = payload.get("category")
