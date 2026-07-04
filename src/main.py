@@ -1,9 +1,9 @@
 import json
 import re
 import os
+from urllib.parse import unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# Importações estáveis do Domínio e Apresentação
 from src.presentation.api.warehouse_router import WarehouseAPIRouter
 from src.application.warehouse.query_service import InventoryQueryService
 from src.application.warehouse.command_bus import CommandBus
@@ -14,29 +14,20 @@ from src.application.warehouse.use_cases.receive_goods import ReceiveGoodsHandle
 from src.application.warehouse.use_cases.transfer_to_store import TransferToStoreHandler
 from src.application.warehouse.use_cases.register_adjustment import RegisterAdjustmentHandler
 
-# =========================================================
-# NOVA INFRAESTRUTURA DE PERSISTÊNCIA (SQLite)
-# =========================================================
 from src.infrastructure.database import SQLiteLedgerRepo, SQLiteCatalog
 
-# Inicialização do estado apontando para o banco de dados real local
 repo = SQLiteLedgerRepo(db_path="kippe.db")
 catalog = SQLiteCatalog(db_path="kippe.db")
 
 query_svc = InventoryQueryService(ledger_repo=repo, catalog_repo=catalog)
 bus = CommandBus()
 
-# Registro de Handlers no Barramento de Comandos
 bus.register(ReceiveGoodsCommand, ReceiveGoodsHandler(repo, catalog))
 bus.register(TransferToStoreCommand, TransferToStoreHandler(repo, catalog))
 bus.register(RegisterAdjustmentCommand, RegisterAdjustmentHandler(repo, catalog))
 
-# Instância única do Roteador de Fronteira
 warehouse_api = WarehouseAPIRouter(query_service=query_svc, command_bus=bus)
 
-# =========================================================
-# GATEWAY HTTP NATIVO
-# =========================================================
 class KippeHTTPGateway(BaseHTTPRequestHandler):
     
     def _set_cors_headers(self):
@@ -44,12 +35,11 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type')
 
-    def _write_json_response(self, status_code: int, body: dict):
+    def _write_json_response(self, status_code: int, body: list | dict):
         self.send_response(status_code)
         self._set_cors_headers()
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.end_headers()
-        
         response_bytes = json.dumps(body, ensure_ascii=False).encode('utf-8')
         self.wfile.write(response_bytes)
 
@@ -65,7 +55,6 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
                 if '..' in filepath:
                     self._write_json_response(403, {"error": "Acesso negado."})
                     return
-
                 with open(filepath, 'rb') as f:
                     content = f.read()
                 
@@ -103,11 +92,29 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
             self._write_json_response(200, {"status": "ok", "system": "KIPPE PLATFORM v1.0 (Native HTTP)"})
             return
 
+        if self.path.startswith('/api/search'):
+            query_params = self.path.split('?')
+            if len(query_params) > 1:
+                params = dict(qc.split('=') for qc in query_params[1].split('&') if '=' in qc)
+                term = unquote(params.get('q', ''))
+                if term:
+                    results = catalog.search_by_term(term)
+                    self._write_json_response(200, results)
+                    return
+            self._write_json_response(200, [])
+            return
+
         sku_match = re.match(r'^/api/sku/([^/]+)$', self.path)
         if sku_match:
             sku = sku_match.group(1)
-            status_code, body = warehouse_api.get_sku(sku)
-            self._write_json_response(status_code, body)
+            status_code, response_data = warehouse_api.get_sku(sku)
+            
+            # Injeta a foto salva no catálogo diretamente no Read Model da API
+            if status_code == 200:
+                product_meta = catalog.get_by_sku(sku)
+                response_data["photo"] = getattr(product_meta, "photo", None)
+                
+            self._write_json_response(status_code, response_data)
             return
 
         self._write_json_response(404, {"error": "Rota não encontrada."})
@@ -123,12 +130,12 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
             return
 
         if self.path == '/api/receive':
-            # Atualiza o catálogo no SQLite
             sku = payload.get("sku")
             description = payload.get("description")
             category = payload.get("category")
+            photo = payload.get("photo") # Captura a string comprimida em base64 da imagem
             if sku and description:
-                catalog.register_product(sku, description, category)
+                catalog.register_product(sku, description, category, photo)
 
             status_code, body = warehouse_api.post_receive_goods(payload)
             self._write_json_response(status_code, body)

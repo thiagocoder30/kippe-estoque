@@ -1,6 +1,5 @@
 /**
- * Módulo de Hardware Scanner (Integração com Câmera do Dispositivo).
- * Responsabilidade: Gerenciar permissões de vídeo, ler EAN/Código de Barras e emitir callbacks.
+ * Módulo de Hardware Scanner (Resolvido o bug de instâncias duplicadas).
  */
 export class ScannerManager {
     constructor(onScanSuccessCallback) {
@@ -8,61 +7,63 @@ export class ScannerManager {
         this.onScanSuccess = onScanSuccessCallback;
         this.modal = document.getElementById('scanner-modal');
         this.closeBtn = document.getElementById('close-scanner-btn');
+        this.isScanning = false;
 
         if (this.closeBtn) {
             this.closeBtn.addEventListener('click', () => this.stop());
         }
     }
 
-    start() {
-        if (!this.modal) return;
-        
-        // Exibe o modal em tela cheia (Overlay)
+    async start() {
+        if (!this.modal || this.isScanning) return;
         this.modal.classList.remove('hidden');
+        this.isScanning = true;
 
-        // Inicializa o leitor apontando para a div "reader"
-        this.html5Qrcode = new Html5Qrcode("reader");
-        
-        // Configuração de alta performance para códigos de barras
+        // Se a instância não existe, cria. Se existe, reutiliza a limpeza.
+        if (!this.html5Qrcode) {
+            this.html5Qrcode = new Html5Qrcode("reader");
+        }
+
         const config = { 
             fps: 10, 
             qrbox: { width: 250, height: 150 },
-            aspectRatio: 1.0,
             formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.CODE_128 ]
         };
-
-        // facingMode: "environment" força o uso da câmera traseira principal
-        this.html5Qrcode.start(
-            { facingMode: "environment" },
-            config,
-            (decodedText, decodedResult) => {
-                // SUCESSO: Para a leitura imediatamente
-                this.stop();
-                
-                // Feedback Tátil (Vibração do celular se suportado)
-                if (navigator.vibrate) navigator.vibrate(200);
-                
-                // Dispara o callback para o orquestrador (app.js)
-                this.onScanSuccess(decodedText);
-            },
-            (errorMessage) => {
-                // Ignora erros contínuos de enquadramento enquanto busca o código
-            }
-        ).catch((err) => {
+        
+        try {
+            await this.html5Qrcode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    if (this.isScanning) {
+                        this.stop(); // Para o hardware imediatamente
+                        if (navigator.vibrate) navigator.vibrate(200);
+                        this.onScanSuccess(decodedText);
+                    }
+                },
+                (errorMessage) => { /* Ignorar avisos naturais de reenquadramento contínuo */ }
+            );
+        } catch (err) {
             console.error("[SCANNER ERROR]", err);
-            alert("Erro ao iniciar a câmera. Verifique as permissões do navegador.");
+            alert("Erro ao aceder à câmara. Verifique as permissões do navegador.");
             this.stop();
-        });
+        }
     }
 
     stop() {
+        this.isScanning = false;
+        if (this.modal) this.modal.classList.add('hidden');
+        
         if (this.html5Qrcode) {
             this.html5Qrcode.stop().then(() => {
                 this.html5Qrcode.clear();
+                this.html5Qrcode = null; // Limpa o ponteiro para a memória (Fix do Bug)
+            }).catch(err => {
+                console.error("Erro ao fechar scanner:", err);
+                this.html5Qrcode.clear();
                 this.html5Qrcode = null;
-            }).catch(err => console.error(err));
+            });
         }
-        if (this.modal) this.modal.classList.add('hidden');
     }
 }
 

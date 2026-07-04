@@ -8,18 +8,30 @@ class KippeApplication {
         this.api = new APIClient();
         this.ui = new UIManager();
         this.router = new Router(this.ui, this.api);
-        
+        this.operatorName = localStorage.getItem('kippe_operator') || null;
+
         this.scanner = new ScannerManager((scannedCode) => {
             this.handleScanSuccess(scannedCode);
         });
     }
 
     async bootstrap() {
-        console.log('[KIPPE] Inicializando KIPPE Platform Mobile...');
+        console.log('[KIPPE] A iniciar KIPPE Platform Mobile...');
         this._registerServiceWorker();
         this.router.init();
         
+        this.initIdentityManager();
+
         this.ui.bindSearchEvent((sku) => this.fetchAndRenderSku(sku));
+        
+        // NOVO: Liga o motor preditivo de procura
+        this.ui.bindSearchAutocomplete(
+            async (term) => {
+                try { return await this.api.searchCatalog(term); } 
+                catch (e) { return []; }
+            },
+            (sku) => { this.fetchAndRenderSku(sku); }
+        );
 
         const scanBtn = document.getElementById('btn-scan');
         if (scanBtn) scanBtn.addEventListener('click', () => this.scanner.start());
@@ -35,29 +47,51 @@ class KippeApplication {
         const submitReceiveBtn = document.getElementById('submit-receive-btn');
         if (submitReceiveBtn) submitReceiveBtn.addEventListener('click', () => this.submitReceive());
 
-        // BIND: Botões de Ações Operacionais no Dashboard
         const btnOpenTransfer = document.getElementById('btn-open-transfer');
-        if (btnOpenTransfer) {
-            btnOpenTransfer.addEventListener('click', () => {
-                const currentSku = document.getElementById('searchInput').value.trim();
-                this.ui.showTransferModal(currentSku);
-            });
-        }
+        if (btnOpenTransfer) btnOpenTransfer.addEventListener('click', () => {
+            this.ui.showTransferModal(document.getElementById('searchInput').value.trim());
+        });
 
         const btnOpenAdjustment = document.getElementById('btn-open-adjustment');
-        if (btnOpenAdjustment) {
-            btnOpenAdjustment.addEventListener('click', () => {
-                const currentSku = document.getElementById('searchInput').value.trim();
-                this.ui.showAdjustmentModal(currentSku);
-            });
-        }
+        if (btnOpenAdjustment) btnOpenAdjustment.addEventListener('click', () => {
+            this.ui.showAdjustmentModal(document.getElementById('searchInput').value.trim());
+        });
 
-        // BIND: Submissão dos Modais
         const submitTransferBtn = document.getElementById('submit-transfer-btn');
         if (submitTransferBtn) submitTransferBtn.addEventListener('click', () => this.submitTransfer());
 
         const submitAdjustmentBtn = document.getElementById('submit-adjustment-btn');
         if (submitAdjustmentBtn) submitAdjustmentBtn.addEventListener('click', () => this.submitAdjustment());
+    }
+
+    initIdentityManager() {
+        if (!this.operatorName) {
+            this.ui.showLockscreen();
+        } else {
+            this.ui.hideLockscreen(this.operatorName);
+        }
+
+        if (this.ui.elements.btnLogin) {
+            this.ui.elements.btnLogin.addEventListener('click', () => {
+                const name = this.ui.getLoginInputValue();
+                if (name && name.length >= 2) {
+                    this.operatorName = name.toUpperCase();
+                    localStorage.setItem('kippe_operator', this.operatorName);
+                    this.ui.hideLockscreen(this.operatorName);
+                } else {
+                    alert('Insira um nome válido para aceder ao sistema.');
+                }
+            });
+        }
+
+        if (this.ui.elements.btnLogout) {
+            this.ui.elements.btnLogout.addEventListener('click', () => {
+                localStorage.removeItem('kippe_operator');
+                this.operatorName = null;
+                if (this.ui.elements.dashboard) this.ui.elements.dashboard.classList.add('hidden');
+                this.ui.showLockscreen();
+            });
+        }
     }
 
     handleScanSuccess(scannedCode) {
@@ -82,7 +116,8 @@ class KippeApplication {
         if (!formData.quantity || isNaN(formData.quantity) || formData.quantity <= 0) {
             alert("Quantidade inválida."); return;
         }
-        const payload = { ...formData, operator: "PWA Mobile" };
+        
+        const payload = { ...formData, operator: this.operatorName || "Desconhecido" };
         try {
             this.ui.hideReceiveModal();
             this.ui.showLoader();
@@ -90,16 +125,15 @@ class KippeApplication {
             this.fetchAndRenderSku(payload.sku);
         } catch (error) {
             this.ui.hideLoader();
-            alert("Erro ao registar entrada: " + error.message);
+            alert("Erro: " + error.message);
         }
     }
 
     async submitTransfer() {
         const formData = this.ui.getTransferFormData();
-        if (!formData.quantity || isNaN(formData.quantity) || formData.quantity <= 0) {
-            alert("Quantidade inválida."); return;
-        }
-        const payload = { ...formData, operator: "PWA Mobile" };
+        if (!formData.quantity || isNaN(formData.quantity) || formData.quantity <= 0) return;
+        
+        const payload = { ...formData, operator: this.operatorName || "Desconhecido" };
         try {
             this.ui.hideTransferModal();
             this.ui.showLoader();
@@ -107,16 +141,15 @@ class KippeApplication {
             this.fetchAndRenderSku(payload.sku);
         } catch (error) {
             this.ui.hideLoader();
-            alert("Erro na transferência: " + error.message);
+            alert("Erro: " + error.message);
         }
     }
 
     async submitAdjustment() {
         const formData = this.ui.getAdjustmentFormData();
-        if (!formData.quantity || isNaN(formData.quantity)) {
-            alert("Quantidade inválida."); return;
-        }
-        const payload = { ...formData, operator: "Auditor Mobile" };
+        if (!formData.quantity || isNaN(formData.quantity)) return;
+        
+        const payload = { ...formData, operator: this.operatorName || "Desconhecido" };
         try {
             this.ui.hideAdjustmentModal();
             this.ui.showLoader();
@@ -124,7 +157,7 @@ class KippeApplication {
             this.fetchAndRenderSku(payload.sku);
         } catch (error) {
             this.ui.hideLoader();
-            alert("Erro no ajuste: " + error.message);
+            alert("Erro: " + error.message);
         }
     }
 

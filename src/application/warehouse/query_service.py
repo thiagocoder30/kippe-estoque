@@ -5,6 +5,8 @@ from src.domain.warehouse import (
     DualStockView, SmartSheetBuilder, ReplenishmentEngine,
     TrustScoreEngine, OperationalTruthEngine, DivergenceEngine
 )
+from src.domain.warehouse.balance import BalanceEngine
+from src.domain.warehouse.topology import TopologyResolver
 from src.security.exceptions import NotFoundException
 
 @dataclass(frozen=True)
@@ -28,6 +30,10 @@ class InventoryProductView:
     recommended_action: str
     action_priority: str
     description: str = "Produto não cadastrado"
+    brand: str = "N/A"
+    category: str = "N/A"
+    physical_zone: str = "N/A"
+    physical_details: str = "N/A"
 
 class InventoryQueryService:
     def __init__(self, ledger_repo: InventoryAccountRepository, catalog_repo=None, **kwargs):
@@ -61,17 +67,20 @@ class InventoryQueryService:
         last_div = div_events[-1] if div_events else None
         last_div_desc = f"{last_div.divergence_type} ({last_div.delta} un)" if last_div else "Nenhuma"
 
-        # Extração silenciosa do catálogo para não quebrar o JSON da API
-        desc = "Produto não cadastrado"
+        desc, brand, cat = "Produto não cadastrado", "N/A", "N/A"
         if self.catalog_repo:
             try:
                 product = self.catalog_repo.get_by_sku(sku)
-                if product and hasattr(product, "description"):
-                    desc = product.description
+                if product:
+                    desc = getattr(product, "description", desc)
+                    brand = getattr(product, "brand", brand)
+                    cat = getattr(product, "category", cat)
             except Exception:
                 pass
 
-        # Safely extract dictionary attributes to prevent mock errors
+        # Resolução do Endereço Físico (Topologia)
+        address = TopologyResolver.get_physical_address(category=cat, description=desc)
+
         next_exp = getattr(sheet, "next_to_expire", {}) or {}
         last_rec = getattr(sheet, "last_receipt", {}) or {}
 
@@ -94,6 +103,10 @@ class InventoryQueryService:
             operational_risk=round((1.0 - trust.score) * 0.4 + (1.0 - trust.score) * 0.4, 2),
             recommended_action=getattr(insight, "suggested_action", "OK"),
             action_priority=getattr(insight, "priority", "NORMAL"),
-            description=desc
+            description=desc,
+            brand=brand,
+            category=cat,
+            physical_zone=address.zone,
+            physical_details=address.details
         )
 

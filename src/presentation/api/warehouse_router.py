@@ -23,6 +23,11 @@ class WarehouseAPIRouter:
             return 200, {
                 "sku": view.sku,
                 "description": view.description,
+                "category": view.category,
+                "physical_location": {
+                    "zone": view.physical_zone,
+                    "details": view.physical_details
+                },
                 "balances": {
                     "total": view.available_total,
                     "depot": view.depot_balance,

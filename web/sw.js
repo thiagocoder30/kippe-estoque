@@ -1,5 +1,5 @@
-// Versão v9: Manifesto PWA Ativo para Instalação Nativa
-const CACHE_NAME = 'kippe-pwa-v9';
+// Versão v12: Foto do SKU e Dicionário de Supermercado
+const CACHE_NAME = 'kippe-pwa-v12';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
@@ -16,7 +16,7 @@ self.addEventListener('install', (event) => {
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] A fazer cache do App Shell V9 (PWA Installable)');
+            console.log('[Service Worker] V12 Cache');
             return cache.addAll(APP_SHELL);
         })
     );
@@ -29,7 +29,7 @@ self.addEventListener('activate', (event) => {
             return Promise.all(
                 cacheNames.map((name) => {
                     if (name !== CACHE_NAME) {
-                        console.log('[Service Worker] Destruindo cache antigo:', name);
+                        console.log('[Service Worker] Limpando cache antigo:', name);
                         return caches.delete(name);
                     }
                 })
