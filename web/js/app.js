@@ -19,16 +19,11 @@ class KippeApplication {
         this._registerServiceWorker();
         this.router.init();
         
-        // 1. Busca por Digitação
         this.ui.bindSearchEvent((sku) => this.fetchAndRenderSku(sku));
 
-        // 2. Botão de Scan (Câmera)
         const scanBtn = document.getElementById('btn-scan');
-        if (scanBtn) {
-            scanBtn.addEventListener('click', () => this.scanner.start());
-        }
+        if (scanBtn) scanBtn.addEventListener('click', () => this.scanner.start());
 
-        // 3. Botão "Registrar Nova Entrada" (aparece quando dá erro)
         const quickReceiveBtn = document.getElementById('btn-quick-receive');
         if (quickReceiveBtn) {
             quickReceiveBtn.addEventListener('click', () => {
@@ -37,15 +32,35 @@ class KippeApplication {
             });
         }
 
-        // 4. Submissão do Formulário de Recebimento
         const submitReceiveBtn = document.getElementById('submit-receive-btn');
-        if (submitReceiveBtn) {
-            submitReceiveBtn.addEventListener('click', () => this.submitReceive());
+        if (submitReceiveBtn) submitReceiveBtn.addEventListener('click', () => this.submitReceive());
+
+        // BIND: Botões de Ações Operacionais no Dashboard
+        const btnOpenTransfer = document.getElementById('btn-open-transfer');
+        if (btnOpenTransfer) {
+            btnOpenTransfer.addEventListener('click', () => {
+                const currentSku = document.getElementById('searchInput').value.trim();
+                this.ui.showTransferModal(currentSku);
+            });
         }
+
+        const btnOpenAdjustment = document.getElementById('btn-open-adjustment');
+        if (btnOpenAdjustment) {
+            btnOpenAdjustment.addEventListener('click', () => {
+                const currentSku = document.getElementById('searchInput').value.trim();
+                this.ui.showAdjustmentModal(currentSku);
+            });
+        }
+
+        // BIND: Submissão dos Modais
+        const submitTransferBtn = document.getElementById('submit-transfer-btn');
+        if (submitTransferBtn) submitTransferBtn.addEventListener('click', () => this.submitTransfer());
+
+        const submitAdjustmentBtn = document.getElementById('submit-adjustment-btn');
+        if (submitAdjustmentBtn) submitAdjustmentBtn.addEventListener('click', () => this.submitAdjustment());
     }
 
     handleScanSuccess(scannedCode) {
-        console.log("[KIPPE] Código capturado:", scannedCode);
         this.ui.setInputValue(scannedCode);
         this.fetchAndRenderSku(scannedCode);
     }
@@ -58,40 +73,58 @@ class KippeApplication {
             this.ui.renderDashboard(data);
         } catch (error) {
             this.ui.hideLoader();
-            // A UI inteligentemente mostrará o botão para registrar entrada
             this.ui.showError(error.message || "SKU não encontrado.");
         }
     }
 
-    // NOVO: Fluxo de Escrita (Command)
     async submitReceive() {
         const formData = this.ui.getReceiveFormData();
-        
         if (!formData.quantity || isNaN(formData.quantity) || formData.quantity <= 0) {
-            alert("Por favor, insira uma quantidade válida maior que zero.");
-            return;
+            alert("Quantidade inválida."); return;
         }
-
-        // Adiciona dados operacionais padronizados
-        const payload = {
-            ...formData,
-            operator: "Mobile App PWA" // Rastreabilidade do autor
-        };
-
+        const payload = { ...formData, operator: "PWA Mobile" };
         try {
-            // Fecha o modal e mostra carregamento
             this.ui.hideReceiveModal();
             this.ui.showLoader();
-            
-            // Dispara o Command pro Backend via rede
             await this.api.registerReceive(payload);
-            
-            // Se sucesso, puxa o Dashboard atualizado para provar a gravação
             this.fetchAndRenderSku(payload.sku);
-
         } catch (error) {
             this.ui.hideLoader();
-            alert("Erro ao registrar entrada: " + error.message);
+            alert("Erro ao registar entrada: " + error.message);
+        }
+    }
+
+    async submitTransfer() {
+        const formData = this.ui.getTransferFormData();
+        if (!formData.quantity || isNaN(formData.quantity) || formData.quantity <= 0) {
+            alert("Quantidade inválida."); return;
+        }
+        const payload = { ...formData, operator: "PWA Mobile" };
+        try {
+            this.ui.hideTransferModal();
+            this.ui.showLoader();
+            await this.api.registerTransfer(payload);
+            this.fetchAndRenderSku(payload.sku);
+        } catch (error) {
+            this.ui.hideLoader();
+            alert("Erro na transferência: " + error.message);
+        }
+    }
+
+    async submitAdjustment() {
+        const formData = this.ui.getAdjustmentFormData();
+        if (!formData.quantity || isNaN(formData.quantity)) {
+            alert("Quantidade inválida."); return;
+        }
+        const payload = { ...formData, operator: "Auditor Mobile" };
+        try {
+            this.ui.hideAdjustmentModal();
+            this.ui.showLoader();
+            await this.api.registerAdjustment(payload);
+            this.fetchAndRenderSku(payload.sku);
+        } catch (error) {
+            this.ui.hideLoader();
+            alert("Erro no ajuste: " + error.message);
         }
     }
 

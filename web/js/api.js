@@ -19,7 +19,6 @@ export class APIClient {
             const data = await response.json();
             
             if (!response.ok) {
-                // Preserva a mensagem de erro do backend (ex: NotFoundException)
                 throw new Error(data.error || `Erro HTTP: ${response.status}`);
             }
             return data;
@@ -37,9 +36,23 @@ export class APIClient {
         return this._request(`/api/sku/${sku}`);
     }
 
-    // NOVO: Metodo de Escrita (Command)
     async registerReceive(payload) {
         return this._request('/api/receive', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    // NOVOS COMANDOS (Write Model)
+    async registerTransfer(payload) {
+        return this._request('/api/transfer', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async registerAdjustment(payload) {
+        return this._request('/api/adjustment', {
             method: 'POST',
             body: JSON.stringify(payload)
         });

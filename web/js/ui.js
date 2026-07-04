@@ -13,13 +13,19 @@ export class UIManager {
             searchBtn: document.getElementById('searchBtn'),
             batchBody: document.getElementById('batch-matrix-body'),
             historyTimeline: document.getElementById('history-timeline'),
+            
+            // Modais
             receiveModal: document.getElementById('receive-modal'),
-            closeReceiveModal: document.getElementById('close-receive-modal')
+            closeReceiveModal: document.getElementById('close-receive-modal'),
+            transferModal: document.getElementById('transfer-modal'),
+            closeTransferModal: document.getElementById('close-transfer-modal'),
+            adjustmentModal: document.getElementById('adjustment-modal'),
+            closeAdjustmentModal: document.getElementById('close-adjustment-modal')
         };
 
-        if (this.elements.closeReceiveModal) {
-            this.elements.closeReceiveModal.addEventListener('click', () => this.hideReceiveModal());
-        }
+        if (this.elements.closeReceiveModal) this.elements.closeReceiveModal.addEventListener('click', () => this.hideReceiveModal());
+        if (this.elements.closeTransferModal) this.elements.closeTransferModal.addEventListener('click', () => this.hideTransferModal());
+        if (this.elements.closeAdjustmentModal) this.elements.closeAdjustmentModal.addEventListener('click', () => this.hideAdjustmentModal());
     }
 
     bindSearchEvent(callback) {
@@ -61,31 +67,55 @@ export class UIManager {
         }
     }
 
+    // Modal Recebimento
     showReceiveModal(sku) {
         document.getElementById('receive-sku').value = sku;
         document.getElementById('receive-desc').value = '';
         document.getElementById('receive-qty').value = '';
-        document.getElementById('receive-batch').value = '';
-        document.getElementById('receive-supplier').value = '';
-        document.getElementById('receive-invoice').value = '';
-        document.getElementById('receive-exp').value = '';
         if (this.elements.receiveModal) this.elements.receiveModal.classList.remove('hidden');
     }
-
-    hideReceiveModal() {
-        if (this.elements.receiveModal) this.elements.receiveModal.classList.add('hidden');
-    }
-
+    hideReceiveModal() { if (this.elements.receiveModal) this.elements.receiveModal.classList.add('hidden'); }
     getReceiveFormData() {
         return {
             sku: document.getElementById('receive-sku').value,
             description: document.getElementById('receive-desc').value,
             category: document.getElementById('receive-cat').value,
             quantity: parseInt(document.getElementById('receive-qty').value, 10),
-            batch_code: document.getElementById('receive-batch').value || "LOTE-PADRAO",
-            supplier: document.getElementById('receive-supplier').value || "Fornecedor Padrão",
-            invoice_id: document.getElementById('receive-invoice').value || "NF-SIMULADA",
-            expiration_date: document.getElementById('receive-exp').value || "2099-12-31" // Formato YYYY-MM-DD
+            batch_code: document.getElementById('receive-batch') ? (document.getElementById('receive-batch').value || "LOTE-PADRAO") : "LOTE-PADRAO",
+            supplier: "Fornecedor Local"
+        };
+    }
+
+    // Modal Transferência
+    showTransferModal(sku) {
+        document.getElementById('transfer-sku').value = sku;
+        document.getElementById('transfer-qty').value = '';
+        document.getElementById('transfer-batch').value = '';
+        if (this.elements.transferModal) this.elements.transferModal.classList.remove('hidden');
+    }
+    hideTransferModal() { if (this.elements.transferModal) this.elements.transferModal.classList.add('hidden'); }
+    getTransferFormData() {
+        return {
+            sku: document.getElementById('transfer-sku').value,
+            quantity: parseInt(document.getElementById('transfer-qty').value, 10),
+            batch_code: document.getElementById('transfer-batch').value || "LOTE-PADRAO"
+        };
+    }
+
+    // Modal Ajuste
+    showAdjustmentModal(sku) {
+        document.getElementById('adjustment-sku').value = sku;
+        document.getElementById('adjustment-qty').value = '';
+        document.getElementById('adjustment-reason').value = '';
+        if (this.elements.adjustmentModal) this.elements.adjustmentModal.classList.remove('hidden');
+    }
+    hideAdjustmentModal() { if (this.elements.adjustmentModal) this.elements.adjustmentModal.classList.add('hidden'); }
+    getAdjustmentFormData() {
+        return {
+            sku: document.getElementById('adjustment-sku').value,
+            quantity: parseInt(document.getElementById('adjustment-qty').value, 10),
+            divergence_type: document.getElementById('adjustment-type').value,
+            reason: document.getElementById('adjustment-reason').value || "Auditoria Mobile"
         };
     }
 
@@ -169,15 +199,15 @@ export class UIManager {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
                 this._formatDate(trace.last_receipt_date),
                 "RECEBIMENTO",
-                `Entrada via fornecedor: ${trace.primary_supplier}`,
+                `Entrada via fornecedor`,
                 "bg-green-500"
             ));
         }
         if (metrics.divergence_count > 0 && metrics.last_divergence !== "Nenhuma") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
-                "AJUSTE MANUAL",
+                "AJUSTE REGISTRADO",
                 "DIVERGÊNCIA OPERACIONAL",
-                `Evento registrado: ${metrics.last_divergence}`,
+                `Evento: ${metrics.last_divergence}`,
                 "bg-red-500"
             ));
         }
