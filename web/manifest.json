@@ -1,22 +1,25 @@
 {
-  "name": "KIPPE PLATFORM",
+  "name": "KIPPE Platform",
   "short_name": "KIPPE",
-  "description": "Sistema Operacional e Auditoria de Estoque",
+  "description": "Sistema Enterprise de Logística",
   "start_url": "/web/index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#f3f4f6",
   "theme_color": "#1e3a8a",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "icons/icon-192x192.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2800/2800342.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2800/2800342.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
+

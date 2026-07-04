@@ -1,5 +1,5 @@
-// Versão v7: Ciclo Operacional Completo (Transferência e Ajustes)
-const CACHE_NAME = 'kippe-pwa-v7';
+// Versão v9: Manifesto PWA Ativo para Instalação Nativa
+const CACHE_NAME = 'kippe-pwa-v9';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
@@ -16,7 +16,7 @@ self.addEventListener('install', (event) => {
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] Fazendo cache do App Shell V7 (Full Operations)');
+            console.log('[Service Worker] A fazer cache do App Shell V9 (PWA Installable)');
             return cache.addAll(APP_SHELL);
         })
     );
