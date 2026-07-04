@@ -1,4 +1,5 @@
-const CACHE_NAME = 'kippe-pwa-v1';
+// Mudança para v3: Força a atualização do cache para carregar os módulos de Rastreabilidade
+const CACHE_NAME = 'kippe-pwa-v3';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
@@ -6,24 +7,26 @@ const APP_SHELL = [
     '/web/manifest.json'
 ];
 
-// Instalação: Salva o App Shell no cache
 self.addEventListener('install', (event) => {
+    // Força a instalação imediata do novo Service Worker
+    self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] Fazendo cache do App Shell');
+            console.log('[Service Worker] Fazendo cache do App Shell V3');
             return cache.addAll(APP_SHELL);
         })
     );
 });
 
-// Ativação: Limpa caches antigos se a versão mudar
 self.addEventListener('activate', (event) => {
+    // Assume o controle imediatamente nas abas abertas
+    event.waitUntil(clients.claim());
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((name) => {
                     if (name !== CACHE_NAME) {
-                        console.log('[Service Worker] Limpando cache antigo:', name);
+                        console.log('[Service Worker] Destruindo cache antigo:', name);
                         return caches.delete(name);
                     }
                 })
@@ -32,7 +35,6 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Interceptação de Rede (Cache First)
 self.addEventListener('fetch', (event) => {
     event.respondWith(
         caches.match(event.request).then((response) => {
@@ -40,3 +42,4 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
