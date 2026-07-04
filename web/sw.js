@@ -1,5 +1,5 @@
-// Versão v12: Foto do SKU e Dicionário de Supermercado
-const CACHE_NAME = 'kippe-pwa-v12';
+// Versão v14: Amnésia de Scanner (Permite leituras consecutivas do mesmo EAN)
+const CACHE_NAME = 'kippe-pwa-v14';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
@@ -16,7 +16,7 @@ self.addEventListener('install', (event) => {
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] V12 Cache');
+            console.log('[Service Worker] Cache V14 - Scanner Memory Fix');
             return cache.addAll(APP_SHELL);
         })
     );
@@ -29,7 +29,6 @@ self.addEventListener('activate', (event) => {
             return Promise.all(
                 cacheNames.map((name) => {
                     if (name !== CACHE_NAME) {
-                        console.log('[Service Worker] Limpando cache antigo:', name);
                         return caches.delete(name);
                     }
                 })

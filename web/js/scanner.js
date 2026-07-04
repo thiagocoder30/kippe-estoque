@@ -1,13 +1,14 @@
 /**
- * Módulo de Hardware Scanner (Resolvido o bug de instâncias duplicadas).
+ * Módulo de Hardware Scanner (Versão Definitiva Enterprise).
+ * Resolvido o Memory Lock de Anti-Spam: a câmera agora permite bipar o mesmo EAN infinitas vezes.
  */
 export class ScannerManager {
     constructor(onScanSuccessCallback) {
-        this.html5Qrcode = null;
         this.onScanSuccess = onScanSuccessCallback;
         this.modal = document.getElementById('scanner-modal');
         this.closeBtn = document.getElementById('close-scanner-btn');
-        this.isScanning = false;
+        this.status = "IDLE";
+        this.html5Qrcode = null; 
 
         if (this.closeBtn) {
             this.closeBtn.addEventListener('click', () => this.stop());
@@ -15,14 +16,24 @@ export class ScannerManager {
     }
 
     async start() {
-        if (!this.modal || this.isScanning) return;
-        this.modal.classList.remove('hidden');
-        this.isScanning = true;
-
-        // Se a instância não existe, cria. Se existe, reutiliza a limpeza.
-        if (!this.html5Qrcode) {
-            this.html5Qrcode = new Html5Qrcode("reader");
+        if (!this.modal || this.status === "STARTING" || this.status === "SCANNING") {
+            return;
         }
+        
+        if (this.status === "STOPPING") {
+            setTimeout(() => this.start(), 300);
+            return;
+        }
+
+        this.status = "STARTING";
+        this.modal.classList.remove('hidden');
+
+        // A MÁGICA DA AMNÉSIA: Destruímos e recriamos a instância a cada abertura
+        // Isso burla o sistema anti-spam da biblioteca, permitindo ler o mesmo SKU em sequência.
+        if (this.html5Qrcode) {
+            try { await this.html5Qrcode.clear(); } catch(e) {}
+        }
+        this.html5Qrcode = new Html5Qrcode("reader");
 
         const config = { 
             fps: 10, 
@@ -35,34 +46,41 @@ export class ScannerManager {
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    if (this.isScanning) {
-                        this.stop(); // Para o hardware imediatamente
+                    if (this.status === "SCANNING") {
                         if (navigator.vibrate) navigator.vibrate(200);
+                        this.stop(); 
                         this.onScanSuccess(decodedText);
                     }
                 },
-                (errorMessage) => { /* Ignorar avisos naturais de reenquadramento contínuo */ }
+                (errorMessage) => { /* Silenciado para não poluir o console com reenquadramentos */ }
             );
+            this.status = "SCANNING";
         } catch (err) {
             console.error("[SCANNER ERROR]", err);
-            alert("Erro ao aceder à câmara. Verifique as permissões do navegador.");
+            this.status = "IDLE";
             this.stop();
+            alert("Não foi possível acessar a câmera. Verifique as permissões.");
         }
     }
 
     stop() {
-        this.isScanning = false;
+        if (this.status === "IDLE" || this.status === "STOPPING") return;
+        
+        this.status = "STOPPING"; 
         if (this.modal) this.modal.classList.add('hidden');
         
         if (this.html5Qrcode) {
             this.html5Qrcode.stop().then(() => {
                 this.html5Qrcode.clear();
-                this.html5Qrcode = null; // Limpa o ponteiro para a memória (Fix do Bug)
-            }).catch(err => {
-                console.error("Erro ao fechar scanner:", err);
-                this.html5Qrcode.clear();
+                this.html5Qrcode = null; // Limpeza absoluta da memória
+                this.status = "IDLE";
+            }).catch(e => {
+                console.error("Erro ao desligar a lente:", e);
                 this.html5Qrcode = null;
+                this.status = "IDLE";
             });
+        } else {
+            this.status = "IDLE";
         }
     }
 }
