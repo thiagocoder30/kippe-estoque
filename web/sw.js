@@ -1,25 +1,28 @@
-// Mudança para v3: Força a atualização do cache para carregar os módulos de Rastreabilidade
-const CACHE_NAME = 'kippe-pwa-v3';
+// Versão v4: Inclui o novo módulo Scanner e CDN Html5-Qrcode no modo Offline
+const CACHE_NAME = 'kippe-pwa-v4';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
     '/web/js/app.js',
-    '/web/manifest.json'
+    '/web/js/api.js',
+    '/web/js/ui.js',
+    '/web/js/router.js',
+    '/web/js/scanner.js',
+    '/web/manifest.json',
+    'https://unpkg.com/html5-qrcode'
 ];
 
 self.addEventListener('install', (event) => {
-    // Força a instalação imediata do novo Service Worker
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] Fazendo cache do App Shell V3');
+            console.log('[Service Worker] Fazendo cache do App Shell V4 (Scanner Ready)');
             return cache.addAll(APP_SHELL);
         })
     );
 });
 
 self.addEventListener('activate', (event) => {
-    // Assume o controle imediatamente nas abas abertas
     event.waitUntil(clients.claim());
     event.waitUntil(
         caches.keys().then((cacheNames) => {

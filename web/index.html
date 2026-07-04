@@ -9,13 +9,14 @@
     <meta name="theme-color" content="#1e3a8a">
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link rel="stylesheet" href="/web/css/app.css">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-24">
     
     <header class="bg-blue-900 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
         <h1 class="text-xl font-bold tracking-wide">KIPPE PLATFORM</h1>
-        <span class="bg-blue-800 text-xs px-2 py-1 rounded border border-blue-700 font-mono">v1.0-Trace</span>
+        <span class="bg-blue-800 text-xs px-2 py-1 rounded border border-blue-700 font-mono">v1.0-Scan</span>
     </header>
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
@@ -95,8 +96,7 @@
                                 <th class="py-2 pr-2">Status</th>
                             </tr>
                         </thead>
-                        <tbody id="batch-matrix-body" class="text-xs font-medium text-gray-700 divide-y divide-gray-50 text-center">
-                            </tbody>
+                        <tbody id="batch-matrix-body" class="text-xs font-medium text-gray-700 divide-y divide-gray-50 text-center"></tbody>
                     </table>
                 </div>
             </div>
@@ -124,8 +124,7 @@
 
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
                 <h3 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider">Histórico de Movimentações (Ledger Trail)</h3>
-                <div id="history-timeline" class="relative border-l-2 border-gray-200 pl-4 ml-2 space-y-4">
-                    </div>
+                <div id="history-timeline" class="relative border-l-2 border-gray-200 pl-4 ml-2 space-y-4"></div>
             </div>
 
         </section>
@@ -136,17 +135,33 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
             <span class="text-[10px] font-bold mt-1">Home</span>
         </button>
-        <button class="flex flex-col items-center text-gray-400 hover:text-blue-600 transition-colors h-12 justify-center w-24">
-            <div class="bg-gray-100 p-2 rounded-full -mt-6 shadow-sm border border-gray-200">
-                <svg class="w-7 h-7 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm14 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zM3 16a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zm14 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+        <button id="btn-scan" class="flex flex-col items-center text-gray-400 hover:text-blue-600 active:scale-95 transition-all h-12 justify-center w-24">
+            <div class="bg-blue-600 p-3 rounded-full -mt-8 shadow-lg border-4 border-white">
+                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm14 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zM3 16a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zm14 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
             </div>
-            <span class="text-[10px] font-bold mt-1">Scan Barcode</span>
+            <span class="text-[10px] font-bold mt-1 text-blue-700">Scan Barcode</span>
         </button>
         <button class="flex flex-col items-center text-gray-400 hover:text-blue-600 transition-colors h-12 justify-center w-20">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
             <span class="text-[10px] font-bold mt-1">Ajustes</span>
         </button>
     </nav>
+
+    <div id="scanner-modal" class="hidden fixed inset-0 z-[100] bg-black flex flex-col">
+        <div class="flex justify-between items-center p-4 bg-gray-900 text-white shadow-md">
+            <h3 class="font-bold uppercase tracking-wider text-sm flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm14 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V4z"></path></svg>
+                Escaneando Produto
+            </h3>
+            <button id="close-scanner-btn" class="bg-red-600 hover:bg-red-700 active:bg-red-800 px-4 py-2 rounded font-bold text-xs transition-colors">FECHAR</button>
+        </div>
+        
+        <div id="reader" class="flex-1 w-full bg-black flex items-center justify-center"></div>
+        
+        <div class="p-6 bg-gray-900 text-center text-gray-400 text-xs shadow-inner">
+            Aponte a câmera traseira do dispositivo para o código de barras ou EAN do produto. A leitura será automática.
+        </div>
+    </div>
 
     <script type="module" src="/web/js/app.js"></script>
 </body>

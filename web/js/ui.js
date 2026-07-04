@@ -1,6 +1,5 @@
 /**
  * Gerenciador de Interface de Usuário Vanilla JS (Enterprise Level).
- * Responsabilidade: Manipulação segura de DOM, formatação semântica e renderização de matrizes.
  */
 export class UIManager {
     constructor() {
@@ -31,6 +30,13 @@ export class UIManager {
         });
     }
 
+    // NOVO: Atualiza o campo de input após o escaneamento físico
+    setInputValue(value) {
+        if (this.elements.searchInput) {
+            this.elements.searchInput.value = value;
+        }
+    }
+
     showLoader() {
         if (this.elements.errorToast) this.elements.errorToast.classList.add('hidden');
         if (this.elements.dashboard) this.elements.dashboard.classList.add('hidden');
@@ -49,18 +55,15 @@ export class UIManager {
     }
 
     renderDashboard(data) {
-        // 1. Dados Base e Saldos
         this._safeSetText('prodName', data.description);
         this._safeSetText('prodSku', data.sku);
         this._safeSetText('stockTotal', data.balances.total);
         this._safeSetText('stockDepot', data.balances.depot);
         this._safeSetText('stockStore', data.balances.store);
         
-        // 2. Endereçamento Topológico
         this._safeSetText('locZone', data.physical_location.zone);
         this._safeSetText('locDetails', data.physical_location.details);
         
-        // 3. Mecânica de Reposição de Compras
         this._safeSetText('repSugg', data.replenishment.suggested_quantity + " un");
         this._safeSetText('repMin', data.replenishment.min_stock_reference);
         this._safeSetText('repIdeal', data.replenishment.ideal_stock_reference);
@@ -77,16 +80,10 @@ export class UIManager {
             repBadge.textContent = "ESTOQUE SAUDÁVEL";
         }
 
-        // 4. Renderização da Matriz de Lotes (Giro FEFO)
         this._renderBatchMatrix(data.traceability, data.balances.depot);
-
-        // 5. Diagnóstico de Operational Truth
         this._renderOperationalTruth(data.operational_metrics);
-
-        // 6. Geração da Trilha do Ledger (Histórico de Movimentações)
         this._renderHistoryTimeline(data.traceability, data.operational_metrics);
 
-        // Exibe a View Consolidada
         if (this.elements.dashboard) this.elements.dashboard.classList.remove('hidden');
     }
 
@@ -97,7 +94,7 @@ export class UIManager {
 
     _renderBatchMatrix(trace, depotBalance) {
         if (!this.elements.batchBody) return;
-        this.elements.batchBody.innerHTML = ''; // Limpa tabela
+        this.elements.batchBody.innerHTML = ''; 
 
         if (trace.active_batch && trace.active_batch !== "N/A") {
             const tr = document.createElement('tr');
@@ -136,9 +133,8 @@ export class UIManager {
 
     _renderHistoryTimeline(trace, metrics) {
         if (!this.elements.historyTimeline) return;
-        this.elements.historyTimeline.innerHTML = ''; // Limpa timeline
+        this.elements.historyTimeline.innerHTML = ''; 
 
-        // Evento 1: Recebimento de Mercadoria (Inbound)
         if (trace.last_receipt_date && trace.last_receipt_date !== "N/A") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
                 this._formatDate(trace.last_receipt_date),
@@ -148,7 +144,6 @@ export class UIManager {
             ));
         }
 
-        // Evento 2: Divergência de Auditoria (Se houver ocorrência no Ledger)
         if (metrics.divergence_count > 0 && metrics.last_divergence !== "Nenhuma") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
                 "Ajuste Recente",
@@ -173,7 +168,6 @@ export class UIManager {
 
     _formatDate(dateStr) {
         if (!dateStr || dateStr === "N/A") return "N/A";
-        // Converte AAAA-MM-DD para DD/MM/AAAA se necessário
         if (dateStr.includes('-')) {
             const parts = dateStr.split('-');
             if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
