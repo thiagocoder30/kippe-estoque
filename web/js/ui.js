@@ -13,8 +13,6 @@ export class UIManager {
             searchBtn: document.getElementById('searchBtn'),
             batchBody: document.getElementById('batch-matrix-body'),
             historyTimeline: document.getElementById('history-timeline'),
-            
-            // Modal Elements
             receiveModal: document.getElementById('receive-modal'),
             closeReceiveModal: document.getElementById('close-receive-modal')
         };
@@ -26,12 +24,10 @@ export class UIManager {
 
     bindSearchEvent(callback) {
         if (!this.elements.searchBtn || !this.elements.searchInput) return;
-        
         this.elements.searchBtn.addEventListener('click', () => {
             const sku = this.elements.searchInput.value.trim();
             if (sku) callback(sku);
         });
-
         this.elements.searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const sku = this.elements.searchInput.value.trim();
@@ -41,9 +37,7 @@ export class UIManager {
     }
 
     setInputValue(value) {
-        if (this.elements.searchInput) {
-            this.elements.searchInput.value = value;
-        }
+        if (this.elements.searchInput) this.elements.searchInput.value = value;
     }
 
     showLoader() {
@@ -57,25 +51,24 @@ export class UIManager {
         if (this.elements.loader) this.elements.loader.classList.add('hidden');
     }
 
-    // NOVO: Tratamento Inteligente de Erro (Mostra o botão se for falta de histórico)
     showError(message) {
         if (this.elements.errorContainer) {
             this.elements.errorToast.textContent = message;
             this.elements.errorContainer.classList.remove('hidden');
-            
-            // Se o erro for do Ledger, ativa o CTA para dar entrada no produto novo
-            if (message.includes("não possui histórico") || message.includes("Ledger")) {
+            if (message.includes("não possui histórico") || message.includes("Ledger") || message.includes("não encontrada")) {
                 this.elements.btnQuickReceive.classList.remove('hidden');
             }
         }
     }
 
-    // CONTROLES DO MODAL DE ENTRADA
     showReceiveModal(sku) {
         document.getElementById('receive-sku').value = sku;
+        document.getElementById('receive-desc').value = '';
         document.getElementById('receive-qty').value = '';
         document.getElementById('receive-batch').value = '';
         document.getElementById('receive-supplier').value = '';
+        document.getElementById('receive-invoice').value = '';
+        document.getElementById('receive-exp').value = '';
         if (this.elements.receiveModal) this.elements.receiveModal.classList.remove('hidden');
     }
 
@@ -86,9 +79,13 @@ export class UIManager {
     getReceiveFormData() {
         return {
             sku: document.getElementById('receive-sku').value,
+            description: document.getElementById('receive-desc').value,
+            category: document.getElementById('receive-cat').value,
             quantity: parseInt(document.getElementById('receive-qty').value, 10),
             batch_code: document.getElementById('receive-batch').value || "LOTE-PADRAO",
-            supplier: document.getElementById('receive-supplier').value || "Fornecedor Padrão"
+            supplier: document.getElementById('receive-supplier').value || "Fornecedor Padrão",
+            invoice_id: document.getElementById('receive-invoice').value || "NF-SIMULADA",
+            expiration_date: document.getElementById('receive-exp').value || "2099-12-31" // Formato YYYY-MM-DD
         };
     }
 
@@ -98,10 +95,8 @@ export class UIManager {
         this._safeSetText('stockTotal', data.balances.total);
         this._safeSetText('stockDepot', data.balances.depot);
         this._safeSetText('stockStore', data.balances.store);
-        
         this._safeSetText('locZone', data.physical_location.zone);
         this._safeSetText('locDetails', data.physical_location.details);
-        
         this._safeSetText('repSugg', data.replenishment.suggested_quantity + " un");
         this._safeSetText('repMin', data.replenishment.min_stock_reference);
         this._safeSetText('repIdeal', data.replenishment.ideal_stock_reference);
@@ -133,7 +128,6 @@ export class UIManager {
     _renderBatchMatrix(trace, depotBalance) {
         if (!this.elements.batchBody) return;
         this.elements.batchBody.innerHTML = ''; 
-
         if (trace.active_batch && trace.active_batch !== "N/A") {
             const tr = document.createElement('tr');
             tr.className = "border-b border-gray-50 hover:bg-gray-50 font-mono";
@@ -157,7 +151,6 @@ export class UIManager {
 
         const scoreEl = document.getElementById('auditScore');
         const riskBadge = document.getElementById('auditRiskBadge');
-        
         if (metrics.trust_score >= 90) {
             scoreEl.className = "text-3xl font-black text-green-600";
             riskBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-800";
@@ -172,7 +165,6 @@ export class UIManager {
     _renderHistoryTimeline(trace, metrics) {
         if (!this.elements.historyTimeline) return;
         this.elements.historyTimeline.innerHTML = ''; 
-
         if (trace.last_receipt_date && trace.last_receipt_date !== "N/A") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
                 this._formatDate(trace.last_receipt_date),
@@ -181,7 +173,6 @@ export class UIManager {
                 "bg-green-500"
             ));
         }
-
         if (metrics.divergence_count > 0 && metrics.last_divergence !== "Nenhuma") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
                 "AJUSTE MANUAL",

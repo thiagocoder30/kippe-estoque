@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KIPPE Mobile</title>
-    
     <link rel="manifest" href="/web/manifest.json">
     <meta name="theme-color" content="#1e3a8a">
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link rel="stylesheet" href="/web/css/app.css">
@@ -16,7 +14,7 @@
     
     <header class="bg-blue-900 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
         <h1 class="text-xl font-bold tracking-wide">KIPPE PLATFORM</h1>
-        <span class="bg-blue-800 text-xs px-2 py-1 rounded border border-blue-700 font-mono">v1.0-Write</span>
+        <span class="bg-blue-800 text-xs px-2 py-1 rounded border border-blue-700 font-mono">v1.0-Ent</span>
     </header>
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
@@ -24,8 +22,7 @@
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
             <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Consulta Rápida de SKU</label>
             <div class="flex gap-2">
-                <input type="number" id="searchInput" placeholder="Digite o SKU..." 
-                       class="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-lg font-mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <input type="number" id="searchInput" placeholder="Digite o SKU..." class="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-lg font-mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
                 <button id="searchBtn" class="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold p-3 rounded-lg w-16 flex justify-center items-center transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </button>
@@ -33,7 +30,7 @@
             
             <div id="error-container" class="hidden mt-3 p-3 bg-red-50 rounded-lg border border-red-100">
                 <p id="error-toast" class="text-red-700 text-sm font-bold mb-2"></p>
-                <button id="btn-quick-receive" class="hidden w-full bg-red-100 hover:bg-red-200 active:bg-red-300 text-red-800 border border-red-300 font-bold py-2 px-4 rounded text-xs transition-colors flex items-center justify-center gap-2">
+                <button id="btn-quick-receive" class="hidden w-full bg-red-100 hover:bg-red-200 text-red-800 border border-red-300 font-bold py-2 px-4 rounded text-xs flex items-center justify-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                     REGISTRAR ENTRADA DE MERCADORIA
                 </button>
@@ -46,7 +43,6 @@
         </div>
 
         <section id="dashboard-view" class="hidden space-y-4">
-            
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-600">
                 <h2 id="prodName" class="text-2xl font-black text-gray-800 leading-tight"></h2>
                 <p class="text-sm text-gray-500 mt-1">SKU: <span id="prodSku" class="font-mono font-bold text-gray-700"></span></p>
@@ -96,7 +92,7 @@
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase bg-gray-50 text-center">
-                                <th class="py-2 text-left pl-2">Código do Lote</th>
+                                <th class="py-2 text-left pl-2">Lote</th>
                                 <th class="py-2">Saldo</th>
                                 <th class="py-2">Vencimento</th>
                                 <th class="py-2 pr-2">Status</th>
@@ -129,7 +125,7 @@
             </div>
 
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-                <h3 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider">Histórico de Movimentações (Ledger Trail)</h3>
+                <h3 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider">Histórico de Movimentações</h3>
                 <div id="history-timeline" class="relative border-l-2 border-gray-200 pl-4 ml-2 space-y-4"></div>
             </div>
         </section>
@@ -161,39 +157,76 @@
             <button id="close-scanner-btn" class="bg-red-600 px-4 py-2 rounded font-bold text-xs transition-colors">FECHAR</button>
         </div>
         <div id="reader" class="flex-1 w-full bg-black flex items-center justify-center"></div>
-        <div class="p-6 bg-gray-900 text-center text-gray-400 text-xs shadow-inner">
-            Aponte a câmera para o código de barras. A leitura é automática.
-        </div>
+        <div class="p-6 bg-gray-900 text-center text-gray-400 text-xs shadow-inner">Aponte a câmera para o código de barras. A leitura é automática.</div>
     </div>
 
     <div id="receive-modal" class="hidden fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div class="bg-blue-600 p-4 flex justify-between items-center">
-                <h3 class="text-white font-bold uppercase tracking-wide text-sm">Registrar Entrada</h3>
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-blue-600 p-4 flex justify-between items-center shrink-0">
+                <h3 class="text-white font-bold uppercase tracking-wide text-sm flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Recebimento Físico
+                </h3>
                 <button id="close-receive-modal" class="text-blue-200 hover:text-white">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <div class="p-5 space-y-4">
-                <div>
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase">SKU Escaneado</label>
-                    <input type="text" id="receive-sku" class="w-full bg-gray-100 border border-gray-200 rounded p-2 font-mono font-bold text-gray-600 mt-1" readonly>
-                </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase">Quantidade (Unidades) *</label>
-                    <input type="number" id="receive-qty" class="w-full bg-white border border-blue-300 rounded p-3 text-2xl font-black text-blue-900 mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="0" min="1">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
+            
+            <div class="p-5 overflow-y-auto space-y-5 bg-gray-50">
+                
+                <div class="bg-white p-3 rounded border border-gray-200 shadow-sm space-y-3">
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase border-b pb-1">1. Identificação do Produto</h4>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 uppercase">Lote (Opcional)</label>
-                        <input type="text" id="receive-batch" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1" placeholder="Ex: L123">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase">SKU</label>
+                        <input type="text" id="receive-sku" class="w-full bg-gray-100 border border-gray-200 rounded p-2 font-mono font-bold text-gray-600 mt-1" readonly>
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 uppercase">Fornecedor</label>
-                        <input type="text" id="receive-supplier" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1" placeholder="Geral">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase">Descrição Completa *</label>
+                        <input type="text" id="receive-desc" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1 focus:ring-1 focus:ring-blue-500" placeholder="Ex: Sabão Líquido Omo 3L">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase">Categoria (Topologia) *</label>
+                        <select id="receive-cat" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1 focus:ring-1 focus:ring-blue-500">
+                            <option value="LIMPEZA">LIMPEZA (Lateral Direita)</option>
+                            <option value="PERFUMARIA">PERFUMARIA (Paletes Chão)</option>
+                            <option value="PAPEL">PAPEIS (Box Fundo)</option>
+                            <option value="GERAL">ARMAZÉM GERAL (Box Padrão)</option>
+                        </select>
                     </div>
                 </div>
-                <button id="submit-receive-btn" class="w-full bg-green-600 hover:bg-green-700 active:scale-95 transition-transform text-white font-black uppercase tracking-wider py-3 rounded-lg mt-2 shadow-md">
+
+                <div class="bg-white p-3 rounded border border-gray-200 shadow-sm border-l-4 border-l-blue-500">
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase border-b pb-1 mb-2">2. Dados Operacionais</h4>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase">Quantidade Física Contada *</label>
+                    <input type="number" id="receive-qty" class="w-full bg-blue-50 border border-blue-300 rounded p-3 text-2xl font-black text-blue-900 mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="0" min="1">
+                </div>
+
+                <div class="bg-white p-3 rounded border border-gray-200 shadow-sm space-y-3">
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase border-b pb-1">3. Rastreabilidade Logística</h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase">Nota Fiscal</label>
+                            <input type="text" id="receive-invoice" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1 font-mono" placeholder="Ex: NF-552">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase">Fornecedor</label>
+                            <input type="text" id="receive-supplier" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1" placeholder="Ex: Indústria S.A">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase">Lote Impresso</label>
+                            <input type="text" id="receive-batch" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1 font-mono" placeholder="Ex: L25-X">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase">Data de Validade</label>
+                            <input type="date" id="receive-exp" class="w-full bg-white border border-gray-300 rounded p-2 text-sm mt-1 text-gray-700">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-4 bg-white border-t shrink-0">
+                <button id="submit-receive-btn" class="w-full bg-green-600 hover:bg-green-700 active:scale-95 transition-transform text-white font-black uppercase tracking-wider py-3 rounded-lg shadow-md flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                     Confirmar Entrada
                 </button>
             </div>

@@ -1,5 +1,5 @@
-// Versão v5: Fluxos de Escrita Ativados (Inbound Register)
-const CACHE_NAME = 'kippe-pwa-v5';
+// Versão v6: Atualização do dicionário de dados de recebimento corporativo
+const CACHE_NAME = 'kippe-pwa-v6';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
@@ -16,7 +16,7 @@ self.addEventListener('install', (event) => {
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] Fazendo cache do App Shell V5 (CQRS Complete)');
+            console.log('[Service Worker] Fazendo cache do App Shell V6 (Enterprise Data Dictionary)');
             return cache.addAll(APP_SHELL);
         })
     );
