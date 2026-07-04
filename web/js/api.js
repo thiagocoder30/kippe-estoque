@@ -1,6 +1,5 @@
 /**
- * Camada de Cliente HTTP.
- * Padrão: Gateway / Adapter
+ * Camada de Cliente HTTP Vanilla JS.
  */
 export class APIClient {
     constructor(baseURL = 'http://localhost:8000') {
@@ -20,6 +19,7 @@ export class APIClient {
             const data = await response.json();
             
             if (!response.ok) {
+                // Preserva a mensagem de erro do backend (ex: NotFoundException)
                 throw new Error(data.error || `Erro HTTP: ${response.status}`);
             }
             return data;
@@ -33,14 +33,11 @@ export class APIClient {
         return this._request('/health');
     }
 
-    /**
-     * @param {string} sku - Código do produto
-     * @returns {Promise<Object>} Payload da View de Produto
-     */
     async getSku(sku) {
         return this._request(`/api/sku/${sku}`);
     }
 
+    // NOVO: Metodo de Escrita (Command)
     async registerReceive(payload) {
         return this._request('/api/receive', {
             method: 'POST',

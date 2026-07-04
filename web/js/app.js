@@ -9,7 +9,6 @@ class KippeApplication {
         this.ui = new UIManager();
         this.router = new Router(this.ui, this.api);
         
-        // Inicializa o Scanner passando a função de Callback para quando a leitura for concluída
         this.scanner = new ScannerManager((scannedCode) => {
             this.handleScanSuccess(scannedCode);
         });
@@ -17,32 +16,40 @@ class KippeApplication {
 
     async bootstrap() {
         console.log('[KIPPE] Inicializando KIPPE Platform Mobile...');
-        
         this._registerServiceWorker();
         this.router.init();
         
-        // 1. Vincula a busca por digitação (Lupa)
+        // 1. Busca por Digitação
         this.ui.bindSearchEvent((sku) => this.fetchAndRenderSku(sku));
 
-        // 2. Vincula o botão físico de Scan na navegação inferior
+        // 2. Botão de Scan (Câmera)
         const scanBtn = document.getElementById('btn-scan');
         if (scanBtn) {
-            scanBtn.addEventListener('click', () => {
-                this.scanner.start();
+            scanBtn.addEventListener('click', () => this.scanner.start());
+        }
+
+        // 3. Botão "Registrar Nova Entrada" (aparece quando dá erro)
+        const quickReceiveBtn = document.getElementById('btn-quick-receive');
+        if (quickReceiveBtn) {
+            quickReceiveBtn.addEventListener('click', () => {
+                const currentSku = document.getElementById('searchInput').value.trim();
+                this.ui.showReceiveModal(currentSku);
             });
+        }
+
+        // 4. Submissão do Formulário de Recebimento
+        const submitReceiveBtn = document.getElementById('submit-receive-btn');
+        if (submitReceiveBtn) {
+            submitReceiveBtn.addEventListener('click', () => this.submitReceive());
         }
     }
 
-    // Fluxo acionado automaticamente após a câmera ler o código de barras com sucesso
     handleScanSuccess(scannedCode) {
-        console.log("[KIPPE] Código capturado pelo Scanner:", scannedCode);
-        // Atualiza a barra de pesquisa visualmente para o operador ver o que foi lido
+        console.log("[KIPPE] Código capturado:", scannedCode);
         this.ui.setInputValue(scannedCode);
-        // Desencadeia a busca no Ledger automaticamente
         this.fetchAndRenderSku(scannedCode);
     }
 
-    // Fluxo principal de busca no banco de dados e atualização da tela
     async fetchAndRenderSku(sku) {
         this.ui.showLoader();
         try {
@@ -51,7 +58,40 @@ class KippeApplication {
             this.ui.renderDashboard(data);
         } catch (error) {
             this.ui.hideLoader();
-            this.ui.showError(error.message || "Erro de rede ou SKU não encontrado.");
+            // A UI inteligentemente mostrará o botão para registrar entrada
+            this.ui.showError(error.message || "SKU não encontrado.");
+        }
+    }
+
+    // NOVO: Fluxo de Escrita (Command)
+    async submitReceive() {
+        const formData = this.ui.getReceiveFormData();
+        
+        if (!formData.quantity || isNaN(formData.quantity) || formData.quantity <= 0) {
+            alert("Por favor, insira uma quantidade válida maior que zero.");
+            return;
+        }
+
+        // Adiciona dados operacionais padronizados
+        const payload = {
+            ...formData,
+            operator: "Mobile App PWA" // Rastreabilidade do autor
+        };
+
+        try {
+            // Fecha o modal e mostra carregamento
+            this.ui.hideReceiveModal();
+            this.ui.showLoader();
+            
+            // Dispara o Command pro Backend via rede
+            await this.api.registerReceive(payload);
+            
+            // Se sucesso, puxa o Dashboard atualizado para provar a gravação
+            this.fetchAndRenderSku(payload.sku);
+
+        } catch (error) {
+            this.ui.hideLoader();
+            alert("Erro ao registrar entrada: " + error.message);
         }
     }
 

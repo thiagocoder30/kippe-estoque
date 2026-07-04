@@ -1,5 +1,5 @@
-// Versão v4: Inclui o novo módulo Scanner e CDN Html5-Qrcode no modo Offline
-const CACHE_NAME = 'kippe-pwa-v4';
+// Versão v5: Fluxos de Escrita Ativados (Inbound Register)
+const CACHE_NAME = 'kippe-pwa-v5';
 const APP_SHELL = [
     '/web/index.html',
     '/web/css/app.css',
@@ -16,7 +16,7 @@ self.addEventListener('install', (event) => {
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] Fazendo cache do App Shell V4 (Scanner Ready)');
+            console.log('[Service Worker] Fazendo cache do App Shell V5 (CQRS Complete)');
             return cache.addAll(APP_SHELL);
         })
     );

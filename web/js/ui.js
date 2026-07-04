@@ -1,17 +1,27 @@
 /**
- * Gerenciador de Interface de Usuário Vanilla JS (Enterprise Level).
+ * Gerenciador de Interface de Usuário Vanilla JS.
  */
 export class UIManager {
     constructor() {
         this.elements = {
             dashboard: document.getElementById('dashboard-view'),
             loader: document.getElementById('global-loader'),
+            errorContainer: document.getElementById('error-container'),
             errorToast: document.getElementById('error-toast'),
+            btnQuickReceive: document.getElementById('btn-quick-receive'),
             searchInput: document.getElementById('searchInput'),
             searchBtn: document.getElementById('searchBtn'),
             batchBody: document.getElementById('batch-matrix-body'),
-            historyTimeline: document.getElementById('history-timeline')
+            historyTimeline: document.getElementById('history-timeline'),
+            
+            // Modal Elements
+            receiveModal: document.getElementById('receive-modal'),
+            closeReceiveModal: document.getElementById('close-receive-modal')
         };
+
+        if (this.elements.closeReceiveModal) {
+            this.elements.closeReceiveModal.addEventListener('click', () => this.hideReceiveModal());
+        }
     }
 
     bindSearchEvent(callback) {
@@ -30,7 +40,6 @@ export class UIManager {
         });
     }
 
-    // NOVO: Atualiza o campo de input após o escaneamento físico
     setInputValue(value) {
         if (this.elements.searchInput) {
             this.elements.searchInput.value = value;
@@ -38,7 +47,8 @@ export class UIManager {
     }
 
     showLoader() {
-        if (this.elements.errorToast) this.elements.errorToast.classList.add('hidden');
+        if (this.elements.errorContainer) this.elements.errorContainer.classList.add('hidden');
+        if (this.elements.btnQuickReceive) this.elements.btnQuickReceive.classList.add('hidden');
         if (this.elements.dashboard) this.elements.dashboard.classList.add('hidden');
         if (this.elements.loader) this.elements.loader.classList.remove('hidden');
     }
@@ -47,11 +57,39 @@ export class UIManager {
         if (this.elements.loader) this.elements.loader.classList.add('hidden');
     }
 
+    // NOVO: Tratamento Inteligente de Erro (Mostra o botão se for falta de histórico)
     showError(message) {
-        if (this.elements.errorToast) {
+        if (this.elements.errorContainer) {
             this.elements.errorToast.textContent = message;
-            this.elements.errorToast.classList.remove('hidden');
+            this.elements.errorContainer.classList.remove('hidden');
+            
+            // Se o erro for do Ledger, ativa o CTA para dar entrada no produto novo
+            if (message.includes("não possui histórico") || message.includes("Ledger")) {
+                this.elements.btnQuickReceive.classList.remove('hidden');
+            }
         }
+    }
+
+    // CONTROLES DO MODAL DE ENTRADA
+    showReceiveModal(sku) {
+        document.getElementById('receive-sku').value = sku;
+        document.getElementById('receive-qty').value = '';
+        document.getElementById('receive-batch').value = '';
+        document.getElementById('receive-supplier').value = '';
+        if (this.elements.receiveModal) this.elements.receiveModal.classList.remove('hidden');
+    }
+
+    hideReceiveModal() {
+        if (this.elements.receiveModal) this.elements.receiveModal.classList.add('hidden');
+    }
+
+    getReceiveFormData() {
+        return {
+            sku: document.getElementById('receive-sku').value,
+            quantity: parseInt(document.getElementById('receive-qty').value, 10),
+            batch_code: document.getElementById('receive-batch').value || "LOTE-PADRAO",
+            supplier: document.getElementById('receive-supplier').value || "Fornecedor Padrão"
+        };
     }
 
     renderDashboard(data) {
@@ -138,17 +176,17 @@ export class UIManager {
         if (trace.last_receipt_date && trace.last_receipt_date !== "N/A") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
                 this._formatDate(trace.last_receipt_date),
-                "RECEBIMENTO DE NOTA FISCAL",
-                `Entrada de lote ativo via fornecedor: ${trace.primary_supplier}`,
+                "RECEBIMENTO",
+                `Entrada via fornecedor: ${trace.primary_supplier}`,
                 "bg-green-500"
             ));
         }
 
         if (metrics.divergence_count > 0 && metrics.last_divergence !== "Nenhuma") {
             this.elements.historyTimeline.appendChild(this._createTimelineRow(
-                "Ajuste Recente",
-                "DIVERGÊNCIA OPERACIONAL DETECTADA",
-                `Evento registrado: ${metrics.last_divergence}. Necessita de conferência cíclica.`,
+                "AJUSTE MANUAL",
+                "DIVERGÊNCIA OPERACIONAL",
+                `Evento registrado: ${metrics.last_divergence}`,
                 "bg-red-500"
             ));
         }
