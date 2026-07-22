@@ -1,47 +1,24 @@
-// Versão v14: Amnésia de Scanner (Permite leituras consecutivas do mesmo EAN)
-const CACHE_NAME = 'kippe-pwa-v14';
-const APP_SHELL = [
-    '/web/index.html',
-    '/web/css/app.css',
-    '/web/js/app.js',
-    '/web/js/api.js',
-    '/web/js/ui.js',
-    '/web/js/router.js',
-    '/web/js/scanner.js',
-    '/web/manifest.json',
-    'https://unpkg.com/html5-qrcode'
-];
+const CACHE_NAME = 'kippe-wms-sprint1';
 
-self.addEventListener('install', (event) => {
-    self.skipWaiting(); 
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Service Worker] Cache V14 - Scanner Memory Fix');
-            return cache.addAll(APP_SHELL);
-        })
-    );
+self.addEventListener('install', (e) => self.skipWaiting());
+
+self.addEventListener('activate', (e) => {
+    e.waitUntil(caches.keys().then(keys => Promise.all(
+        keys.map(k => { if(k !== CACHE_NAME) return caches.delete(k); })
+    )));
+    self.clients.claim();
 });
 
-self.addEventListener('activate', (event) => {
-    event.waitUntil(clients.claim());
-    event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((name) => {
-                    if (name !== CACHE_NAME) {
-                        return caches.delete(name);
-                    }
-                })
-            );
-        })
-    );
-});
-
-self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request).then((response) => {
-            return response || fetch(event.request);
-        })
+self.addEventListener('fetch', (e) => {
+    if (e.request.method !== 'GET') return;
+    e.respondWith(
+        fetch(e.request).then(res => {
+            if (res && res.status === 200 && res.type === 'basic') {
+                const clone = res.clone();
+                caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+            }
+            return res;
+        }).catch(() => caches.match(e.request))
     );
 });
 
