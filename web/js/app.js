@@ -3,20 +3,20 @@ import { APIClient } from './api.js';
 class KippeApplication {
     constructor() {
         this.api = new APIClient();
+        this.html5QrCode = null;
     }
 
     async bootstrap() {
-        // LUPA BUSCA
+        // --- BUSCA RÁPIDA ---
         const searchBtn = document.getElementById('searchBtn');
         const searchInput = document.getElementById('searchInput');
         if (searchBtn && searchInput) {
             searchBtn.addEventListener('click', () => {
-                const val = searchInput.value.trim();
-                if (val) this.fetchAndRenderSku(val);
+                if (searchInput.value.trim()) this.fetchAndRenderSku(searchInput.value.trim());
             });
         }
 
-        // VOLTAR
+        // --- NAVEGAÇÃO ---
         const btnBackDash = document.getElementById('btn-back-dashboard');
         if (btnBackDash) {
             btnBackDash.addEventListener('click', () => {
@@ -24,8 +24,14 @@ class KippeApplication {
                 document.getElementById('home-module-view').classList.remove('hidden');
             });
         }
+        
+        const navHome = document.getElementById('nav-home');
+        if(navHome) navHome.addEventListener('click', () => {
+             document.getElementById('dashboard-view').classList.add('hidden');
+             document.getElementById('home-module-view').classList.remove('hidden');
+        });
 
-        // ABRIR RECEBIMENTO
+        // --- MÓDULO RECEBIMENTO ---
         const btnInbound = document.getElementById('btn-module-inbound');
         const modalReceive = document.getElementById('receive-modal');
         if (btnInbound && modalReceive) {
@@ -36,39 +42,62 @@ class KippeApplication {
             });
         }
 
-        // FECHAR RECEBIMENTO
         const closeReceive = document.getElementById('close-receive-modal');
         if (closeReceive) closeReceive.addEventListener('click', () => modalReceive.classList.add('hidden'));
 
-        // CONFIRMAR RECEBIMENTO
         const submitReceive = document.getElementById('submit-receive');
         if (submitReceive) {
             submitReceive.addEventListener('click', async () => {
                 const sku = document.getElementById('rec-ean').value.trim();
                 const qty = parseInt(document.getElementById('rec-qty').value.trim(), 10);
+                if (!sku || isNaN(qty) || qty <= 0) return alert('Verifique o SKU e a Quantidade.');
                 
-                if (!sku || isNaN(qty) || qty <= 0) {
-                    alert('Dados inválidos. Verifique o SKU e a Quantidade.');
-                    return;
-                }
-
                 document.getElementById('loader').classList.remove('hidden');
                 try {
-                    // API Register Receive do backend oficial
-                    await this.api.registerReceive({
-                        id: sku,
-                        barcode: sku,
-                        amount: qty,
-                        operator: "ADMIN"
-                    });
-                    
+                    await this.api.registerReceive({ id: sku, barcode: sku, amount: qty, operator: "ADMIN" });
                     document.getElementById('loader').classList.add('hidden');
                     modalReceive.classList.add('hidden');
-                    this.fetchAndRenderSku(sku); // Já busca e mostra o saldo atualizado!
+                    this.fetchAndRenderSku(sku);
                 } catch (error) {
                     document.getElementById('loader').classList.add('hidden');
-                    alert('Erro ao dar entrada: ' + (error.message || 'Falha no banco.'));
+                    alert('Erro: ' + (error.message || 'Falha no banco.'));
                 }
+            });
+        }
+
+        // --- MÓDULO SCANNER (CÂMERA) ---
+        const btnScan3 = document.getElementById('btn-module-scan');
+        const navScan = document.getElementById('nav-scan');
+        const scannerModal = document.getElementById('scanner-modal');
+        const closeScannerBtn = document.getElementById('close-scanner-btn');
+
+        const openScanner = () => {
+            scannerModal.classList.remove('hidden');
+            if (!this.html5QrCode) {
+                this.html5QrCode = new Html5Qrcode("reader");
+            }
+            this.html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                (decodedText) => {
+                    this.html5QrCode.stop();
+                    scannerModal.classList.add('hidden');
+                    if(searchInput) searchInput.value = decodedText;
+                    this.fetchAndRenderSku(decodedText);
+                },
+                (errorMessage) => { /* Ignora erros de frame contínuo */ }
+            ).catch(err => {
+                alert("Erro ao iniciar a câmera. Verifique as permissões do navegador.");
+                scannerModal.classList.add('hidden');
+            });
+        };
+
+        if(btnScan3) btnScan3.addEventListener('click', openScanner);
+        if(navScan) navScan.addEventListener('click', openScanner);
+        if(closeScannerBtn) {
+            closeScannerBtn.addEventListener('click', () => {
+                if (this.html5QrCode) this.html5QrCode.stop().catch(e => {});
+                scannerModal.classList.add('hidden');
             });
         }
     }
@@ -84,13 +113,12 @@ class KippeApplication {
             
             document.getElementById('prodName').textContent = data.name || data.description || "NOVO PRODUTO";
             document.getElementById('prodSku').textContent = data.id || data.sku || sku;
-            
             const stock = data.balances ? data.balances.total : data.quantity;
             document.getElementById('stockTotal').textContent = stock !== undefined ? stock : 0;
             
         } catch (error) {
             document.getElementById('loader').classList.add('hidden');
-            alert("❌ PRODUTO NÃO ENCONTRADO.\n\nClique no botão '1. RECEBER' para dar entrada nele.");
+            alert("❌ PRODUTO NÃO ENCONTRADO.\n\nUse o botão '1. RECEBER' para dar entrada.");
         }
     }
 }
