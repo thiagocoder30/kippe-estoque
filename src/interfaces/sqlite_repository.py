@@ -164,3 +164,86 @@ class SQLiteProductRepository:
                 ORDER BY t.id DESC LIMIT ?
             ''', (limit,)).fetchall()
             return [dict(row) for row in rows]
+
+    def get_dashboard_projection(self, sku_or_barcode: str) -> dict:
+        import sqlite3
+        try:
+            conn = sqlite3.connect('kippe.db')
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            
+            # 1. Catálogo: Busca tanto por SKU quanto por Código de Barras
+            cur.execute("SELECT * FROM catalog WHERE sku = ? OR barcode = ?", (sku_or_barcode, sku_or_barcode))
+            catalog_row = cur.fetchone()
+            
+            if not catalog_row:
+                conn.close()
+                return None
+                
+            catalog_data = dict(catalog_row)
+            
+            # O Segredo: Pegamos o SKU verdadeiro (ex: MAT-1023) para as próximas buscas
+            true_sku = catalog_data.get('sku', sku_or_barcode)
+            
+            # 2. Lotes e Saldos usando o verdadeiro SKU
+            cur.execute("SELECT * FROM batches WHERE sku = ?", (true_sku,))
+            batches_rows = cur.fetchall()
+            
+            batches = []
+            total_quantity = 0
+            primary_supplier = "N/D"
+            
+            for b in batches_rows:
+                b_dict = dict(b)
+                qty = int(b_dict.get('quantity') or 0)
+                store_qty = int(b_dict.get('quantity_store') or 0)
+                bal_qty = int(b_dict.get('store_balance') or 0)
+                
+                batches.append({
+                    "batch_code": b_dict.get('batch_code', 'N/D'),
+                    "quantity": qty,
+                    "expiration_date": b_dict.get('expiration', 'N/D')
+                })
+                total_quantity += (qty + store_qty + bal_qty)
+                
+                if b_dict.get('supplier') and primary_supplier == "N/D":
+                    primary_supplier = b_dict.get('supplier')
+                    
+            # 3. Auditoria (Últimas Movimentações)
+            cur.execute("SELECT * FROM audit_log WHERE sku = ? ORDER BY timestamp DESC LIMIT 10", (true_sku,))
+            audit_rows = cur.fetchall()
+            
+            audit_logs = []
+            for a in audit_rows:
+                a_dict = dict(a)
+                audit_logs.append({
+                    "date": a_dict.get('timestamp', ''),
+                    "op": a_dict.get('operation', ''),
+                    "qty": a_dict.get('quantity', 0),
+                    "operator": a_dict.get('operator', 'SISTEMA')
+                })
+                
+            conn.close()
+            
+            return {
+                "sku": true_sku,
+                "description": catalog_data.get('description', 'PRODUTO SEM NOME'),
+                "barcode": catalog_data.get('barcode', true_sku),
+                "category": catalog_data.get('category', 'N/D'),
+                "photo": catalog_data.get('photo', None),
+                "balances": {
+                    "total": total_quantity
+                },
+                "primary_supplier": primary_supplier,
+                "physical_location": {
+                    "details": catalog_data.get('box_location', 'NÃO ENDEREÇADO')
+                },
+                "traceability": {
+                    "batches": batches
+                },
+                "audit_logs": audit_logs
+            }
+            
+        except Exception as e:
+            print(f"Erro no Read Model do sku/ean {sku_or_barcode}: {e}")
+            return None

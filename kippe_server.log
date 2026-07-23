@@ -1,0 +1,59 @@
+127.0.0.1 - - [23/Jul/2026 10:37:52] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:52] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:52] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:54] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:54] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:54] "GET /api/relatorios/vencimentos?_t=1784813874845 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:56] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:56] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:56] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:56] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:56] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:56] "GET /api/relatorios/vencimentos?_t=1784813876704 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:57] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:57] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:57] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:58] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:58] "GET /api/relatorios/vencimentos?_t=1784813878124 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:58] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:58] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:59] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:59] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:59] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:59] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:37:59] "GET /api/relatorios/vencimentos?_t=1784813879449 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:01] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:01] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:01] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:01] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:01] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:01] "GET /api/relatorios/vencimentos?_t=1784813881602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:02] "GET /api/relatorios/vencimentos?_t=1784813882245 HTTP/1.1" 200 -
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/home/kippe-estoque/src/presentation/api/warehouse_router.py", line 22, in get_sku
+    view = self.query_service.get_sku_view(sku)
+  File "/data/data/com.termux/files/home/kippe-estoque/src/application/warehouse/query_service.py", line 44, in get_sku_view
+    account = self.ledger_repo.get_by_sku(sku)
+  File "/data/data/com.termux/files/home/kippe-estoque/src/infrastructure/database.py", line 82, in get_by_sku
+    return pickle.loads(row[0])
+           ~~~~~~~~~~~~^^^^^^^^
+AttributeError: module 'src.infrastructure.database' has no attribute 'KippeAccount'
+127.0.0.1 - - [23/Jul/2026 10:38:18] "GET /api/sku/7891242151567 HTTP/1.1" 500 -
+127.0.0.1 - - [23/Jul/2026 10:38:22] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:22] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:22] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:23] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:23] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:23] "GET /api/relatorios/vencimentos?_t=1784813903375 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:24] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:24] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:24] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:24] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:24] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:25] "GET /api/relatorios/vencimentos?_t=1784813904945 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:26] "GET /web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:26] "GET /web/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:26] "GET /web/js/app.js?v=nuke_1784753602 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:26] "GET /web/js/api.js HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:26] "GET /web/manifest.json HTTP/1.1" 200 -
+127.0.0.1 - - [23/Jul/2026 10:38:26] "GET /api/relatorios/vencimentos?_t=1784813906831 HTTP/1.1" 200 -

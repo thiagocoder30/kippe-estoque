@@ -104,18 +104,105 @@ class KippeHTTPGateway(BaseHTTPRequestHandler):
             self._write_json_response(200, [])
             return
 
-        sku_match = re.match(r'^/api/sku/([^/]+)$', self.path)
-        if sku_match:
-            sku = sku_match.group(1)
-            status_code, response_data = warehouse_api.get_sku(sku)
-            
-            # Injeta a foto salva no catálogo diretamente no Read Model da API
-            if status_code == 200:
-                product_meta = catalog.get_by_sku(sku)
-                response_data["photo"] = getattr(product_meta, "photo", None)
+
+        # --- MÓDULO ENTERPRISE: RELATÓRIO FEFO ---
+        if self.path.split('?')[0] == '/api/relatorios/vencimentos':
+            import sqlite3
+            from datetime import datetime
+            try:
+                conn = sqlite3.connect('kippe.db')
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                query = '''
+                    SELECT b.sku, b.batch_code, b.expiration, b.quantity, b.quantity_store, b.store_balance, c.description
+                    FROM batches b
+                    LEFT JOIN catalog c ON b.sku = c.sku
+                    WHERE b.expiration IS NOT NULL AND b.expiration != ''
+                '''
+                rows = cur.execute(query).fetchall()
+                conn.close()
+
+                result = []
+                today = datetime.now()
+                for r in rows:
+                    try:
+                        exp_str = str(r['expiration']).split(' ')[0]
+                        exp_date = None
+                        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y-%m-%dT%H:%M:%S'):
+                            try:
+                                exp_date = datetime.strptime(exp_str, fmt)
+                                break
+                            except: pass
+                        if not exp_date: continue
+                        dias = (exp_date - today).days
+
+                        if dias > 60: continue
+
+                        if dias < 0: status = "⚫ VENCIDO"
+                        elif dias <= 15: status = "🔴 CRÍTICO"
+                        elif dias <= 30: status = "🟠 ALERTA"
+                        else: status = "🟡 ATENÇÃO"
+
+                        desc = r['description'] if r['description'] else 'PRODUTO SEM NOME'
+                        q_wh = int(r['quantity'] or 0)
+                        q_st = int(r['quantity_store'] or 0)
+                        q_bal = int(r['store_balance'] or 0)
+                        total_stock = q_wh + q_st + q_bal
+
+                        result.append({
+                            "sku": str(r['sku']),
+                            "name": f"{status} | {desc}",
+                            "expiration": f"{exp_str} ({dias} DIAS) | ESTOQUE TOTAL: {total_stock} UN",
+                            "batch": str(r['batch_code']),
+                            "sort_days": dias
+                        })
+                    except Exception:
+                        pass
+                result.sort(key=lambda x: x['sort_days'])
+                for item in result: 
+                    if 'sort_days' in item: del item['sort_days']
                 
+                self._write_json_response(200, result)
+                return
+            except Exception as e:
+                import traceback
+                print(f"ERRO FEFO: {traceback.format_exc()}")
+                self._write_json_response(200, [{"sku": "ERR", "name": "ERRO BANCO DE DADOS", "expiration": str(e), "batch": "CRASH"}])
+                return
+
+        # --- BUSCA INTELIGENTE (SKU OU CÓDIGO DE BARRAS) ---
+        # Suporta tanto /api/sku/ quanto /api/produto/ para bater com o Frontend
+        sku_match = re.match(r'^/api/(?:sku|produto)/([^/]+)$', self.path)
+        if sku_match:
+            from urllib.parse import unquote
+            sku_or_barcode = unquote(sku_match.group(1))
+            true_sku = sku_or_barcode
+
+            # Tenta descobrir o verdadeiro SKU se a busca for por Código de Barras
+            try:
+                import sqlite3
+                conn = sqlite3.connect('kippe.db')
+                conn.row_factory = sqlite3.Row
+                c_row = conn.cursor().execute("SELECT sku FROM catalog WHERE sku = ? OR barcode = ?", (sku_or_barcode, sku_or_barcode)).fetchone()
+                if c_row:
+                    true_sku = c_row['sku']
+                conn.close()
+            except Exception:
+                pass
+
+            # Busca no Motor Institucional (CQRS)
+            status_code, response_data = warehouse_api.get_sku(true_sku)
+
+            if status_code == 200:
+                try:
+                    product_meta = catalog.get_by_sku(true_sku)
+                    response_data["photo"] = getattr(product_meta, "photo", None)
+                except:
+                    pass
+
             self._write_json_response(status_code, response_data)
             return
+
 
         self._write_json_response(404, {"error": "Rota não encontrada."})
 
