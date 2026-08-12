@@ -2,7 +2,7 @@
   "name": "KIPPE Platform",
   "short_name": "KIPPE",
   "description": "Sistema Enterprise de Logística",
-  "start_url": "/web/index.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f3f4f6",
   "theme_color": "#1e3a8a",
@@ -20,6 +20,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "scope": "/"
 }
-

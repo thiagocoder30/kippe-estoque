@@ -2,7 +2,7 @@
  * Camada de Cliente HTTP Vanilla JS.
  */
 export class APIClient {
-    constructor(baseURL = 'http://localhost:8000') {
+    constructor(baseURL = '') {
         this.baseURL = baseURL;
     }
 

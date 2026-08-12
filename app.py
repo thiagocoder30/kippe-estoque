@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template, session
+from flask import Flask, jsonify, request, session, send_from_directory
 from src.infrastructure.container import Container
 
 container = Container()
@@ -10,7 +10,20 @@ def _has_valid_session():
     return 'operator_id' in session
 
 @app.route('/')
-def index(): return render_template('index.html')
+def index():
+    return send_from_directory('web', 'index.html')
+
+@app.route('/web/<path:filename>', methods=['GET'])
+def web_assets(filename):
+    return send_from_directory('web', filename)
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'ok',
+        'system': 'KIPPE WMS',
+        'gateway': 'flask'
+    }), 200
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -53,6 +66,7 @@ def get_produtos():
     return jsonify([{'id': p.id, 'name': p.name, 'quantity': p.quantity} for p in container.use_case.list_all()])
 
 @app.route('/api/produto/<sku>', methods=['GET'])
+@app.route('/api/sku/<sku>', methods=['GET'])
 def get_produto(sku):
     p = container.product_repository.get_by_id(sku)
     return jsonify({'id': p.id, 'name': p.name, 'quantity': p.quantity}) if p else (jsonify({'error': 'Not found'}), 404)

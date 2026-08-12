@@ -12,7 +12,7 @@ fi
 echo -e "\033[96m[SISTEMA] Iniciando KIPPE Platform em Background...\033[0m"
 
 # Inicia o servidor Python desvinculado do terminal atual
-nohup python3 -m src.main > "$LOG_FILE" 2>&1 &
+nohup python3 app.py > "$LOG_FILE" 2>&1 &
 
 # Salva o número do processo para podermos desligar depois
 echo $! > "$PID_FILE"
