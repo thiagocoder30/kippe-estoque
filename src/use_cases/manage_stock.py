@@ -3,6 +3,8 @@ from src.domain.product import Product
 from src.domain.result import Result
 from src.interfaces.logger import Logger
 from src.interfaces.identity import IdentityProvider
+from src.domain.services.stock_transfer_engine import StockTransferEngine
+from src.domain.services.inventory_adjustment_engine import InventoryAdjustmentEngine
 class ManageStockUseCase:
     def __init__(self, repository, logger: Optional[Logger] = None, identity_provider: Optional[IdentityProvider] = None):
         self.repository = repository
@@ -68,6 +70,99 @@ class ManageStockUseCase:
         else:
             self._log_warn(f"Saída Rejeitada pelo Domínio: SKU [{product_id}] - {res.error}. Operador: [{op_id}]")
         return res
+    def execute_transfer(
+        self,
+        product_id: str,
+        amount: int,
+        from_warehouse: str,
+        to_warehouse: str,
+    ) -> Result[None, str]:
+        op_id = self._get_op()
+
+        product = self.repository.get_by_id(product_id)
+        if not product:
+            self._log_warn(
+                f"Transferência Bloqueada: SKU [{product_id}] não encontrado. "
+                f"Operador: [{op_id}]"
+            )
+            return Result.fail("Produto não encontrado.")
+
+        res = StockTransferEngine.execute_transfer(
+            product=product,
+            amount=amount,
+            from_warehouse=from_warehouse,
+            to_warehouse=to_warehouse,
+        )
+
+        if res.is_success:
+            self.repository.save(product)
+            self.repository.log_transaction(
+                product_id,
+                f"TRANSFERENCIA ({from_warehouse} -> {to_warehouse})",
+                amount,
+                op_id,
+            )
+            self._log_info(
+                f"Transferência Registrada: SKU [{product_id}] | "
+                f"{from_warehouse} -> {to_warehouse} | Qtd: {amount}. "
+                f"Operador: [{op_id}]"
+            )
+        else:
+            self._log_warn(
+                f"Transferência Rejeitada: SKU [{product_id}] - {res.error}. "
+                f"Operador: [{op_id}]"
+            )
+
+        return res
+
+    def execute_adjustment(
+        self,
+        product_id: str,
+        amount: int,
+        reason: str,
+        batch_code: str = None,
+        warehouse_id: str = "WH-PADRAO",
+    ) -> Result[None, str]:
+        op_id = self._get_op()
+
+        product = self.repository.get_by_id(product_id)
+        if not product:
+            self._log_warn(
+                f"Ajuste Bloqueado: SKU [{product_id}] não encontrado. "
+                f"Operador: [{op_id}]"
+            )
+            return Result.fail("Produto não encontrado.")
+
+        res = InventoryAdjustmentEngine.execute_adjustment(
+            product=product,
+            amount=amount,
+            reason=reason,
+            operator_id=op_id,
+            warehouse_id=warehouse_id,
+            batch_code=batch_code,
+        )
+
+        if res.is_success:
+            self.repository.save(product)
+            self.repository.log_transaction(
+                product_id,
+                f"AJUSTE ({reason})",
+                amount,
+                op_id,
+            )
+            self._log_info(
+                f"Ajuste Registrado: SKU [{product_id}] | "
+                f"Motivo: [{reason}] | Qtd: {amount}. "
+                f"Operador: [{op_id}]"
+            )
+        else:
+            self._log_warn(
+                f"Ajuste Rejeitado: SKU [{product_id}] - {res.error}. "
+                f"Operador: [{op_id}]"
+            )
+
+        return res
+
     def list_all(self) -> List[Product]: return self.repository.get_all()
     def get_picking_info(self, product_id: str) -> Result[Dict[str, Any], str]:
         product = self.repository.get_by_id(product_id)
