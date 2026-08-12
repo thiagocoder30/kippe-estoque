@@ -7,3 +7,12 @@ instance/
 
 data/*.db
 data/*.log
+
+# Runtime / operational artifacts
+*.log
+*.db-shm
+*.db-wal
+.kippe.pid
+
+# Generated data artifacts
+data/**/*.log

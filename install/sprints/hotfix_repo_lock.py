@@ -39,13 +39,13 @@ def patch_repo_strict_mapping(content: str) -> str:
     content = pattern_read_id.sub(strict_read_id, content)
     # Assegura que o mapeamento Domain -> SQLite (Escrita) é explícito e tipado
     pattern_write = re.compile(r'VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?, \?\).*?\)', re.DOTALL)
-    strict_write = '''VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    strict_write = """VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     str(product.id), str(batch.code), str(batch.expiration_date), int(batch.quantity), 
                     str(batch.manufacturing_date), str(batch.supplier), str(batch.status), 
                     str(batch.traceability_id), str(batch.location_id), str(batch.warehouse_id), 
                     float(batch.cost_per_unit)
-                ))'''
+                ))"""
     
     if "float(batch.cost_per_unit)" not in content:
         content = pattern_write.sub(strict_write, content)
