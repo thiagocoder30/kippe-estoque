@@ -74,3 +74,31 @@ def test_query_returns_batches_in_fefo_order():
 
     assert batches[0]["code"] == "L002"
     assert batches[1]["code"] == "L001"
+
+
+def test_query_returns_expiration_status_for_batches():
+
+    product = Product(
+        id="SKU-EXP",
+        name="Produto Validade",
+        ean="7896666666666"
+    )
+
+    product.add_stock(
+        amount=10,
+        expiration_date="2026-09-01",
+        batch_code="L-EXP"
+    )
+
+    result = ProductQueryEngine.query(
+        products=[product],
+        identifier="7896666666666"
+    )
+
+    assert result.is_success
+
+    batch = result.value["batches"][0]
+
+    assert batch["code"] == "L-EXP"
+    assert batch["expiration_status"] == "ATENCAO"
+    assert batch["days_remaining"] > 0
