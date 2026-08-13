@@ -9,6 +9,7 @@ from .services.fefo_selector import FEFOSelector
 class Product:
     id: str  
     name: str  
+    ean: str = ""
     quantity: int = 0  
     reserved_quantity: int = 0
     batches: Dict[str, Batch] = field(default_factory=dict)  
@@ -20,6 +21,18 @@ class Product:
     @property
     def available_quantity(self) -> int:
         return self.quantity - self.reserved_quantity
+
+    def matches_identifier(self, value: str) -> bool:
+        if not value:
+            return False
+
+        query = value.strip().lower()
+
+        return (
+            query == self.id.lower()
+            or query == self.ean.lower()
+            or query in self.name.lower()
+        )
 
     def __post_init__(self):
         if not self.id or not isinstance(self.id, str) or len(self.id.strip()) == 0:
