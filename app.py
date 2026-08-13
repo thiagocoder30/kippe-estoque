@@ -86,6 +86,36 @@ def create_produto():
     res = container.use_case.create_product(data.get('id'), data.get('name'), data.get('unit_of_measure', 'un'), data.get('status', 'ATIVO'), data.get('category_id'))
     return (jsonify({'message': 'OK'}), 201) if res.is_success else (jsonify({'error': res.error}), 400)
 
+
+@app.route('/api/receive', methods=['POST'])
+def receive_stock():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+
+    product_id = data.get('sku') or data.get('id')
+    amount = data.get('quantity') or data.get('amount')
+
+    res = container.use_case.execute_add(
+        product_id,
+        amount,
+        data.get('expiration_date', ''),
+        data.get('batch_code', ''),
+        data.get('manufacturing_date', ''),
+        data.get('supplier', 'PADRAO')
+    )
+
+    if res.is_success:
+        return jsonify({
+            'message': 'Entrada registrada.'
+        }), 200
+
+    return jsonify({
+        'error': res.error
+    }), 400
+
+
 @app.route('/api/entrada', methods=['POST'])
 def add_stock():
     if not _has_valid_session(): return jsonify({'error': 'Operador não autenticado.'}), 401
