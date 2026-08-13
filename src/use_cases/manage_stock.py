@@ -5,6 +5,7 @@ from src.interfaces.logger import Logger
 from src.interfaces.identity import IdentityProvider
 from src.domain.services.stock_transfer_engine import StockTransferEngine
 from src.domain.services.inventory_adjustment_engine import InventoryAdjustmentEngine
+from src.domain.services.putaway_engine import PutawayEngine
 class ManageStockUseCase:
     def __init__(self, repository, logger: Optional[Logger] = None, identity_provider: Optional[IdentityProvider] = None):
         self.repository = repository
@@ -55,6 +56,53 @@ class ManageStockUseCase:
         else:
             self._log_warn(f"Entrada Rejeitada pelo Domínio: SKU [{product_id}] - {res.error}. Operador: [{op_id}]")
         return res
+
+    def execute_putaway(
+        self,
+        product_id: str,
+        batch_code: str,
+        location_id: str,
+    ) -> Result[None, str]:
+        op_id = self._get_op()
+
+        product = self.repository.get_by_id(product_id)
+
+        if not product:
+            self._log_warn(
+                f"Putaway Bloqueado: SKU [{product_id}] não encontrado. "
+                f"Operador: [{op_id}]"
+            )
+            return Result.fail("Produto não encontrado.")
+
+        res = PutawayEngine.execute_putaway(
+            product,
+            batch_code,
+            location_id,
+        )
+
+        if res.is_success:
+            self.repository.save(product)
+
+            self.repository.log_transaction(
+                product_id,
+                f"PUTAWAY (Lote {batch_code} -> {location_id})",
+                0,
+                op_id,
+            )
+
+            self._log_info(
+                f"Putaway Registrado: SKU [{product_id}] | "
+                f"Lote [{batch_code}] | Local [{location_id}]. "
+                f"Operador: [{op_id}]"
+            )
+        else:
+            self._log_warn(
+                f"Putaway Rejeitado: SKU [{product_id}] - {res.error}. "
+                f"Operador: [{op_id}]"
+            )
+
+        return res
+
     def execute_remove(self, product_id: str, amount: int) -> Result[None, str]:
         op_id = self._get_op()
         product = self.repository.get_by_id(product_id)
