@@ -155,13 +155,12 @@ def receive_stock():
     product_id = data.get('sku') or data.get('id')
     amount = data.get('quantity') or data.get('amount')
 
-    res = container.use_case.execute_add(
-        product_id,
-        amount,
-        data.get('expiration_date', ''),
-        data.get('batch_code', ''),
-        data.get('manufacturing_date', ''),
-        data.get('supplier', 'PADRAO')
+    res = container.receive_use_case.execute(
+        identifier=product_id,
+        quantity=amount,
+        batch_code=data.get('batch_code', ''),
+        expiration_date=data.get('expiration_date', ''),
+        supplier=data.get('supplier', 'PADRAO')
     )
 
     if res.is_success:

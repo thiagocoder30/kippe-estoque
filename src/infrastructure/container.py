@@ -4,6 +4,7 @@ from src.infrastructure.identity import CurrentOperatorResolver
 from src.interfaces.sqlite_repository import SQLiteProductRepository
 from src.interfaces.sqlite_operator_repository import SQLiteOperatorRepository
 from src.use_cases.manage_stock import ManageStockUseCase
+from src.use_cases.receive_stock import ReceivingUseCase
 from src.use_cases.manage_operators import ManageOperatorsUseCase
 from src.use_cases.manage_categories import ManageCategoriesUseCase
 class Container:
@@ -14,6 +15,7 @@ class Container:
         self._product_repository = None
         self._operator_repository = None
         self._manage_stock_use_case = None
+        self._receiving_use_case = None
         self._manage_operators_use_case = None
         self._manage_categories_use_case = None
     @property
@@ -40,6 +42,14 @@ class Container:
             )
         return self._manage_stock_use_case
         
+    @property
+    def receive_use_case(self) -> ReceivingUseCase:
+        if not self._receiving_use_case:
+            self._receiving_use_case = ReceivingUseCase(
+                repository=self.product_repository
+            )
+        return self._receiving_use_case
+
     @property
     def auth_use_case(self) -> ManageOperatorsUseCase:
         if not self._manage_operators_use_case:
