@@ -87,6 +87,36 @@ def create_produto():
     return (jsonify({'message': 'OK'}), 201) if res.is_success else (jsonify({'error': res.error}), 400)
 
 
+
+@app.route('/api/adjustment', methods=['POST'])
+def adjustment_stock():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+
+    product_id = data.get('sku') or data.get('id')
+    amount = data.get('quantity') or data.get('amount')
+    reason = data.get('divergence_type') or data.get('reason') or "CONTAGEM"
+
+    res = container.use_case.execute_adjustment(
+        product_id,
+        amount,
+        reason,
+        data.get('batch_code'),
+        data.get('warehouse_id', 'WH-PADRAO')
+    )
+
+    if res.is_success:
+        return jsonify({
+            'message': 'Ajuste registrado.'
+        }), 200
+
+    return jsonify({
+        'error': res.error
+    }), 400
+
+
 @app.route('/api/receive', methods=['POST'])
 def receive_stock():
     if not _has_valid_session():
