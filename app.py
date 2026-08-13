@@ -117,6 +117,34 @@ def adjustment_stock():
     }), 400
 
 
+
+@app.route('/api/putaway', methods=['POST'])
+def putaway_stock():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+
+    product_id = data.get('sku') or data.get('id')
+    batch_code = data.get('batch_code')
+    location_id = data.get('location_id') or data.get('location')
+
+    res = container.use_case.execute_putaway(
+        product_id,
+        batch_code,
+        location_id
+    )
+
+    if res.is_success:
+        return jsonify({
+            'message': 'Putaway registrado.'
+        }), 200
+
+    return jsonify({
+        'error': res.error
+    }), 400
+
+
 @app.route('/api/receive', methods=['POST'])
 def receive_stock():
     if not _has_valid_session():
