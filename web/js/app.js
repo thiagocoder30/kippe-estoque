@@ -252,30 +252,159 @@ ${loc}`);
         } catch(e) {}
     }
 
-    async fetchAndRenderSku(sku) {
+    async fetchAndRenderSku(identifier) {
         document.getElementById('loader')?.classList.remove('hidden');
+
         try {
-            const data = await this.api.getSku(sku);
+            const data = await this.api.queryProduct(identifier);
+
             document.getElementById('loader')?.classList.add('hidden');
-            
+
             ['home-module-view', 'reports-view'].forEach(id => {
                 const el = document.getElementById(id);
-                if(el) el.classList.add('hidden');
+
+                if (el) {
+                    el.classList.add('hidden');
+                }
             });
+
             document.getElementById('dashboard-view')?.classList.remove('hidden');
-            
+
             const prodName = document.getElementById('prodName');
-            if(prodName) prodName.textContent = data.name || data.description || "PRODUTO SEM CADASTRO";
-            
             const prodSku = document.getElementById('prodSku');
-            if(prodSku) prodSku.textContent = data.id || data.sku || sku;
-            
+            const prodEan = document.getElementById('prodEan');
             const stockTotal = document.getElementById('stockTotal');
-            const stock = data.balances ? data.balances.total : data.quantity;
-            if(stockTotal) stockTotal.textContent = stock !== undefined ? stock : 0;
+            const batchesContainer = document.getElementById('product-batches');
+
+            if (prodName) {
+                prodName.textContent = data.name || 'PRODUTO SEM DESCRIÇÃO';
+            }
+
+            if (prodSku) {
+                prodSku.textContent = data.id || identifier;
+            }
+
+            if (prodEan) {
+                prodEan.textContent = data.ean || 'NÃO INFORMADO';
+            }
+
+            if (stockTotal) {
+                stockTotal.textContent = data.quantity ?? 0;
+            }
+
+            if (batchesContainer) {
+                batchesContainer.innerHTML = '';
+
+                const batches = Array.isArray(data.batches)
+                    ? data.batches
+                    : [];
+
+                if (batches.length === 0) {
+                    batchesContainer.innerHTML = `
+                        <div class="p-4 bg-gray-50 border border-gray-100 rounded-lg text-center">
+                            <p class="text-[10px] font-bold text-gray-400">
+                                NENHUM LOTE ATIVO
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    batches.forEach((batch) => {
+                        const card = document.createElement('div');
+
+                        const status = batch.expiration_status || 'NORMAL';
+
+                        const statusClasses = {
+                            NORMAL: 'bg-green-100 text-green-700 border-green-200',
+                            ATENCAO: 'bg-amber-100 text-amber-800 border-amber-200',
+                            CRITICO: 'bg-red-100 text-red-700 border-red-200',
+                            VENCIDO: 'bg-red-600 text-white border-red-700',
+                        };
+
+                        const statusClass =
+                            statusClasses[status] ||
+                            statusClasses.NORMAL;
+
+                        const location =
+                            batch.location_id ||
+                            'NÃO ENDEREÇADO';
+
+                        const daysRemaining =
+                            batch.days_remaining ?? 'N/A';
+
+                        card.className =
+                            'p-3 rounded-xl border border-gray-100 bg-gray-50';
+
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-[9px] text-gray-400 font-bold">
+                                        LOTE
+                                    </p>
+
+                                    <p class="text-sm font-black text-gray-800 font-mono">
+                                        ${batch.code || 'N/A'}
+                                    </p>
+                                </div>
+
+                                <span class="text-[9px] font-black px-2 py-1 rounded border ${statusClass}">
+                                    ${status}
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 mt-3 text-[9px]">
+                                <div>
+                                    <p class="text-gray-400 font-bold">
+                                        QUANTIDADE
+                                    </p>
+
+                                    <p class="font-black text-gray-800">
+                                        ${batch.quantity ?? 0}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-gray-400 font-bold">
+                                        LOCALIZAÇÃO
+                                    </p>
+
+                                    <p class="font-black text-[#124191]">
+                                        ${location}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-gray-400 font-bold">
+                                        VALIDADE
+                                    </p>
+
+                                    <p class="font-black text-gray-800">
+                                        ${batch.expiration_date || 'N/A'}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="text-gray-400 font-bold">
+                                        DIAS RESTANTES
+                                    </p>
+
+                                    <p class="font-black text-gray-800">
+                                        ${daysRemaining}
+                                    </p>
+                                </div>
+                            </div>
+                        `;
+
+                        batchesContainer.appendChild(card);
+                    });
+                }
+            }
         } catch (error) {
             document.getElementById('loader')?.classList.add('hidden');
-            alert("❌ PRODUTO NÃO ENCONTRADO.\n\nUse o botão '1. RECEBER' para dar entrada.");
+
+            alert(
+                "❌ PRODUTO NÃO ENCONTRADO.\n\n" +
+                "Use o botão '1. RECEBER' para dar entrada."
+            );
         }
     }
 }

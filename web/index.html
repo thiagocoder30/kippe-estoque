@@ -81,13 +81,49 @@ if ('serviceWorker' in navigator) {
         <!-- TELA PRODUTO -->
         <section id="dashboard-view" class="hidden space-y-3">
             <button id="btn-back-dashboard" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm">VOLTAR</button>
+
             <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-kippe-blue">
                 <h2 id="prodName" class="text-lg font-black text-gray-800"></h2>
-                <p class="text-[9px] text-gray-500 mt-1">SKU: <span id="prodSku" class="font-mono font-black text-kippe-blue"></span></p>
+
+                <div class="mt-2 space-y-1">
+                    <p class="text-[9px] text-gray-500">
+                        SKU:
+                        <span id="prodSku" class="font-mono font-black text-kippe-blue"></span>
+                    </p>
+
+                    <p class="text-[9px] text-gray-500">
+                        EAN:
+                        <span id="prodEan" class="font-mono font-black text-gray-700"></span>
+                    </p>
+                </div>
+
                 <div class="mt-3 pt-3 border-t border-gray-100">
-                    <p class="text-[9px] font-bold text-gray-400 tracking-widest">SALDO NO DEPÓSITO</p>
+                    <p class="text-[9px] font-bold text-gray-400 tracking-widest">
+                        SALDO TOTAL
+                    </p>
+
                     <p id="stockTotal" class="text-4xl font-black text-[#124191] leading-none"></p>
                 </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-3">
+                    <div>
+                        <h3 class="text-[11px] font-black text-gray-800">
+                            LOTES / FEFO
+                        </h3>
+
+                        <p class="text-[8px] text-gray-400 font-bold mt-0.5">
+                            ORDEM RECOMENDADA DE CONSUMO
+                        </p>
+                    </div>
+
+                    <span class="text-[8px] font-black text-[#124191] bg-blue-50 px-2 py-1 rounded">
+                        FEFO
+                    </span>
+                </div>
+
+                <div id="product-batches" class="space-y-2"></div>
             </div>
         </section>
     
