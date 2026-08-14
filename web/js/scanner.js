@@ -57,9 +57,26 @@ export class ScannerManager {
             this.status = "SCANNING";
         } catch (err) {
             console.error("[SCANNER ERROR]", err);
+
+            if (this.modal) {
+                this.modal.classList.add('hidden');
+            }
+
+            if (this.html5Qrcode) {
+                try {
+                    await this.html5Qrcode.clear();
+                } catch (clearError) {
+                    console.warn("[SCANNER CLEANUP]", clearError);
+                }
+            }
+
+            this.html5Qrcode = null;
             this.status = "IDLE";
-            this.stop();
-            alert("Não foi possível acessar a câmera. Verifique as permissões.");
+
+            alert(
+                "Não foi possível acessar a câmera. " +
+                "Verifique as permissões."
+            );
         }
     }
 

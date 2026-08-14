@@ -1,9 +1,19 @@
 import { APIClient } from './api.js';
+import { ScannerManager } from './scanner.js';
 
 class KippeApplication {
     constructor() {
         this.api = new APIClient();
-        this.html5QrCode = null;
+
+        this.scanner = new ScannerManager((decodedText) => {
+            const searchInput = document.getElementById('searchInput');
+
+            if (searchInput) {
+                searchInput.value = decodedText;
+            }
+
+            this.fetchAndRenderSku(decodedText);
+        });
     }
 
     async bootstrap() {
@@ -204,36 +214,19 @@ ${loc}`);
     }
 
     bindScannerModule() {
-        const scannerModal = document.getElementById('scanner-modal');
         const openScanner = () => {
-            scannerModal?.classList.remove('hidden');
-            if (!this.html5QrCode && window.Html5Qrcode) {
-                this.html5QrCode = new window.Html5Qrcode("reader");
-            }
-            if (this.html5QrCode) {
-                this.html5QrCode.start(
-                    { facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
-                    (decodedText) => {
-                        this.html5QrCode.stop().catch(e=>{});
-                        scannerModal?.classList.add('hidden');
-                        const searchInput = document.getElementById('searchInput');
-                        if(searchInput) searchInput.value = decodedText;
-                        this.fetchAndRenderSku(decodedText);
-                    },
-                    (errorMessage) => { }
-                ).catch(err => {
-                    alert("Erro ao iniciar a câmera.");
-                    scannerModal?.classList.add('hidden');
-                });
-            }
+            this.scanner.start();
         };
 
-        document.getElementById('btn-module-scan')?.addEventListener('click', openScanner);
-        document.getElementById('nav-scan')?.addEventListener('click', openScanner);
-        document.getElementById('close-scanner-btn')?.addEventListener('click', () => {
-            if (this.html5QrCode) this.html5QrCode.stop().catch(e => {});
-            scannerModal?.classList.add('hidden');
-        });
+        document.getElementById('btn-module-scan')?.addEventListener(
+            'click',
+            openScanner
+        );
+
+        document.getElementById('nav-scan')?.addEventListener(
+            'click',
+            openScanner
+        );
     }
 
     async checkGlobalFefoAlerts() {
