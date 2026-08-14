@@ -119,6 +119,28 @@ def adjustment_stock():
 
 
 
+
+@app.route('/api/product/suggestions', methods=['GET'])
+def suggest_products():
+    query = request.args.get('q', '').strip()
+
+    if not query:
+        return jsonify([]), 200
+
+    products = container.product_suggestion_use_case.execute(
+        query=query
+    )
+
+    return jsonify([
+        {
+            'id': product.id,
+            'name': product.name,
+            'ean': product.ean,
+        }
+        for product in products
+    ]), 200
+
+
 @app.route('/api/product/query', methods=['GET'])
 def query_product():
     identifier = request.args.get('identifier', '').strip()
