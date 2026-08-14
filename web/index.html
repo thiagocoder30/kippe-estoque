@@ -151,10 +151,29 @@ if ('serviceWorker' in navigator) {
                     <label class="text-[10px] font-bold text-gray-500">EAN / SKU</label>
                     <input type="text" id="rec-ean" class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1">
                 </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500">LOTE</label>
+                        <input type="text" id="rec-batch" class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1">
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500">VALIDADE</label>
+                        <input type="date" id="rec-expiration" class="w-full border rounded p-2 text-sm font-bold mt-1">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-gray-500">FORNECEDOR</label>
+                    <input type="text" id="rec-supplier" class="w-full border rounded p-2 text-sm font-bold uppercase mt-1" placeholder="FORNECEDOR">
+                </div>
+
                 <div>
                     <label class="text-[10px] font-bold text-gray-500">QUANTIDADE (+)</label>
-                    <input type="number" id="rec-qty" class="w-full border rounded p-2 text-xl font-black text-kippe-blue mt-1 text-center" placeholder="0">
+                    <input type="number" id="rec-qty" min="1" class="w-full border rounded p-2 text-xl font-black text-kippe-blue mt-1 text-center" placeholder="0">
                 </div>
+
                 <button id="submit-receive" class="w-full bg-green-600 text-white font-black p-3 rounded-lg mt-2 active:scale-95 shadow-md">CONFIRMAR ENTRADA</button>
             </div>
         </div>

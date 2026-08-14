@@ -102,21 +102,63 @@ class KippeApplication {
         });
 
         const submitReceive = document.getElementById('submit-receive');
+
         if (submitReceive) {
             submitReceive.addEventListener('click', async () => {
-                const sku = document.getElementById('rec-ean')?.value.trim();
-                const qty = parseInt(document.getElementById('rec-qty')?.value.trim(), 10);
-                if (!sku || isNaN(qty) || qty <= 0) return alert('Verifique o SKU e a Quantidade.');
-                
+                const sku =
+                    document.getElementById('rec-ean')?.value.trim();
+
+                const quantity = parseInt(
+                    document.getElementById('rec-qty')?.value.trim(),
+                    10
+                );
+
+                const batchCode =
+                    document.getElementById('rec-batch')?.value.trim();
+
+                const expirationDate =
+                    document.getElementById('rec-expiration')?.value;
+
+                const supplier =
+                    document.getElementById('rec-supplier')?.value.trim();
+
+                if (
+                    !sku ||
+                    !batchCode ||
+                    !expirationDate ||
+                    !supplier ||
+                    Number.isNaN(quantity) ||
+                    quantity <= 0
+                ) {
+                    alert(
+                        'Preencha EAN/SKU, lote, validade, ' +
+                        'fornecedor e quantidade.'
+                    );
+                    return;
+                }
+
                 document.getElementById('loader')?.classList.remove('hidden');
+
                 try {
-                    await this.api.registerReceive({ id: sku, barcode: sku, amount: qty, operator: "ADMIN", batch_code: "LOTE-" + new Date().getTime().toString().slice(-5), expiration_date: "2027-12-31" });
+                    await this.api.registerReceive({
+                        sku: sku,
+                        quantity: quantity,
+                        batch_code: batchCode,
+                        expiration_date: expirationDate,
+                        supplier: supplier,
+                    });
+
                     document.getElementById('loader')?.classList.add('hidden');
                     modalReceive?.classList.add('hidden');
+
                     this.fetchAndRenderSku(sku);
                 } catch (error) {
                     document.getElementById('loader')?.classList.add('hidden');
-                    alert('Erro: ' + (error.message || 'Falha no banco.'));
+
+                    alert(
+                        'Erro: ' +
+                        (error.message || 'Falha no recebimento.')
+                    );
                 }
             });
         }
