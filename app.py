@@ -118,6 +118,33 @@ def adjustment_stock():
 
 
 
+
+@app.route('/api/product/query', methods=['GET'])
+def query_product():
+    identifier = request.args.get('identifier', '').strip()
+
+    if not identifier:
+        return jsonify({
+            'error': 'Identificador obrigatório.'
+        }), 400
+
+    res = container.product_query_use_case.execute(
+        identifier=identifier
+    )
+
+    if res.is_success:
+        return jsonify(res.value), 200
+
+    if res.error == 'PRODUTO_NAO_CADASTRADO':
+        return jsonify({
+            'error': res.error
+        }), 404
+
+    return jsonify({
+        'error': res.error
+    }), 400
+
+
 @app.route('/api/putaway', methods=['POST'])
 def putaway_stock():
     if not _has_valid_session():
