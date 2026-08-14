@@ -86,3 +86,28 @@ def test_product_query_gateway_returns_operational_view(client):
     assert batch["expiration_date"] == "2035-12-31"
     assert batch["expiration_status"] == "NORMAL"
     assert batch["days_remaining"] > 0
+
+
+def test_product_query_gateway_requires_identifier(client):
+
+    response = client.get(
+        "/api/product/query"
+    )
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert response.json["error"] == "Identificador obrigatório."
+
+
+def test_product_query_gateway_returns_not_found_for_unknown_product(client):
+
+    response = client.get(
+        "/api/product/query",
+        query_string={
+            "identifier": "SKU-INEXISTENTE"
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.is_json
+    assert response.json["error"] == "PRODUTO_NAO_CADASTRADO"

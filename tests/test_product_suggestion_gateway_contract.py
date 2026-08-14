@@ -87,3 +87,17 @@ def test_product_suggestion_gateway_returns_matching_products(client):
 
     assert "quantity" not in data[0]
     assert "batches" not in data[0]
+
+
+def test_product_suggestion_gateway_returns_empty_for_blank_query(client):
+
+    response = client.get(
+        "/api/product/suggestions",
+        query_string={
+            "q": "   "
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert response.json == []
