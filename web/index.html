@@ -313,33 +313,22 @@ if ('serviceWorker' in navigator) {
             </div>
             <div class="p-6 space-y-4">
                 <button id="btn-inbound-traditional" class="w-full bg-white border-2 border-[#124191] text-[#124191] font-black py-4 rounded-xl shadow-sm active:scale-95 flex justify-center gap-2">SCANNER / MANUAL</button>
-                <button id="btn-inbound-ai" class="w-full bg-[#124191] text-white font-black py-4 rounded-xl shadow-md active:scale-95 flex justify-center gap-2">LER NF POR FOTO (IA)</button>
-                <input type="file" id="ia-photo-input" accept="image/*" capture="environment" class="hidden">
+
+                <button
+                    id="btn-inbound-ai"
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    class="w-full bg-gray-200 text-gray-500 font-black py-4 rounded-xl cursor-not-allowed flex flex-col items-center justify-center gap-1"
+                >
+                    <span>LER NF POR FOTO (IA)</span>
+                    <span class="text-[9px] tracking-widest">
+                        EM DESENVOLVIMENTO
+                    </span>
+                </button>
             </div>
         </div>
     </div>
-
-    <!-- RESULTADO DA IA -->
-    <div id="smart-receipt-modal" class="hidden fixed inset-0 z-[200] bg-black/90 flex flex-col justify-end p-0 sm:p-4 uppercase">
-        <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-lg mx-auto flex flex-col h-[85vh] sm:h-[75vh] overflow-hidden shadow-2xl">
-            <div class="bg-[#124191] p-4 flex justify-between items-center text-white">
-                <h3 class="font-black text-sm">CONFERÊNCIA IA</h3>
-                <button id="close-smart-modal" class="text-blue-200 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-            </div>
-            <div class="p-4 bg-gray-50 border-b border-gray-200">
-                <p class="text-[9px] text-gray-500 font-bold">FORNECEDOR IDENTIFICADO</p>
-                <p id="ia-supplier-name" class="font-black text-lg text-[#124191]">DISTRIBUIDORA KIPPE</p>
-                <p class="text-[10px] text-gray-600 font-mono mt-1">NF: <span id="ia-invoice-id" class="font-bold">004.992.831</span></p>
-            </div>
-            <div class="flex-1 overflow-y-auto p-4 bg-gray-100">
-                <div id="ia-items-list" class="space-y-3"></div>
-            </div>
-            <div class="p-4 bg-white border-t border-gray-200">
-                <button id="btn-confirm-ai-batch" class="w-full bg-green-600 text-white font-black p-3 rounded-lg shadow-md active:scale-95">CONFIRMAR LOTE (120 UN)</button>
-            </div>
-        </div>
-    </div>
-
 
     <!-- MODAL ARMAZENAR (PUTAWAY) -->
     <div id="putaway-modal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">

@@ -192,7 +192,6 @@ class KippeApplication {
 
         document.getElementById('btn-module-inbound')?.addEventListener('click', () => methodModal?.classList.remove('hidden'));
         document.getElementById('close-inbound-method')?.addEventListener('click', () => methodModal?.classList.add('hidden'));
-        document.getElementById('close-smart-modal')?.addEventListener('click', () => document.getElementById('smart-receipt-modal')?.classList.add('hidden'));
         document.getElementById('close-receive-modal')?.addEventListener('click', () => modalReceive?.classList.add('hidden'));
 
         document.getElementById('btn-inbound-traditional')?.addEventListener('click', () => {
@@ -205,36 +204,13 @@ class KippeApplication {
             modalReceive?.classList.remove('hidden');
         });
 
-        // IA OCR Lógica
-        const btnAi = document.getElementById('btn-inbound-ai');
-        const photoInput = document.getElementById('ia-photo-input');
-        if (btnAi && photoInput) {
-            btnAi.addEventListener('click', () => photoInput.click());
-            photoInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    methodModal?.classList.add('hidden');
-                    document.getElementById('loader')?.classList.remove('hidden');
-                    setTimeout(() => {
-                        document.getElementById('loader')?.classList.add('hidden');
-                        document.getElementById('smart-receipt-modal')?.classList.remove('hidden');
-                    }, 1800);
-                }
-            });
-        }
-
-        document.getElementById('btn-confirm-ai-batch')?.addEventListener('click', async () => {
-            const sku = "7891242151567"; const qty = 120;
-            document.getElementById('loader')?.classList.remove('hidden');
-            try {
-                await this.api.registerReceive({ id: sku, barcode: sku, amount: qty, operator: "ADMIN (IA)", batch_code: "NF-004992831", expiration_date: "2027-12-31", supplier: "DISTRIBUIDORA KIPPE" });
-                document.getElementById('loader')?.classList.add('hidden');
-                document.getElementById('smart-receipt-modal')?.classList.add('hidden');
-                this.fetchAndRenderSku(sku);
-            } catch (error) {
-                document.getElementById('loader')?.classList.add('hidden');
-                alert('Erro na IA: ' + (error.message || 'Falha de comunicação.'));
-            }
-        });
+        /*
+         * Entrada por NF/IA reservada para implementação futura.
+         *
+         * Não existe extrator OCR canônico conectado ao backend.
+         * O botão permanece desabilitado no HTML para impedir
+         * movimentações fictícias de estoque.
+         */
 
         const submitReceive = document.getElementById('submit-receive');
 
