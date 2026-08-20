@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, session, send_from_directory
 from src.infrastructure.container import Container
+from src.domain.services.expiration_analyzer import ExpirationAnalyzer
 
 container = Container()
 app = Flask(__name__)
@@ -182,6 +183,46 @@ def query_product():
     return jsonify({
         'error': res.error
     }), 400
+
+
+@app.route('/api/relatorios/vencimentos', methods=['GET'])
+def expiration_report():
+    report = []
+
+    products = container.product_repository.get_all()
+
+    for product in products:
+        for batch in product.batches.values():
+            analysis = ExpirationAnalyzer.analyze(
+                batch.expiration_date
+            )
+
+            if not analysis.is_success:
+                continue
+
+            expiration = analysis.value
+
+            report.append({
+                'sku': product.id,
+                'ean': product.ean,
+                'name': product.name,
+                'batch': batch.code,
+                'expiration': batch.expiration_date,
+                'days_remaining': expiration['days_remaining'],
+                'status': expiration['status'],
+                'quantity': batch.quantity,
+                'location_id': batch.location_id,
+            })
+
+    report.sort(
+        key=lambda item: (
+            item['expiration'],
+            item['sku'],
+            item['batch'],
+        )
+    )
+
+    return jsonify(report), 200
 
 
 @app.route('/api/putaway', methods=['POST'])

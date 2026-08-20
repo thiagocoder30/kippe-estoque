@@ -107,6 +107,13 @@ export class APIClient {
     }
 
     /**
+     * Relatório canônico de validade por lote.
+     */
+    async getExpirationReport() {
+        return this._request('/api/relatorios/vencimentos');
+    }
+
+    /**
      * Ajuste canônico.
      */
     async registerAdjustment(payload) {

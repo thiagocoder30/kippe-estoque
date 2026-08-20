@@ -390,43 +390,86 @@ class KippeApplication {
     }
 
     bindReportsModule() {
-        const btnReports = document.getElementById('btn-module-reports');
-        if(btnReports) {
+        const btnReports =
+            document.getElementById('btn-module-reports');
+
+        if (btnReports) {
             btnReports.addEventListener('click', async () => {
                 document.getElementById('loader')?.classList.remove('hidden');
+
                 try {
-                    const res = await fetch('/api/relatorios/vencimentos?_t=' + Date.now(), { method: 'GET', headers: {'Cache-Control': 'no-cache, no-store, must-revalidate'}, cache: 'no-store' });
-                    let data = [];
-                    if (res.ok) {
-                        data = await res.json();
-                    } else {
-                        data = [{sku: "HTTP " + res.status, name: "ERRO 500: SERVIDOR PYTHON CAIU", expiration: "FALHA DE COMUNICAÇÃO INTERNA", batch: "CRASH FRONTEND"}];
-                    }
-                    
+                    const data =
+                        await this.api.getExpirationReport();
+
                     document.getElementById('loader')?.classList.add('hidden');
-                    document.getElementById('home-module-view')?.classList.add('hidden');
-                    document.getElementById('dashboard-view')?.classList.add('hidden');
-                    document.getElementById('reports-view')?.classList.remove('hidden');
-                    
-                    const list = document.getElementById('fefo-list');
-                    if(list) {
-                        if(data.length === 0) {
-                            list.innerHTML = `<div class="p-4 bg-green-50 text-green-700 rounded-lg text-center font-bold text-[11px] uppercase border border-green-100">NENHUM PRODUTO PRÓXIMO AO VENCIMENTO! OPERAÇÃO SEGURA.</div>`;
-                        } else {
-                            list.innerHTML = data.map(item => `
-                                <div class="p-3 bg-red-50 border-l-4 border-l-kippe-red rounded-lg shadow-sm flex justify-between items-center">
-                                    <div>
-                                        <p class="text-[11px] font-black text-gray-800 uppercase">${item.name || item.sku || 'PRODUTO'}</p>
-                                        <p class="text-[9px] text-red-600 font-bold uppercase mt-0.5">VENCE EM: ${item.expiration || 'CRÍTICO'}</p>
-                                    </div>
-                                    <span class="bg-white border border-red-200 text-kippe-red font-black text-[10px] px-2 py-1 rounded">LOTE: ${item.batch || 'ND'}</span>
-                                </div>
-                            `).join('');
-                        }
+
+                    document.getElementById(
+                        'home-module-view'
+                    )?.classList.add('hidden');
+
+                    document.getElementById(
+                        'dashboard-view'
+                    )?.classList.add('hidden');
+
+                    document.getElementById(
+                        'reports-view'
+                    )?.classList.remove('hidden');
+
+                    const list =
+                        document.getElementById('fefo-list');
+
+                    if (!list) {
+                        return;
                     }
-                } catch(e) {
+
+                    if (data.length === 0) {
+                        list.innerHTML = `
+                            <div class="p-4 bg-green-50 text-green-700 rounded-lg text-center font-bold text-[11px] uppercase border border-green-100">
+                                NENHUM LOTE ENCONTRADO.
+                            </div>
+                        `;
+
+                        return;
+                    }
+
+                    list.innerHTML = data.map(item => `
+                        <div class="p-3 bg-white border rounded-lg shadow-sm flex justify-between items-center">
+                            <div>
+                                <p class="text-[11px] font-black text-gray-800 uppercase">
+                                    ${item.name || item.sku || 'PRODUTO'}
+                                </p>
+
+                                <p class="text-[9px] text-gray-500 font-bold uppercase mt-0.5">
+                                    VALIDADE: ${item.expiration || 'N/A'}
+                                </p>
+
+                                <p class="text-[9px] text-gray-500 font-bold uppercase mt-0.5">
+                                    STATUS: ${item.status || 'N/A'}
+                                </p>
+
+                                <p class="text-[9px] text-gray-500 font-bold uppercase mt-0.5">
+                                    LOCAL: ${item.location_id || 'NÃO ENDEREÇADO'}
+                                </p>
+                            </div>
+
+                            <div class="text-right">
+                                <span class="block bg-gray-50 border text-gray-700 font-black text-[10px] px-2 py-1 rounded">
+                                    LOTE: ${item.batch || 'N/A'}
+                                </span>
+
+                                <span class="block mt-1 text-[10px] font-black text-[#124191]">
+                                    ${item.quantity ?? 0} UN
+                                </span>
+                            </div>
+                        </div>
+                    `).join('');
+                } catch (error) {
                     document.getElementById('loader')?.classList.add('hidden');
-                    alert("Erro ao gerar relatório FEFO.");
+
+                    alert(
+                        'Erro ao carregar relatório de validade: ' +
+                        (error.message || 'Falha de comunicação.')
+                    );
                 }
             });
         }
@@ -450,18 +493,30 @@ class KippeApplication {
 
     async checkGlobalFefoAlerts() {
         try {
-            const res = await fetch('/api/relatorios/vencimentos?_t=' + Date.now(), { method: 'GET', headers: {'Cache-Control': 'no-cache, no-store, must-revalidate'}, cache: 'no-store' });
-            if (res.ok) {
-                const data = await res.json();
-                if (data && data.length > 0) {
-                    const badge = document.getElementById('global-fefo-badge');
-                    if (badge) {
-                        badge.textContent = data.length;
-                        badge.classList.remove('hidden');
-                    }
+            const data =
+                await this.api.getExpirationReport();
+
+            const critical = data.filter(item =>
+                item.status === 'VENCIDO' ||
+                item.status === 'CRITICO' ||
+                item.status === 'ATENCAO'
+            );
+
+            if (critical.length > 0) {
+                const badge =
+                    document.getElementById('global-fefo-badge');
+
+                if (badge) {
+                    badge.textContent = critical.length;
+                    badge.classList.remove('hidden');
                 }
             }
-        } catch(e) {}
+        } catch (error) {
+            console.warn(
+                '[FEFO ALERTS] Não foi possível carregar alertas.',
+                error
+            );
+        }
     }
 
     async fetchAndRenderSku(identifier) {
