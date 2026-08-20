@@ -313,49 +313,102 @@ class KippeApplication {
     }
 
     bindPutawayModule() {
-        const modalPutaway = document.getElementById('putaway-modal');
-        const btnPutaway = document.getElementById('btn-module-putaway');
+        const modalPutaway =
+            document.getElementById('putaway-modal');
 
-        if(btnPutaway) {
+        const btnPutaway =
+            document.getElementById('btn-module-putaway');
+
+        if (btnPutaway) {
             btnPutaway.addEventListener('click', () => {
-                const searchInput = document.getElementById('searchInput');
-                const putEan = document.getElementById('put-ean');
-                if(putEan) putEan.value = searchInput ? searchInput.value.trim() : '';
-                
-                const putLoc = document.getElementById('put-location');
-                if(putLoc) putLoc.value = ''; // Reseta Topologia
-                
-                const putQty = document.getElementById('put-qty');
-                if(putQty) putQty.value = '';
-                
+                const searchInput =
+                    document.getElementById('searchInput');
+
+                const putEan =
+                    document.getElementById('put-ean');
+
+                const putBatch =
+                    document.getElementById('put-batch');
+
+                const putLocation =
+                    document.getElementById('put-location');
+
+                if (putEan) {
+                    putEan.value =
+                        searchInput
+                            ? searchInput.value.trim()
+                            : '';
+                }
+
+                if (putBatch) {
+                    putBatch.value = '';
+                }
+
+                if (putLocation) {
+                    putLocation.value = '';
+                }
+
                 modalPutaway?.classList.remove('hidden');
             });
         }
 
-        document.getElementById('close-putaway-modal')?.addEventListener('click', () => modalPutaway?.classList.add('hidden'));
+        document.getElementById(
+            'close-putaway-modal'
+        )?.addEventListener('click', () => {
+            modalPutaway?.classList.add('hidden');
+        });
 
-        document.getElementById('submit-putaway')?.addEventListener('click', async () => {
-            const sku = document.getElementById('put-ean')?.value.trim();
-            const loc = document.getElementById('put-location')?.value.trim();
-            const qty = parseInt(document.getElementById('put-qty')?.value.trim(), 10);
-            
-            if (!sku || !loc || isNaN(qty) || qty <= 0) return alert('Preencha SKU, Topologia e Quantidade válidos.');
-            
+        document.getElementById(
+            'submit-putaway'
+        )?.addEventListener('click', async () => {
+            const sku =
+                document.getElementById('put-ean')?.value.trim();
+
+            const batchCode =
+                document.getElementById('put-batch')?.value.trim();
+
+            const locationId =
+                document.getElementById('put-location')?.value.trim();
+
+            if (
+                !sku ||
+                !batchCode ||
+                !locationId
+            ) {
+                alert(
+                    'Preencha EAN/SKU, lote e localização.'
+                );
+                return;
+            }
+
             document.getElementById('loader')?.classList.remove('hidden');
-            try {
-                if(this.api.registerTransfer) {
-                    await this.api.registerTransfer({ id: sku, location: loc, amount: qty, operator: "ADMIN" }).catch(e => console.warn("Modo Off: Transfer Mock"));
-                }
-                document.getElementById('loader')?.classList.add('hidden');
-                modalPutaway?.classList.add('hidden');
-                alert(`✅ PRODUTO ENDEREÇADO!
 
-${qty} UN do Produto ${sku} foram alocadas na posição:
-${loc}`);
+            try {
+                await this.api.registerPutaway({
+                    sku: sku,
+                    batch_code: batchCode,
+                    location_id: locationId,
+                });
+
+                document.getElementById('loader')?.classList.add('hidden');
+
+                modalPutaway?.classList.add('hidden');
+
+                alert(
+                    '✅ LOTE ENDEREÇADO.\n\n' +
+                    `Produto: ${sku}\n` +
+                    `Lote: ${batchCode}\n` +
+                    `Local: ${locationId}`
+                );
+
                 this.fetchAndRenderSku(sku);
             } catch (error) {
                 document.getElementById('loader')?.classList.add('hidden');
-                alert('Erro ao armazenar.');
+
+                alert(
+                    'Erro ao armazenar: ' +
+                    (error.message || 'Falha no Putaway.')
+                );
             }
         });
     }
