@@ -116,30 +116,4 @@ export class APIClient {
         });
     }
 
-    /**
-     * Transferência permanece disponível enquanto os demais
-     * fluxos legados forem reconciliados.
-     */
-    async registerTransfer(payload) {
-        return this._request('/api/transfer', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        });
-    }
-
-    /*
-     * Compatibility aliases.
-     *
-     * app.js ainda usa esses nomes. Eles serão removidos quando
-     * migrarmos a camada de aplicação frontend para os contratos
-     * canônicos acima.
-     */
-
-    async getSku(identifier) {
-        return this.queryProduct(identifier);
-    }
-
-    async searchCatalog(query) {
-        return this.suggestProducts(query);
-    }
 }
