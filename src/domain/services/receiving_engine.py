@@ -12,11 +12,12 @@ class ReceivingEngine:
         batch_code: str,
         expiration_date: str,
         supplier: str = "PADRAO",
+        manufacturing_date: str = "",
     ) -> Result[dict, str]:
 
         matches = ProductSearchEngine.search(
             products,
-            identifier
+            identifier,
         )
 
         if not matches:
@@ -30,6 +31,7 @@ class ReceivingEngine:
             amount=quantity,
             expiration_date=expiration_date,
             batch_code=batch_code,
+            manufacturing_date=manufacturing_date,
             supplier=supplier,
         )
 
@@ -40,4 +42,8 @@ class ReceivingEngine:
             "status": "RECEIVED",
             "product_id": product.id,
             "batch_code": batch_code,
+            "quantity": quantity,
+            "supplier": supplier,
+            "manufacturing_date": manufacturing_date,
+            "expiration_date": expiration_date,
         })

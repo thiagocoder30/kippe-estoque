@@ -262,17 +262,50 @@ def receive_stock():
     product_id = data.get('sku') or data.get('id')
     amount = data.get('quantity') or data.get('amount')
 
+    manufacturing_date = data.get(
+        'manufacturing_date',
+        ''
+    )
+
+    invoice_id = data.get(
+        'invoice_id',
+        ''
+    )
+
+    origin_document = data.get(
+        'origin_document',
+        'MANUAL'
+    )
+
     res = container.receive_use_case.execute(
         identifier=product_id,
         quantity=amount,
         batch_code=data.get('batch_code', ''),
         expiration_date=data.get('expiration_date', ''),
-        supplier=data.get('supplier', 'PADRAO')
+        supplier=data.get('supplier', 'PADRAO'),
+        manufacturing_date=manufacturing_date,
     )
 
     if res.is_success:
+        received = res.value
+
         return jsonify({
-            'message': 'Entrada registrada.'
+            'message': 'Entrada registrada.',
+            'receiving': {
+                'sku': received['product_id'],
+                'batch_code': received['batch_code'],
+                'quantity': received['quantity'],
+                'supplier': received['supplier'],
+                'manufacturing_date': received[
+                    'manufacturing_date'
+                ],
+                'expiration_date': received[
+                    'expiration_date'
+                ],
+                'invoice_id': invoice_id,
+                'origin_document': origin_document,
+                'putaway_status': 'PENDENTE',
+            }
         }), 200
 
     return jsonify({

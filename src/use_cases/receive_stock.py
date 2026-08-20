@@ -14,6 +14,7 @@ class ReceivingUseCase:
         batch_code: str,
         expiration_date: str,
         supplier: str = "PADRAO",
+        manufacturing_date: str = "",
     ) -> Result[dict, str]:
 
         products = self.repository.get_all()
@@ -25,6 +26,7 @@ class ReceivingUseCase:
             batch_code=batch_code,
             expiration_date=expiration_date,
             supplier=supplier,
+            manufacturing_date=manufacturing_date,
         )
 
         if not result.is_success:
