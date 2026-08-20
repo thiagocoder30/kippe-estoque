@@ -34,7 +34,8 @@ class SQLiteProductRepository:
             ''')
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS products (
-                    id TEXT PRIMARY KEY, name TEXT NOT NULL, quantity INTEGER NOT NULL,
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL, ean TEXT NOT NULL DEFAULT '',
+                    quantity INTEGER NOT NULL,
                     unit_of_measure TEXT NOT NULL DEFAULT 'un', status TEXT NOT NULL DEFAULT 'ATIVO',
                     category_id TEXT, reserved_quantity INTEGER NOT NULL DEFAULT 0,
                     allow_negative_stock INTEGER NOT NULL DEFAULT 0,
@@ -64,8 +65,17 @@ class SQLiteProductRepository:
             
             # Migrações retroativas
             cursor = conn.execute("PRAGMA table_info(products)")
-            if 'allow_negative_stock' not in [info['name'] for info in cursor.fetchall()]:
-                conn.execute("ALTER TABLE products ADD COLUMN allow_negative_stock INTEGER NOT NULL DEFAULT 0")
+            product_columns = [info['name'] for info in cursor.fetchall()]
+
+            if 'ean' not in product_columns:
+                conn.execute(
+                    "ALTER TABLE products ADD COLUMN ean TEXT NOT NULL DEFAULT ''"
+                )
+
+            if 'allow_negative_stock' not in product_columns:
+                conn.execute(
+                    "ALTER TABLE products ADD COLUMN allow_negative_stock INTEGER NOT NULL DEFAULT 0"
+                )
             cursor = conn.execute("PRAGMA table_info(batches)")
             if 'cost_per_unit' not in [info['name'] for info in cursor.fetchall()]:
                 conn.execute("ALTER TABLE batches ADD COLUMN cost_per_unit REAL NOT NULL DEFAULT 0.0")
@@ -91,10 +101,38 @@ class SQLiteProductRepository:
     def save(self, product: Product) -> None:
         with self._get_connection() as conn:
             conn.execute('''
-                INSERT INTO products (id, name, quantity, unit_of_measure, status, category_id, reserved_quantity, allow_negative_stock) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET name=excluded.name, quantity=excluded.quantity, unit_of_measure=excluded.unit_of_measure, status=excluded.status, category_id=excluded.category_id, reserved_quantity=excluded.reserved_quantity, allow_negative_stock=excluded.allow_negative_stock
-            ''', (product.id, product.name, product.quantity, product.unit_of_measure, product.status, product.category_id, product.reserved_quantity, int(product.allow_negative_stock)))
+                INSERT INTO products (
+                    id,
+                    name,
+                    ean,
+                    quantity,
+                    unit_of_measure,
+                    status,
+                    category_id,
+                    reserved_quantity,
+                    allow_negative_stock
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    ean=excluded.ean,
+                    quantity=excluded.quantity,
+                    unit_of_measure=excluded.unit_of_measure,
+                    status=excluded.status,
+                    category_id=excluded.category_id,
+                    reserved_quantity=excluded.reserved_quantity,
+                    allow_negative_stock=excluded.allow_negative_stock
+            ''', (
+                product.id,
+                product.name,
+                product.ean,
+                product.quantity,
+                product.unit_of_measure,
+                product.status,
+                product.category_id,
+                product.reserved_quantity,
+                int(product.allow_negative_stock),
+            ))
             
             conn.execute('DELETE FROM batches WHERE product_id = ?', (product.id,))
             for batch_code, batch in product.batches.items():
@@ -120,10 +158,17 @@ class SQLiteProductRepository:
                     cost_per_unit=float(r_dict.get('cost_per_unit', 0.0))
                 )
             product = Product(
-                id=prod_row['id'], name=prod_row['name'], quantity=prod_row['quantity'], 
-                batches=batches_dict, unit_of_measure=prod_row['unit_of_measure'], 
-                status=prod_row['status'], category_id=prod_row['category_id'],
-                allow_negative_stock=bool(dict(prod_row).get('allow_negative_stock', 0))
+                id=prod_row['id'],
+                name=prod_row['name'],
+                ean=dict(prod_row).get('ean', ''),
+                quantity=prod_row['quantity'],
+                batches=batches_dict,
+                unit_of_measure=prod_row['unit_of_measure'],
+                status=prod_row['status'],
+                category_id=prod_row['category_id'],
+                allow_negative_stock=bool(
+                    dict(prod_row).get('allow_negative_stock', 0)
+                ),
             )
             product.reserved_quantity = prod_row['reserved_quantity']
             return product
@@ -144,10 +189,17 @@ class SQLiteProductRepository:
                         cost_per_unit=float(b_dict.get('cost_per_unit', 0.0))
                     )
                 product = Product(
-                    id=row['id'], name=row['name'], quantity=row['quantity'], 
-                    batches=batches_dict, unit_of_measure=row['unit_of_measure'], 
-                    status=row['status'], category_id=row['category_id'],
-                    allow_negative_stock=bool(dict(row).get('allow_negative_stock', 0))
+                    id=row['id'],
+                    name=row['name'],
+                    ean=dict(row).get('ean', ''),
+                    quantity=row['quantity'],
+                    batches=batches_dict,
+                    unit_of_measure=row['unit_of_measure'],
+                    status=row['status'],
+                    category_id=row['category_id'],
+                    allow_negative_stock=bool(
+                        dict(row).get('allow_negative_stock', 0)
+                    ),
                 )
                 product.reserved_quantity = row['reserved_quantity']
                 products.append(product)

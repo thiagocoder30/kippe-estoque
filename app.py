@@ -81,10 +81,27 @@ def get_picking_info(sku):
 # ========================================================
 @app.route('/api/produto', methods=['POST'])
 def create_produto():
-    if not _has_valid_session(): return jsonify({'error': 'Operador não autenticado.'}), 401
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
     data = request.json or {}
-    res = container.use_case.create_product(data.get('id'), data.get('name'), data.get('unit_of_measure', 'un'), data.get('status', 'ATIVO'), data.get('category_id'))
-    return (jsonify({'message': 'OK'}), 201) if res.is_success else (jsonify({'error': res.error}), 400)
+
+    res = container.use_case.create_product(
+        product_id=data.get('id'),
+        name=data.get('name'),
+        unit_of_measure=data.get('unit_of_measure', 'un'),
+        status=data.get('status', 'ATIVO'),
+        category_id=data.get('category_id'),
+        ean=data.get('ean', ''),
+    )
+
+    return (
+        jsonify({'message': 'OK'}),
+        201
+    ) if res.is_success else (
+        jsonify({'error': res.error}),
+        400
+    )
 
 
 

@@ -20,7 +20,15 @@ class ManageStockUseCase:
         
     def _log_warn(self, msg: str):
         if self.logger: self.logger.warning(msg)
-    def create_product(self, product_id: str, name: str, unit_of_measure: str = "un", status: str = "ATIVO", category_id: str = None) -> Result[None, str]:
+    def create_product(
+        self,
+        product_id: str,
+        name: str,
+        unit_of_measure: str = "un",
+        status: str = "ATIVO",
+        category_id: str = None,
+        ean: str = "",
+    ) -> Result[None, str]:
         op_id = self._get_op()
         op_role = self._get_role()
         
@@ -33,7 +41,15 @@ class ManageStockUseCase:
             return Result.fail("Produto já cadastrado.")
             
         try:
-            product = Product(id=product_id, name=name, quantity=0, unit_of_measure=unit_of_measure, status=status, category_id=category_id)
+            product = Product(
+                id=product_id,
+                name=name,
+                ean=ean,
+                quantity=0,
+                unit_of_measure=unit_of_measure,
+                status=status,
+                category_id=category_id,
+            )
         except ValueError as e:
             self._log_warn(f"Validation Block: Falha de Invariante na criação do SKU [{product_id}] - {str(e)}")
             return Result.fail(str(e))
