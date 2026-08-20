@@ -70,6 +70,23 @@ export class APIClient {
     }
 
     /**
+     * Cadastro canônico de produto.
+     */
+    async createProduct(payload) {
+        return this._request('/api/produto', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    }
+
+    /**
+     * Categorias disponíveis para cadastro.
+     */
+    async getCategories() {
+        return this._request('/api/categorias');
+    }
+
+    /**
      * Recebimento canônico.
      */
     async registerReceive(payload) {

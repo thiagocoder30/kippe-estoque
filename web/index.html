@@ -139,6 +139,99 @@ if ('serviceWorker' in navigator) {
     
     </main>
 
+    <!-- MODAL CADASTRO DE NOVO PRODUTO -->
+    <div id="new-product-modal" class="hidden fixed inset-0 z-[180] bg-black/80 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="bg-[#124191] p-4 flex justify-between items-center text-white">
+                <div>
+                    <h3 class="font-black text-sm">NOVO PRODUTO</h3>
+                    <p class="text-[9px] text-blue-200 font-bold mt-1">
+                        EAN NÃO ENCONTRADO NO CATÁLOGO
+                    </p>
+                </div>
+
+                <button id="close-new-product-modal" class="text-blue-200 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-3">
+                <div>
+                    <label class="text-[10px] font-bold text-gray-500">
+                        EAN
+                    </label>
+                    <input
+                        type="text"
+                        id="new-product-ean"
+                        readonly
+                        class="w-full border rounded p-2 text-sm font-mono font-bold bg-gray-100 mt-1"
+                    >
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-gray-500">
+                        SKU INTERNO
+                    </label>
+                    <input
+                        type="text"
+                        id="new-product-sku"
+                        class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1"
+                        placeholder="EX: SKU-001"
+                    >
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-gray-500">
+                        DESCRIÇÃO
+                    </label>
+                    <input
+                        type="text"
+                        id="new-product-name"
+                        class="w-full border rounded p-2 text-sm font-bold uppercase mt-1"
+                        placeholder="NOME DO PRODUTO"
+                    >
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500">
+                            CATEGORIA
+                        </label>
+                        <select
+                            id="new-product-category"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                        >
+                            <option value="">SEM CATEGORIA</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500">
+                            UNIDADE
+                        </label>
+                        <select
+                            id="new-product-unit"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                        >
+                            <option value="un">UN</option>
+                            <option value="kg">KG</option>
+                            <option value="lt">LT</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button
+                    id="submit-new-product"
+                    class="w-full bg-green-600 text-white font-black p-3 rounded-lg mt-2 active:scale-95 shadow-md"
+                >
+                    CADASTRAR PRODUTO
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL RECEBIMENTO -->
     <div id="receive-modal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">

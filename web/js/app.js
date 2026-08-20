@@ -51,9 +51,144 @@ class KippeApplication {
         document.getElementById('nav-home')?.addEventListener('click', showHome);
     }
 
+    async openNewProductRegistration(ean) {
+        const modal =
+            document.getElementById('new-product-modal');
+
+        const eanInput =
+            document.getElementById('new-product-ean');
+
+        const skuInput =
+            document.getElementById('new-product-sku');
+
+        const nameInput =
+            document.getElementById('new-product-name');
+
+        const unitInput =
+            document.getElementById('new-product-unit');
+
+        const categoryInput =
+            document.getElementById('new-product-category');
+
+        if (eanInput) {
+            eanInput.value = ean;
+        }
+
+        if (skuInput) {
+            skuInput.value = '';
+        }
+
+        if (nameInput) {
+            nameInput.value = '';
+        }
+
+        if (unitInput) {
+            unitInput.value = 'un';
+        }
+
+        if (categoryInput) {
+            categoryInput.innerHTML =
+                '<option value="">SEM CATEGORIA</option>';
+
+            try {
+                const categories =
+                    await this.api.getCategories();
+
+                categories.forEach((category) => {
+                    const option =
+                        document.createElement('option');
+
+                    option.value = category.id;
+                    option.textContent = category.name;
+
+                    categoryInput.appendChild(option);
+                });
+            } catch (error) {
+                console.warn(
+                    '[PRODUCT REGISTRATION] Falha ao carregar categorias.',
+                    error
+                );
+            }
+        }
+
+        modal?.classList.remove('hidden');
+    }
+
     bindInboundModule() {
         const methodModal = document.getElementById('inbound-method-modal');
         const modalReceive = document.getElementById('receive-modal');
+        const newProductModal =
+            document.getElementById('new-product-modal');
+
+        document.getElementById(
+            'close-new-product-modal'
+        )?.addEventListener('click', () => {
+            newProductModal?.classList.add('hidden');
+        });
+
+        document.getElementById(
+            'submit-new-product'
+        )?.addEventListener('click', async () => {
+            const ean =
+                document.getElementById('new-product-ean')?.value.trim();
+
+            const sku =
+                document.getElementById('new-product-sku')?.value.trim();
+
+            const name =
+                document.getElementById('new-product-name')?.value.trim();
+
+            const categoryId =
+                document.getElementById('new-product-category')?.value || null;
+
+            const unit =
+                document.getElementById('new-product-unit')?.value || 'un';
+
+            if (!ean || !sku || !name) {
+                alert(
+                    'Preencha EAN, SKU interno e descrição.'
+                );
+                return;
+            }
+
+            document.getElementById('loader')?.classList.remove('hidden');
+
+            try {
+                await this.api.createProduct({
+                    id: sku,
+                    name: name,
+                    ean: ean,
+                    unit_of_measure: unit,
+                    category_id: categoryId,
+                });
+
+                document.getElementById('loader')?.classList.add('hidden');
+
+                newProductModal?.classList.add('hidden');
+
+                const recEan =
+                    document.getElementById('rec-ean');
+
+                if (recEan) {
+                    recEan.value = ean;
+                }
+
+                modalReceive?.classList.remove('hidden');
+
+                alert(
+                    '✅ PRODUTO CADASTRADO.\n\n' +
+                    'Continue o recebimento informando lote, validade, ' +
+                    'fornecedor e quantidade.'
+                );
+            } catch (error) {
+                document.getElementById('loader')?.classList.add('hidden');
+
+                alert(
+                    'Erro ao cadastrar produto: ' +
+                    (error.message || 'Falha no cadastro.')
+                );
+            }
+        });
 
         document.getElementById('btn-module-inbound')?.addEventListener('click', () => methodModal?.classList.remove('hidden'));
         document.getElementById('close-inbound-method')?.addEventListener('click', () => methodModal?.classList.add('hidden'));
@@ -154,6 +289,19 @@ class KippeApplication {
                     this.fetchAndRenderSku(sku);
                 } catch (error) {
                     document.getElementById('loader')?.classList.add('hidden');
+
+                    if (
+                        error.message ===
+                        'PRODUTO_NAO_CADASTRADO'
+                    ) {
+                        modalReceive?.classList.add('hidden');
+
+                        await this.openNewProductRegistration(
+                            sku
+                        );
+
+                        return;
+                    }
 
                     alert(
                         'Erro: ' +
