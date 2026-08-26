@@ -1,6 +1,10 @@
 /**
- * Módulo de Hardware Scanner (Versão Definitiva Enterprise).
- * Resolvido o Memory Lock de Anti-Spam: a câmera agora permite bipar o mesmo EAN infinitas vezes.
+ * Módulo de Hardware Scanner.
+ *
+ * Responsabilidade:
+ * - controlar uma única instância de câmera;
+ * - oferecer leitura confiável de códigos de barras no mobile;
+ * - evitar estado residual entre aberturas do scanner.
  */
 export class ScannerManager {
     constructor(onScanSuccessCallback) {
@@ -8,55 +12,107 @@ export class ScannerManager {
         this.modal = document.getElementById('scanner-modal');
         this.closeBtn = document.getElementById('close-scanner-btn');
         this.status = "IDLE";
-        this.html5Qrcode = null; 
+        this.html5Qrcode = null;
 
         if (this.closeBtn) {
-            this.closeBtn.addEventListener('click', () => this.stop());
+            this.closeBtn.addEventListener(
+                'click',
+                () => this.stop()
+            );
         }
     }
 
     async start() {
-        if (!this.modal || this.status === "STARTING" || this.status === "SCANNING") {
+        if (
+            !this.modal ||
+            this.status === "STARTING" ||
+            this.status === "SCANNING"
+        ) {
             return;
         }
-        
+
         if (this.status === "STOPPING") {
-            setTimeout(() => this.start(), 300);
+            setTimeout(
+                () => this.start(),
+                300
+            );
             return;
         }
 
         this.status = "STARTING";
         this.modal.classList.remove('hidden');
 
-        // A MÁGICA DA AMNÉSIA: Destruímos e recriamos a instância a cada abertura
-        // Isso burla o sistema anti-spam da biblioteca, permitindo ler o mesmo SKU em sequência.
         if (this.html5Qrcode) {
-            try { await this.html5Qrcode.clear(); } catch(e) {}
+            try {
+                await this.html5Qrcode.clear();
+            } catch (error) {
+                console.warn(
+                    "[SCANNER CLEANUP]",
+                    error
+                );
+            }
         }
+
         this.html5Qrcode = new Html5Qrcode("reader");
 
-        const config = { 
-            fps: 10, 
-            qrbox: { width: 250, height: 150 },
-            formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.CODE_128 ]
+        const config = {
+            fps: 15,
+
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+                const width = Math.floor(
+                    viewfinderWidth * 0.9
+                );
+
+                const height = Math.floor(
+                    Math.min(
+                        160,
+                        viewfinderHeight * 0.45
+                    )
+                );
+
+                return {
+                    width: width,
+                    height: height,
+                };
+            },
+
+            aspectRatio: 1.777778,
         };
-        
+
         try {
             await this.html5Qrcode.start(
-                { facingMode: "environment" },
-                config,
-                (decodedText) => {
-                    if (this.status === "SCANNING") {
-                        if (navigator.vibrate) navigator.vibrate(200);
-                        this.stop(); 
-                        this.onScanSuccess(decodedText);
+                {
+                    facingMode: {
+                        exact: "environment"
                     }
                 },
-                (errorMessage) => { /* Silenciado para não poluir o console com reenquadramentos */ }
+                config,
+                (decodedText) => {
+                    if (this.status !== "SCANNING") {
+                        return;
+                    }
+
+                    if (navigator.vibrate) {
+                        navigator.vibrate(200);
+                    }
+
+                    this.stop();
+                    this.onScanSuccess(decodedText);
+                },
+                () => {
+                    /*
+                     * Erros de enquadramento/decodificação são esperados
+                     * enquanto a câmera procura um código válido.
+                     */
+                }
             );
+
             this.status = "SCANNING";
-        } catch (err) {
-            console.error("[SCANNER ERROR]", err);
+        } catch (error) {
+            console.error(
+                "[SCANNER ERROR]",
+                error
+            );
 
             if (this.modal) {
                 this.modal.classList.add('hidden');
@@ -66,7 +122,10 @@ export class ScannerManager {
                 try {
                     await this.html5Qrcode.clear();
                 } catch (clearError) {
-                    console.warn("[SCANNER CLEANUP]", clearError);
+                    console.warn(
+                        "[SCANNER CLEANUP]",
+                        clearError
+                    );
                 }
             }
 
@@ -81,24 +140,47 @@ export class ScannerManager {
     }
 
     stop() {
-        if (this.status === "IDLE" || this.status === "STOPPING") return;
-        
-        this.status = "STOPPING"; 
-        if (this.modal) this.modal.classList.add('hidden');
-        
-        if (this.html5Qrcode) {
-            this.html5Qrcode.stop().then(() => {
-                this.html5Qrcode.clear();
-                this.html5Qrcode = null; // Limpeza absoluta da memória
+        if (
+            this.status === "IDLE" ||
+            this.status === "STOPPING"
+        ) {
+            return;
+        }
+
+        this.status = "STOPPING";
+
+        if (this.modal) {
+            this.modal.classList.add('hidden');
+        }
+
+        if (!this.html5Qrcode) {
+            this.status = "IDLE";
+            return;
+        }
+
+        this.html5Qrcode
+            .stop()
+            .then(async () => {
+                try {
+                    await this.html5Qrcode.clear();
+                } catch (error) {
+                    console.warn(
+                        "[SCANNER CLEANUP]",
+                        error
+                    );
+                }
+
+                this.html5Qrcode = null;
                 this.status = "IDLE";
-            }).catch(e => {
-                console.error("Erro ao desligar a lente:", e);
+            })
+            .catch((error) => {
+                console.error(
+                    "Erro ao desligar a lente:",
+                    error
+                );
+
                 this.html5Qrcode = null;
                 this.status = "IDLE";
             });
-        } else {
-            this.status = "IDLE";
-        }
     }
 }
-

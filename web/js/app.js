@@ -5,8 +5,34 @@ class KippeApplication {
     constructor() {
         this.api = new APIClient();
 
+        this.scannerTarget = 'search';
+
         this.scanner = new ScannerManager((decodedText) => {
-            const searchInput = document.getElementById('searchInput');
+            if (this.scannerTarget === 'receive') {
+                const receiveInput =
+                    document.getElementById('rec-ean');
+
+                const receiveModal =
+                    document.getElementById('receive-modal');
+
+                if (receiveInput) {
+                    receiveInput.value = decodedText;
+                }
+
+                receiveModal?.classList.remove('hidden');
+
+                this.loadReceivingProduct(
+                    decodedText
+                );
+
+                this.updateReceivingSummary();
+
+                this.scannerTarget = 'search';
+                return;
+            }
+
+            const searchInput =
+                document.getElementById('searchInput');
 
             if (searchInput) {
                 searchInput.value = decodedText;
@@ -20,6 +46,7 @@ class KippeApplication {
         this.checkGlobalFefoAlerts();
         this.bindNavigation();
         this.bindInboundModule();
+        this.bindReceivingDetailedControls();
         this.bindPutawayModule();
         this.bindScannerModule();
         this.bindReportsModule();
@@ -114,6 +141,663 @@ class KippeApplication {
         modal?.classList.remove('hidden');
     }
 
+    async loadReceivingProduct(identifier) {
+        const value = (identifier || '').trim();
+
+        const card =
+            document.getElementById(
+                'receive-product-card'
+            );
+
+        const status =
+            document.getElementById(
+                'receive-product-status'
+            );
+
+        const descriptionInput =
+            document.getElementById(
+                'rec-product-description'
+            );
+
+        if (!value) {
+            if (card) {
+                card.classList.add('hidden');
+            }
+
+            if (status) {
+                status.textContent = 'NÃO CONSULTADO';
+                status.className =
+                    'text-[9px] font-black px-2 py-1 rounded-full bg-gray-100 text-gray-500';
+            }
+
+            if (descriptionInput) {
+                descriptionInput.value = '';
+                descriptionInput.placeholder =
+                    'AGUARDANDO IDENTIFICAÇÃO';
+            }
+
+            this.updateReceivingSummary();
+            return;
+        }
+
+        try {
+            const data =
+                await this.api.queryProduct(value);
+
+            if (card) {
+                card.classList.remove('hidden');
+            }
+
+            if (status) {
+                status.textContent = 'CADASTRADO';
+                status.className =
+                    'text-[9px] font-black px-2 py-1 rounded-full bg-green-100 text-green-700';
+            }
+
+            if (descriptionInput) {
+                descriptionInput.value =
+                    data.name;
+            }
+
+            const setText = (id, text) => {
+                const element =
+                    document.getElementById(id);
+
+                if (element) {
+                    element.textContent =
+                        text || '—';
+                }
+            };
+
+            setText(
+                'receive-product-name',
+                data.name
+            );
+
+            setText(
+                'receive-product-sku',
+                data.id || data.sku
+            );
+
+            setText(
+                'receive-product-ean',
+                data.ean
+            );
+
+            setText(
+                'receive-product-unit',
+                (
+                    data.unit_of_measure ||
+                    'un'
+                ).toUpperCase()
+            );
+
+            const unit =
+                document.getElementById(
+                    'receive-quantity-unit'
+                );
+
+            if (unit) {
+                unit.textContent =
+                    (
+                        data.unit_of_measure ||
+                        'un'
+                    ).toUpperCase();
+            }
+
+            this.updateReceivingSummary();
+
+        } catch (error) {
+            if (card) {
+                card.classList.add('hidden');
+            }
+
+            if (descriptionInput) {
+                descriptionInput.value = '';
+                descriptionInput.placeholder =
+                    'PRODUTO NÃO CADASTRADO';
+            }
+
+            if (status) {
+                status.textContent =
+                    error.message ===
+                    'PRODUTO_NAO_CADASTRADO'
+                        ? 'NÃO CADASTRADO'
+                        : 'NÃO ENCONTRADO';
+
+                status.className =
+                    'text-[9px] font-black px-2 py-1 rounded-full bg-red-100 text-red-700';
+            }
+
+            this.updateReceivingSummary();
+        }
+    }
+
+
+    updateReceivingExpirationIntelligence() {
+        const expirationInput =
+            document.getElementById(
+                'rec-expiration'
+            );
+
+        const statusElement =
+            document.getElementById(
+                'receive-expiration-status'
+            );
+
+        const daysElement =
+            document.getElementById(
+                'receive-expiration-days'
+            );
+
+        if (
+            !expirationInput ||
+            !statusElement ||
+            !daysElement
+        ) {
+            return;
+        }
+
+        if (!expirationInput.value) {
+            statusElement.textContent =
+                'AGUARDANDO DATA';
+
+            statusElement.className =
+                'text-xs font-black text-gray-500 mt-0.5';
+
+            daysElement.textContent = '—';
+            return;
+        }
+
+        const expiration =
+            new Date(
+                expirationInput.value +
+                'T00:00:00'
+            );
+
+        const today = new Date();
+
+        today.setHours(
+            0,
+            0,
+            0,
+            0
+        );
+
+        const daysRemaining =
+            Math.floor(
+                (
+                    expiration.getTime() -
+                    today.getTime()
+                ) /
+                86400000
+            );
+
+        let status = 'NORMAL';
+        let statusClass =
+            'text-xs font-black text-green-600 mt-0.5';
+
+        if (daysRemaining < 0) {
+            status = 'VENCIDO';
+            statusClass =
+                'text-xs font-black text-red-700 mt-0.5';
+        } else if (daysRemaining <= 7) {
+            status = 'CRITICO';
+            statusClass =
+                'text-xs font-black text-red-600 mt-0.5';
+        } else if (daysRemaining <= 30) {
+            status = 'ATENCAO';
+            statusClass =
+                'text-xs font-black text-amber-600 mt-0.5';
+        }
+
+        statusElement.textContent = status;
+        statusElement.className = statusClass;
+
+        daysElement.textContent =
+            daysRemaining === 1
+                ? '1 DIA RESTANTE'
+                : `${daysRemaining} DIAS RESTANTES`;
+    }
+
+    getReceivingEntryMode() {
+        return document.getElementById(
+            'rec-entry-mode-package'
+        )?.checked
+            ? 'PACKAGE'
+            : 'UNIT';
+    }
+
+    calculateReceivingTotalUnits() {
+        const mode =
+            this.getReceivingEntryMode();
+
+        const unitQuantity =
+            parseInt(
+                document.getElementById(
+                    'rec-qty'
+                )?.value,
+                10
+            ) || 0;
+
+        const unitsPerPackage =
+            parseInt(
+                document.getElementById(
+                    'rec-units-per-package'
+                )?.value,
+                10
+            ) || 0;
+
+        const packageQuantity =
+            parseInt(
+                document.getElementById(
+                    'rec-package-qty'
+                )?.value,
+                10
+            ) || 0;
+
+        let totalUnits = unitQuantity;
+
+        if (mode === 'PACKAGE') {
+            totalUnits =
+                unitsPerPackage * packageQuantity;
+        }
+
+        const totalInput =
+            document.getElementById(
+                'rec-total-units'
+            );
+
+        if (totalInput) {
+            totalInput.value =
+                Math.max(0, totalUnits);
+        }
+
+        const calculation =
+            document.getElementById(
+                'receive-package-calculation-text'
+            );
+
+        if (calculation) {
+            calculation.textContent =
+                mode === 'PACKAGE' &&
+                unitsPerPackage > 0 &&
+                packageQuantity > 0
+                    ? `${unitsPerPackage} UN × ${packageQuantity} VOLUMES = ${totalUnits} UN`
+                    : '—';
+        }
+
+        return Math.max(
+            0,
+            totalUnits
+        );
+    }
+
+    updateReceivingQuantityMode() {
+        const mode =
+            this.getReceivingEntryMode();
+
+        const unitFields =
+            document.getElementById(
+                'rec-unit-fields'
+            );
+
+        const packageFields =
+            document.getElementById(
+                'rec-package-fields'
+            );
+
+        if (unitFields) {
+            unitFields.classList.toggle(
+                'hidden',
+                mode !== 'UNIT'
+            );
+        }
+
+        if (packageFields) {
+            packageFields.classList.toggle(
+                'hidden',
+                mode !== 'PACKAGE'
+            );
+        }
+
+        this.calculateReceivingTotalUnits();
+        this.updateReceivingSummary();
+    }
+
+    updateReceivingSummary() {
+        const read = (id) =>
+            document.getElementById(id)
+                ?.value
+                ?.trim() || '';
+
+        const text = (id) =>
+            document.getElementById(id)
+                ?.textContent
+                ?.trim() || '';
+
+        const setText = (id, value) => {
+            const element =
+                document.getElementById(id);
+
+            if (element) {
+                element.textContent =
+                    value || '—';
+            }
+        };
+
+        const productDescription =
+            read('rec-product-description');
+
+        const productName =
+            text('receive-product-name');
+
+        const identifier =
+            read('rec-ean');
+
+        const batch =
+            read('rec-batch');
+
+        const expiration =
+            read('rec-expiration');
+
+        const supplier =
+            read('rec-supplier');
+
+        const invoice =
+            read('rec-invoice');
+
+        const mode =
+            this.getReceivingEntryMode();
+
+        const unitsPerPackage =
+            parseInt(
+                read('rec-units-per-package'),
+                10
+            ) || 0;
+
+        const packageQuantity =
+            parseInt(
+                read('rec-package-qty'),
+                10
+            ) || 0;
+
+        const quantity =
+            this.calculateReceivingTotalUnits();
+
+        const unit =
+            text('receive-quantity-unit') ||
+            'UN';
+
+        setText(
+            'receive-summary-product',
+            productDescription ||
+            (
+                productName !== '—'
+                    ? productName
+                    : identifier
+            )
+        );
+
+        setText(
+            'receive-summary-batch',
+            batch
+        );
+
+        setText(
+            'receive-summary-expiration',
+            expiration
+        );
+
+        setText(
+            'receive-summary-supplier',
+            supplier
+        );
+
+        setText(
+            'receive-summary-invoice',
+            invoice
+        );
+
+        setText(
+            'receive-summary-packaging',
+            mode === 'PACKAGE'
+                ? (
+                    unitsPerPackage > 0 &&
+                    packageQuantity > 0
+                        ? `${packageQuantity} VOLUMES × ${unitsPerPackage} UN`
+                        : 'FARDO / CAIXA'
+                )
+                : 'UNIDADES'
+        );
+
+        setText(
+            'receive-summary-quantity',
+            `${quantity} ${unit}`
+        );
+
+        const button =
+            document.getElementById(
+                'submit-receive'
+            );
+
+        if (button) {
+            button.textContent =
+                `CONFIRMAR RECEBIMENTO • ${quantity} ${unit}`;
+        }
+    }
+
+
+    bindReceivingDetailedControls() {
+        const watchIds = [
+            'rec-ean',
+            'rec-batch',
+            'rec-manufacturing',
+            'rec-expiration',
+            'rec-supplier',
+            'rec-invoice',
+            'rec-origin',
+            'rec-qty',
+            'rec-units-per-package',
+            'rec-package-qty',
+        ];
+
+        watchIds.forEach((id) => {
+            const element =
+                document.getElementById(id);
+
+            element?.addEventListener(
+                'input',
+                () => {
+                    if (
+                        id ===
+                        'rec-expiration'
+                    ) {
+                        this.updateReceivingExpirationIntelligence();
+                    }
+
+                    if (
+                        id === 'rec-qty' ||
+                        id === 'rec-units-per-package' ||
+                        id === 'rec-package-qty'
+                    ) {
+                        this.calculateReceivingTotalUnits();
+                    }
+
+                    this.updateReceivingSummary();
+                }
+            );
+
+            element?.addEventListener(
+                'change',
+                () => {
+                    if (
+                        id ===
+                        'rec-expiration'
+                    ) {
+                        this.updateReceivingExpirationIntelligence();
+                    }
+
+                    if (
+                        id === 'rec-qty' ||
+                        id === 'rec-units-per-package' ||
+                        id === 'rec-package-qty'
+                    ) {
+                        this.calculateReceivingTotalUnits();
+                    }
+
+                    this.updateReceivingSummary();
+                }
+            );
+        });
+
+        document.getElementById(
+            'rec-entry-mode-unit'
+        )?.addEventListener(
+            'change',
+            () => this.updateReceivingQuantityMode()
+        );
+
+        document.getElementById(
+            'rec-entry-mode-package'
+        )?.addEventListener(
+            'change',
+            () => this.updateReceivingQuantityMode()
+        );
+
+        document.getElementById(
+            'rec-ean'
+        )?.addEventListener(
+            'change',
+            (event) => {
+                this.loadReceivingProduct(
+                    event.target.value
+                );
+            }
+        );
+
+        document.getElementById(
+            'rec-qty-minus'
+        )?.addEventListener(
+            'click',
+            () => {
+                const input =
+                    document.getElementById(
+                        'rec-qty'
+                    );
+
+                if (!input) {
+                    return;
+                }
+
+                const current =
+                    parseInt(
+                        input.value,
+                        10
+                    ) || 1;
+
+                input.value =
+                    Math.max(
+                        1,
+                        current - 1
+                    );
+
+                this.calculateReceivingTotalUnits();
+                this.updateReceivingSummary();
+            }
+        );
+
+        document.getElementById(
+            'rec-qty-plus'
+        )?.addEventListener(
+            'click',
+            () => {
+                const input =
+                    document.getElementById(
+                        'rec-qty'
+                    );
+
+                if (!input) {
+                    return;
+                }
+
+                const current =
+                    parseInt(
+                        input.value,
+                        10
+                    ) || 0;
+
+                input.value =
+                    current + 1;
+
+                this.calculateReceivingTotalUnits();
+                this.updateReceivingSummary();
+            }
+        );
+
+        document.getElementById(
+            'rec-package-qty-minus'
+        )?.addEventListener(
+            'click',
+            () => {
+                const input =
+                    document.getElementById(
+                        'rec-package-qty'
+                    );
+
+                if (!input) {
+                    return;
+                }
+
+                const current =
+                    parseInt(
+                        input.value,
+                        10
+                    ) || 1;
+
+                input.value =
+                    Math.max(
+                        1,
+                        current - 1
+                    );
+
+                this.calculateReceivingTotalUnits();
+                this.updateReceivingSummary();
+            }
+        );
+
+        document.getElementById(
+            'rec-package-qty-plus'
+        )?.addEventListener(
+            'click',
+            () => {
+                const input =
+                    document.getElementById(
+                        'rec-package-qty'
+                    );
+
+                if (!input) {
+                    return;
+                }
+
+                const current =
+                    parseInt(
+                        input.value,
+                        10
+                    ) || 0;
+
+                input.value =
+                    current + 1;
+
+                this.calculateReceivingTotalUnits();
+                this.updateReceivingSummary();
+            }
+        );
+
+        this.updateReceivingQuantityMode();
+    }
+
+
     bindInboundModule() {
         const methodModal = document.getElementById('inbound-method-modal');
         const modalReceive = document.getElementById('receive-modal');
@@ -204,6 +888,27 @@ class KippeApplication {
             modalReceive?.classList.remove('hidden');
         });
 
+        document.getElementById(
+            'btn-receive-scanner'
+        )?.addEventListener('click', async () => {
+            this.scannerTarget = 'receive';
+
+            modalReceive?.classList.add('hidden');
+
+            try {
+                await this.scanner.start();
+            } catch (error) {
+                this.scannerTarget = 'search';
+
+                modalReceive?.classList.remove('hidden');
+
+                alert(
+                    'Erro ao abrir scanner: ' +
+                    (error.message || 'Falha na câmera.')
+                );
+            }
+        });
+
         /*
          * Entrada por NF/IA reservada para implementação futura.
          *
@@ -220,7 +925,9 @@ class KippeApplication {
                     document.getElementById('rec-ean')?.value.trim();
 
                 const quantity = parseInt(
-                    document.getElementById('rec-qty')?.value.trim(),
+                    document.getElementById(
+                        'rec-total-units'
+                    )?.value,
                     10
                 );
 
@@ -232,6 +939,21 @@ class KippeApplication {
 
                 const supplier =
                     document.getElementById('rec-supplier')?.value.trim();
+
+                const manufacturingDate =
+                    document.getElementById(
+                        'rec-manufacturing'
+                    )?.value || '';
+
+                const invoiceId =
+                    document.getElementById(
+                        'rec-invoice'
+                    )?.value.trim() || '';
+
+                const originDocument =
+                    document.getElementById(
+                        'rec-origin'
+                    )?.value || 'MANUAL';
 
                 if (
                     !sku ||
@@ -251,16 +973,54 @@ class KippeApplication {
                 document.getElementById('loader')?.classList.remove('hidden');
 
                 try {
-                    await this.api.registerReceive({
-                        sku: sku,
-                        quantity: quantity,
-                        batch_code: batchCode,
-                        expiration_date: expirationDate,
-                        supplier: supplier,
-                    });
+                    const response =
+                        await this.api.registerReceive({
+                            sku: sku,
+                            quantity: quantity,
+                            batch_code: batchCode,
+                            manufacturing_date: manufacturingDate,
+                            expiration_date: expirationDate,
+                            supplier: supplier,
+                            invoice_id: invoiceId,
+                            origin_document: originDocument,
+                        });
 
-                    document.getElementById('loader')?.classList.add('hidden');
-                    modalReceive?.classList.add('hidden');
+                    const receiving =
+                        response.receiving;
+
+                    document.getElementById(
+                        'loader'
+                    )?.classList.add('hidden');
+
+                    if (receiving) {
+                        const details =
+                            document.getElementById(
+                                'receive-success-details'
+                            );
+
+                        const putaway =
+                            document.getElementById(
+                                'receive-success-putaway'
+                            );
+
+                        if (details) {
+                            details.textContent =
+                                `${receiving.quantity} UN • ` +
+                                `LOTE ${receiving.batch_code}`;
+                        }
+
+                        if (putaway) {
+                            putaway.textContent =
+                                receiving.putaway_status ===
+                                'PENDENTE'
+                                    ? 'PENDENTE DE ARMAZENAGEM'
+                                    : receiving.putaway_status;
+                        }
+
+                        document.getElementById(
+                            'receive-success-panel'
+                        )?.classList.remove('hidden');
+                    }
 
                     this.fetchAndRenderSku(sku);
                 } catch (error) {

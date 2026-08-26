@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from src.domain.services.product_query_engine import ProductQueryEngine
 from src.domain.product import Product
 
@@ -86,7 +88,9 @@ def test_query_returns_expiration_status_for_batches():
 
     product.add_stock(
         amount=10,
-        expiration_date="2026-09-01",
+        expiration_date=(
+            datetime.now() + timedelta(days=20)
+        ).strftime("%Y-%m-%d"),
         batch_code="L-EXP"
     )
 

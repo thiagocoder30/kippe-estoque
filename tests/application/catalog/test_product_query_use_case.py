@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from src.use_cases.query_product import ProductQueryUseCase
 from src.domain.product import Product
 
@@ -59,7 +61,9 @@ def test_product_query_use_case_returns_expiration_intelligence():
 
     product.add_stock(
         amount=10,
-        expiration_date="2026-09-01",
+        expiration_date=(
+            datetime.now() + timedelta(days=20)
+        ).strftime("%Y-%m-%d"),
         batch_code="L001"
     )
 

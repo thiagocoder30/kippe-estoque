@@ -233,41 +233,579 @@ if ('serviceWorker' in navigator) {
     </div>
 
     <!-- MODAL RECEBIMENTO -->
-    <div id="receive-modal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
-            <div class="bg-[#1a56b6] p-4 flex justify-between items-center text-white">
-                <h3 class="font-black text-sm">ENTRADA DE ESTOQUE</h3>
-                <button id="close-receive-modal" class="text-blue-200 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+    <div id="receive-modal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-gray-50 rounded-2xl w-full max-w-md max-h-[94vh] overflow-hidden shadow-2xl flex flex-col">
+
+            <!-- CABEÇALHO -->
+            <div class="bg-[#124191] px-4 py-3 flex justify-between items-center text-white shrink-0">
+                <div>
+                    <p class="text-[9px] font-bold tracking-[0.18em] text-blue-200">
+                        RECEBIMENTO • NOVA ENTRADA
+                    </p>
+                    <h3 class="font-black text-sm mt-0.5">
+                        RECEBIMENTO DE MERCADORIA
+                    </h3>
+                </div>
+
+                <button
+                    id="close-receive-modal"
+                    type="button"
+                    class="text-blue-200 hover:text-white p-1"
+                    aria-label="Fechar recebimento"
+                >
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
             </div>
-            <div class="p-5 space-y-3">
-                <div>
-                    <label class="text-[10px] font-bold text-gray-500">EAN / SKU</label>
-                    <input type="text" id="rec-ean" class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1">
-                </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-[10px] font-bold text-gray-500">LOTE</label>
-                        <input type="text" id="rec-batch" class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1">
+            <!-- CONTEÚDO COM SCROLL -->
+            <div class="overflow-y-auto p-3 space-y-3">
+
+                <!-- 1. PRODUTO -->
+                <section
+                    id="receive-product-section"
+                    class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
+                >
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                                01 • PRODUTO
+                            </p>
+                            <p class="text-[10px] text-gray-500">
+                                Identifique o item recebido
+                            </p>
+                        </div>
+
+                        <span
+                            id="receive-product-status"
+                            class="text-[9px] font-black px-2 py-1 rounded-full bg-gray-100 text-gray-500"
+                        >
+                            NÃO CONSULTADO
+                        </span>
                     </div>
 
-                    <div>
-                        <label class="text-[10px] font-bold text-gray-500">VALIDADE</label>
-                        <input type="date" id="rec-expiration" class="w-full border rounded p-2 text-sm font-bold mt-1">
+                    <label class="text-[9px] font-bold text-gray-500">
+                        EAN / SKU
+                    </label>
+
+                    <div class="flex gap-2 mt-1">
+                        <input
+                            type="text"
+                            id="rec-ean"
+                            autocomplete="off"
+                            class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono font-black uppercase outline-none focus:border-[#124191]"
+                            placeholder="DIGITE OU BIPAR"
+                        >
+
+                        <button
+                            type="button"
+                            id="btn-receive-scanner"
+                            class="bg-[#124191] text-white rounded-lg px-4 flex items-center justify-center active:scale-95 shadow-sm"
+                            aria-label="Ler código de barras"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5v4m0-4h4M21 5v4m0-4h-4M3 19v-4m0 4h4M21 19v-4m0 4h-4M7 12h10"></path>
+                            </svg>
+                        </button>
                     </div>
-                </div>
 
-                <div>
-                    <label class="text-[10px] font-bold text-gray-500">FORNECEDOR</label>
-                    <input type="text" id="rec-supplier" class="w-full border rounded p-2 text-sm font-bold uppercase mt-1" placeholder="FORNECEDOR">
-                </div>
+                    <div class="mt-3">
+                        <label
+                            for="rec-product-description"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            DESCRIÇÃO DO PRODUTO
+                        </label>
 
-                <div>
-                    <label class="text-[10px] font-bold text-gray-500">QUANTIDADE (+)</label>
-                    <input type="number" id="rec-qty" min="1" class="w-full border rounded p-2 text-xl font-black text-kippe-blue mt-1 text-center" placeholder="0">
-                </div>
+                        <input
+                            type="text"
+                            id="rec-product-description"
+                            readonly
+                            value=""
+                            placeholder="AGUARDANDO IDENTIFICAÇÃO"
+                            class="w-full mt-1 border border-gray-200 bg-gray-50 rounded-lg px-3 py-2.5 text-sm font-black text-gray-800 uppercase cursor-default"
+                        >
+                    </div>
 
-                <button id="submit-receive" class="w-full bg-green-600 text-white font-black p-3 rounded-lg mt-2 active:scale-95 shadow-md">CONFIRMAR ENTRADA</button>
+                    <div
+                        id="receive-product-card"
+                        class="hidden mt-3 rounded-lg border border-green-200 bg-green-50 p-3"
+                    >
+                        <div class="flex justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-[9px] font-black text-green-700 tracking-wider">
+                                    PRODUTO IDENTIFICADO
+                                </p>
+
+                                <p
+                                    id="receive-product-name"
+                                    class="text-sm font-black text-gray-900 mt-1 truncate"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <span class="text-green-600 text-lg">✓</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-[9px]">
+                            <p class="text-gray-500">
+                                SKU:
+                                <strong id="receive-product-sku" class="text-gray-800">—</strong>
+                            </p>
+
+                            <p class="text-gray-500">
+                                UNIDADE:
+                                <strong id="receive-product-unit" class="text-gray-800">—</strong>
+                            </p>
+
+                            <p class="text-gray-500 col-span-2">
+                                EAN:
+                                <strong id="receive-product-ean" class="font-mono text-gray-800">—</strong>
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. DOCUMENTO -->
+                <section
+                    id="receive-document-section"
+                    class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
+                >
+                    <div class="mb-2">
+                        <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                            02 • DOCUMENTO DE ORIGEM
+                        </p>
+                        <p class="text-[10px] text-gray-500">
+                            Origem comercial da mercadoria
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500">
+                                FORNECEDOR
+                            </label>
+
+                            <input
+                                type="text"
+                                id="rec-supplier"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold uppercase mt-1"
+                                placeholder="NOME / IDENTIFICAÇÃO DO FORNECEDOR"
+                            >
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[9px] font-bold text-gray-500">
+                                    Nº NF / DOCUMENTO
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="rec-invoice"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono font-bold uppercase mt-1"
+                                    placeholder="EX: 000123"
+                                >
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-gray-500">
+                                    ORIGEM
+                                </label>
+
+                                <select
+                                    id="rec-origin"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold bg-white mt-1"
+                                >
+                                    <option value="MANUAL">MANUAL</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. RASTREABILIDADE -->
+                <section
+                    id="receive-traceability-section"
+                    class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
+                >
+                    <div class="mb-2">
+                        <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                            03 • RASTREABILIDADE DO LOTE
+                        </p>
+                        <p class="text-[10px] text-gray-500">
+                            Dados físicos do lote recebido
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="col-span-2">
+                            <label class="text-[9px] font-bold text-gray-500">
+                                LOTE
+                            </label>
+
+                            <input
+                                type="text"
+                                id="rec-batch"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono font-black uppercase mt-1"
+                                placeholder="CÓDIGO DO LOTE"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500">
+                                FABRICAÇÃO
+                            </label>
+
+                            <input
+                                type="date"
+                                id="rec-manufacturing"
+                                class="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm font-bold mt-1"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500">
+                                VALIDADE
+                            </label>
+
+                            <input
+                                type="date"
+                                id="rec-expiration"
+                                class="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm font-bold mt-1"
+                            >
+                        </div>
+                    </div>
+
+                    <div
+                        id="receive-expiration-intelligence"
+                        class="mt-3 rounded-lg bg-gray-50 border border-gray-200 p-3 flex items-center justify-between"
+                    >
+                        <div>
+                            <p class="text-[8px] font-black tracking-wider text-gray-400">
+                                STATUS DE VALIDADE
+                            </p>
+
+                            <p
+                                id="receive-expiration-status"
+                                class="text-xs font-black text-gray-500 mt-0.5"
+                            >
+                                AGUARDANDO DATA
+                            </p>
+                        </div>
+
+                        <p
+                            id="receive-expiration-days"
+                            class="text-[10px] font-bold text-gray-500 text-right"
+                        >
+                            —
+                        </p>
+                    </div>
+                </section>
+
+                <!-- 4. QUANTIDADE -->
+                <section
+                    id="receive-quantity-section"
+                    class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
+                >
+                    <div class="mb-3">
+                        <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                            04 • QUANTIDADE RECEBIDA
+                        </p>
+
+                        <p class="text-[10px] text-gray-500 mt-0.5">
+                            Informe em unidades ou por fardo / caixa
+                        </p>
+                    </div>
+
+                    <!-- MODO DE ENTRADA -->
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <label
+                            for="rec-entry-mode-unit"
+                            class="cursor-pointer"
+                        >
+                            <input
+                                type="radio"
+                                id="rec-entry-mode-unit"
+                                name="rec-entry-mode"
+                                value="UNIT"
+                                checked
+                                class="peer sr-only"
+                            >
+
+                            <span class="block text-center border-2 border-[#124191] rounded-xl px-2 py-2.5 text-[10px] font-black text-[#124191] peer-checked:bg-[#124191] peer-checked:text-white">
+                                UNIDADES
+                            </span>
+                        </label>
+
+                        <label
+                            for="rec-entry-mode-package"
+                            class="cursor-pointer"
+                        >
+                            <input
+                                type="radio"
+                                id="rec-entry-mode-package"
+                                name="rec-entry-mode"
+                                value="PACKAGE"
+                                class="peer sr-only"
+                            >
+
+                            <span class="block text-center border-2 border-gray-200 rounded-xl px-2 py-2.5 text-[10px] font-black text-gray-600 peer-checked:border-[#124191] peer-checked:bg-[#124191] peer-checked:text-white">
+                                FARDO / CAIXA
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- MODO UNIDADES -->
+                    <div id="rec-unit-fields">
+                        <p class="text-[9px] font-bold text-gray-500 text-center mb-2">
+                            QUANTIDADE EM UNIDADES
+                        </p>
+
+                        <div class="flex items-center justify-center gap-3">
+                            <button
+                                type="button"
+                                id="rec-qty-minus"
+                                class="w-11 h-11 rounded-xl border-2 border-gray-200 text-gray-600 text-xl font-black active:scale-95"
+                            >
+                                −
+                            </button>
+
+                            <div class="flex-1 max-w-[150px]">
+                                <input
+                                    type="number"
+                                    id="rec-qty"
+                                    min="1"
+                                    value="1"
+                                    inputmode="numeric"
+                                    class="w-full border-2 border-[#124191] rounded-xl py-2 text-2xl font-black text-[#124191] text-center outline-none"
+                                >
+
+                                <p
+                                    id="receive-quantity-unit"
+                                    class="text-center text-[9px] font-black text-gray-400 mt-1"
+                                >
+                                    UN
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                id="rec-qty-plus"
+                                class="w-11 h-11 rounded-xl bg-[#124191] text-white text-xl font-black active:scale-95 shadow-sm"
+                            >
+                                +
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- MODO FARDO / CAIXA -->
+                    <div
+                        id="rec-package-fields"
+                        class="hidden space-y-3"
+                    >
+                        <div>
+                            <label
+                                for="rec-units-per-package"
+                                class="text-[9px] font-bold text-gray-500"
+                            >
+                                UNIDADES POR FARDO / CAIXA
+                            </label>
+
+                            <input
+                                type="number"
+                                id="rec-units-per-package"
+                                min="1"
+                                value=""
+                                inputmode="numeric"
+                                placeholder="EX: 20"
+                                class="w-full mt-1 border border-gray-300 rounded-xl px-3 py-2.5 text-xl font-black text-[#124191] text-center outline-none focus:border-[#124191]"
+                            >
+                        </div>
+
+                        <div>
+                            <p class="text-[9px] font-bold text-gray-500 text-center mb-2">
+                                QUANTIDADE DE FARDOS / CAIXAS
+                            </p>
+
+                            <div class="flex items-center justify-center gap-3">
+                                <button
+                                    type="button"
+                                    id="rec-package-qty-minus"
+                                    class="w-11 h-11 rounded-xl border-2 border-gray-200 text-gray-600 text-xl font-black active:scale-95"
+                                >
+                                    −
+                                </button>
+
+                                <input
+                                    type="number"
+                                    id="rec-package-qty"
+                                    min="1"
+                                    value="1"
+                                    inputmode="numeric"
+                                    class="flex-1 max-w-[150px] border-2 border-[#124191] rounded-xl py-2 text-2xl font-black text-[#124191] text-center outline-none"
+                                >
+
+                                <button
+                                    type="button"
+                                    id="rec-package-qty-plus"
+                                    class="w-11 h-11 rounded-xl bg-[#124191] text-white text-xl font-black active:scale-95 shadow-sm"
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
+
+                        <div
+                            id="receive-package-calculation"
+                            class="rounded-xl bg-blue-50 border border-blue-100 p-3 text-center"
+                        >
+                            <p class="text-[8px] font-black tracking-wider text-gray-400">
+                                CÁLCULO DA EMBALAGEM
+                            </p>
+
+                            <p
+                                id="receive-package-calculation-text"
+                                class="text-sm font-black text-[#124191] mt-1"
+                            >
+                                —
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- TOTAL CANÔNICO -->
+                    <div class="mt-4 rounded-xl bg-green-50 border border-green-200 p-3">
+                        <label
+                            for="rec-total-units"
+                            class="block text-[8px] font-black tracking-wider text-green-700 text-center"
+                        >
+                            TOTAL RECEBIDO EM UNIDADES
+                        </label>
+
+                        <input
+                            type="number"
+                            id="rec-total-units"
+                            readonly
+                            value="1"
+                            class="w-full bg-transparent border-0 text-center text-3xl font-black text-green-700 outline-none mt-1"
+                        >
+
+                        <p class="text-center text-[9px] font-black text-green-600">
+                            UN
+                        </p>
+                    </div>
+                </section>
+
+                <!-- 5. LOGÍSTICA -->
+                <section
+                    id="receive-logistics-section"
+                    class="bg-amber-50 rounded-xl border border-amber-200 p-3"
+                >
+                    <div class="flex items-start gap-3">
+                        <div class="w-3 h-3 rounded-full bg-amber-500 mt-1"></div>
+
+                        <div>
+                            <p class="text-[9px] font-black text-amber-700 tracking-widest">
+                                05 • FLUXO LOGÍSTICO
+                            </p>
+
+                            <p
+                                id="receive-putaway-status"
+                                class="text-xs font-black text-amber-800 mt-1"
+                            >
+                                AGUARDANDO ARMAZENAGEM
+                            </p>
+
+                            <p class="text-[9px] text-amber-700 mt-1">
+                                Após o recebimento, este lote ficará pendente de
+                                localização física no módulo ARMAZENAR.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. RESUMO -->
+                <section
+                    id="receive-summary-section"
+                    class="bg-[#f5f8ff] rounded-xl border border-blue-200 p-3"
+                >
+                    <p class="text-[9px] font-black text-[#124191] tracking-widest mb-2">
+                        06 • RESUMO DA ENTRADA
+                    </p>
+
+                    <div class="space-y-1 text-[10px]">
+                        <div class="flex justify-between gap-3">
+                            <span class="text-gray-500">Produto</span>
+                            <strong id="receive-summary-product" class="text-right text-gray-800">—</strong>
+                        </div>
+
+                        <div class="flex justify-between gap-3">
+                            <span class="text-gray-500">Lote</span>
+                            <strong id="receive-summary-batch" class="font-mono text-gray-800">—</strong>
+                        </div>
+
+                        <div class="flex justify-between gap-3">
+                            <span class="text-gray-500">Validade</span>
+                            <strong id="receive-summary-expiration" class="text-gray-800">—</strong>
+                        </div>
+
+                        <div class="flex justify-between gap-3">
+                            <span class="text-gray-500">Fornecedor</span>
+                            <strong id="receive-summary-supplier" class="text-right text-gray-800">—</strong>
+                        </div>
+
+                        <div class="flex justify-between gap-3">
+                            <span class="text-gray-500">NF / Documento</span>
+                            <strong id="receive-summary-invoice" class="font-mono text-gray-800">—</strong>
+                        </div>
+
+                        <div class="flex justify-between gap-3">
+                            <span class="text-gray-500">Embalagem</span>
+                            <strong id="receive-summary-packaging" class="text-right text-gray-800">UNIDADES</strong>
+                        </div>
+
+                        <div class="flex justify-between gap-3 border-t border-blue-100 pt-1 mt-1">
+                            <span class="font-black text-[#124191]">Quantidade</span>
+                            <strong id="receive-summary-quantity" class="text-[#124191]">1 UN</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <button
+                    id="submit-receive"
+                    type="button"
+                    class="w-full bg-green-600 text-white font-black p-3.5 rounded-xl active:scale-95 shadow-md"
+                >
+                    CONFIRMAR RECEBIMENTO • 1 UN
+                </button>
+
+                <!-- RESULTADO OPERACIONAL -->
+                <section
+                    id="receive-success-panel"
+                    class="hidden bg-green-50 rounded-xl border border-green-200 p-4 text-center"
+                >
+                    <div class="text-3xl text-green-600">✓</div>
+
+                    <p class="text-sm font-black text-green-800 mt-1">
+                        RECEBIMENTO REGISTRADO
+                    </p>
+
+                    <p
+                        id="receive-success-details"
+                        class="text-[10px] text-green-700 mt-2"
+                    >
+                        —
+                    </p>
+
+                    <p
+                        id="receive-success-putaway"
+                        class="mt-3 inline-block bg-amber-100 text-amber-800 text-[9px] font-black px-3 py-1 rounded-full"
+                    >
+                        PENDENTE DE ARMAZENAGEM
+                    </p>
+                </section>
             </div>
         </div>
     </div>
