@@ -5,6 +5,8 @@ class KippeApplication {
     constructor() {
         this.api = new APIClient();
 
+        this.currentOperator = null;
+
         this.scannerTarget = 'search';
 
         this.scanner = new ScannerManager((decodedText) => {
@@ -43,6 +45,8 @@ class KippeApplication {
     }
 
     async bootstrap() {
+        this.bindAuthentication();
+
         this.checkGlobalFefoAlerts();
         this.bindNavigation();
         this.bindInboundModule();
@@ -50,6 +54,361 @@ class KippeApplication {
         this.bindPutawayModule();
         this.bindScannerModule();
         this.bindReportsModule();
+
+        await this.restoreOperatorSession();
+    }
+
+    bindAuthentication() {
+        const submit =
+            document.getElementById(
+                'auth-submit'
+            );
+
+        const operatorId =
+            document.getElementById(
+                'auth-operator-id'
+            );
+
+        const pin =
+            document.getElementById(
+                'auth-pin'
+            );
+
+        const logout =
+            document.getElementById(
+                'operator-logout-btn'
+            );
+
+        const attemptLogin = async () => {
+            await this.authenticateOperator();
+        };
+
+        submit?.addEventListener(
+            'click',
+            attemptLogin
+        );
+
+        operatorId?.addEventListener(
+            'keydown',
+            (event) => {
+                if (event.key === 'Enter') {
+                    pin?.focus();
+                }
+            }
+        );
+
+        pin?.addEventListener(
+            'keydown',
+            async (event) => {
+                if (event.key === 'Enter') {
+                    await attemptLogin();
+                }
+            }
+        );
+
+        logout?.addEventListener(
+            'click',
+            async () => {
+                await this.logoutOperator();
+            }
+        );
+    }
+
+    showAuthenticationModal(message = '') {
+        const modal =
+            document.getElementById(
+                'auth-modal'
+            );
+
+        const error =
+            document.getElementById(
+                'auth-error'
+            );
+
+        const operatorId =
+            document.getElementById(
+                'auth-operator-id'
+            );
+
+        modal?.classList.remove(
+            'hidden'
+        );
+
+        if (error) {
+            error.textContent =
+                message;
+
+            error.classList.toggle(
+                'hidden',
+                !message
+            );
+        }
+
+        window.setTimeout(
+            () => {
+                operatorId?.focus();
+            },
+            50
+        );
+    }
+
+    hideAuthenticationModal() {
+        document.getElementById(
+            'auth-modal'
+        )?.classList.add(
+            'hidden'
+        );
+
+        const error =
+            document.getElementById(
+                'auth-error'
+            );
+
+        if (error) {
+            error.textContent = '';
+            error.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    renderOperatorIdentity() {
+        const operator =
+            this.currentOperator || {
+                name: 'NÃO AUTENTICADO',
+                role: 'SEM SESSÃO',
+            };
+
+        const operatorName =
+            operator.name;
+
+        const operatorRole =
+            operator.role;
+
+        const headerName =
+            document.getElementById(
+                'header-operator-name'
+            );
+
+        const homeName =
+            document.getElementById(
+                'home-operator-name'
+            );
+
+        const homeRole =
+            document.getElementById(
+                'home-operator-role'
+            );
+
+        if (headerName) {
+            headerName.textContent =
+                operatorName;
+        }
+
+        if (homeName) {
+            homeName.textContent =
+                operatorName;
+        }
+
+        if (homeRole) {
+            homeRole.textContent =
+                operatorRole;
+        }
+    }
+
+    async restoreOperatorSession() {
+        try {
+            const session =
+                await this.api.getCurrentOperator();
+
+            if (
+                session.authenticated &&
+                session.operator
+            ) {
+                this.currentOperator =
+                    session.operator;
+
+                this.renderOperatorIdentity();
+                this.hideAuthenticationModal();
+
+                return true;
+            }
+
+            this.currentOperator = null;
+            this.renderOperatorIdentity();
+
+            this.showAuthenticationModal();
+
+            return false;
+
+        } catch (error) {
+            console.error(
+                '[AUTH SESSION]',
+                error
+            );
+
+            this.currentOperator = null;
+            this.renderOperatorIdentity();
+
+            this.showAuthenticationModal(
+                'Não foi possível verificar a sessão do operador.'
+            );
+
+            return false;
+        }
+    }
+
+    async authenticateOperator() {
+        const operatorIdInput =
+            document.getElementById(
+                'auth-operator-id'
+            );
+
+        const pinInput =
+            document.getElementById(
+                'auth-pin'
+            );
+
+        const submit =
+            document.getElementById(
+                'auth-submit'
+            );
+
+        const error =
+            document.getElementById(
+                'auth-error'
+            );
+
+        const id =
+            operatorIdInput?.value.trim();
+
+        const pin =
+            pinInput?.value || '';
+
+        if (!id || !pin) {
+            if (error) {
+                error.textContent =
+                    'Informe operador e PIN.';
+
+                error.classList.remove(
+                    'hidden'
+                );
+            }
+
+            return false;
+        }
+
+        if (submit) {
+            submit.disabled = true;
+            submit.textContent =
+                'AUTENTICANDO...';
+        }
+
+        if (error) {
+            error.textContent = '';
+            error.classList.add(
+                'hidden'
+            );
+        }
+
+        try {
+            const response =
+                await this.api.login(
+                    id,
+                    pin
+                );
+
+            const operator =
+                response.operator;
+
+            if (!operator) {
+                throw new Error(
+                    'Backend não retornou o operador autenticado.'
+                );
+            }
+
+            this.currentOperator =
+                operator;
+
+            this.renderOperatorIdentity();
+
+            if (pinInput) {
+                pinInput.value = '';
+            }
+
+            this.hideAuthenticationModal();
+
+            return true;
+
+        } catch (authError) {
+            console.error(
+                '[AUTH LOGIN]',
+                authError
+            );
+
+            this.currentOperator = null;
+            this.renderOperatorIdentity();
+
+            if (pinInput) {
+                pinInput.value = '';
+                pinInput.focus();
+            }
+
+            if (error) {
+                error.textContent =
+                    authError.message ||
+                    'Credenciais inválidas.';
+
+                error.classList.remove(
+                    'hidden'
+                );
+            }
+
+            return false;
+
+        } finally {
+            if (submit) {
+                submit.disabled = false;
+                submit.textContent =
+                    'ENTRAR NO WMS';
+            }
+        }
+    }
+
+    async logoutOperator() {
+        try {
+            await this.api.logout();
+        } catch (error) {
+            console.warn(
+                '[AUTH LOGOUT]',
+                error
+            );
+        }
+
+        this.currentOperator = null;
+        this.renderOperatorIdentity();
+
+        const operatorId =
+            document.getElementById(
+                'auth-operator-id'
+            );
+
+        const pin =
+            document.getElementById(
+                'auth-pin'
+            );
+
+        if (operatorId) {
+            operatorId.value = '';
+        }
+
+        if (pin) {
+            pin.value = '';
+        }
+
+        this.showAuthenticationModal(
+            'Sessão encerrada.'
+        );
     }
 
     bindNavigation() {

@@ -3,8 +3,8 @@
  *
  * Responsabilidade:
  * - centralizar contratos HTTP do frontend;
- * - evitar URLs de API espalhadas pela interface;
- * - preservar compatibilidade temporária durante a reconciliação.
+ * - preservar a sessão Flask do operador;
+ * - evitar URLs de API espalhadas pela interface.
  */
 export class APIClient {
     constructor(baseURL = '') {
@@ -24,6 +24,7 @@ export class APIClient {
             const response = await fetch(url, {
                 ...options,
                 headers,
+                credentials: 'same-origin',
             });
 
             const data = await response.json();
@@ -43,6 +44,35 @@ export class APIClient {
 
             throw error;
         }
+    }
+
+    /**
+     * Inicia sessão nominal de operador.
+     */
+    async login(id, pin) {
+        return this._request('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({
+                id,
+                pin,
+            }),
+        });
+    }
+
+    /**
+     * Consulta a sessão Flask atualmente ativa.
+     */
+    async getCurrentOperator() {
+        return this._request('/api/auth/me');
+    }
+
+    /**
+     * Encerra a sessão Flask atualmente ativa.
+     */
+    async logout() {
+        return this._request('/api/auth/logout', {
+            method: 'POST',
+        });
     }
 
     async checkHealth() {
@@ -122,5 +152,4 @@ export class APIClient {
             body: JSON.stringify(payload),
         });
     }
-
 }

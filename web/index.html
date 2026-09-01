@@ -31,12 +31,104 @@ if ('serviceWorker' in navigator) {
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 pb-20 uppercase">
+    <!-- AUTENTICAÇÃO NOMINAL DO OPERADOR -->
+    <div
+        id="auth-modal"
+        class="fixed inset-0 z-[2000] bg-slate-950/95 flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-title"
+    >
+        <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden normal-case">
+            <div class="bg-[#124191] text-white p-5 border-b-4 border-kippe-red">
+                <p class="text-[9px] font-black tracking-[0.25em] text-blue-200 uppercase">
+                    KIPPE SUPERMERCADO
+                </p>
+
+                <h2
+                    id="auth-title"
+                    class="text-xl font-black mt-1 uppercase"
+                >
+                    IDENTIFICAÇÃO DO OPERADOR
+                </h2>
+
+                <p class="text-[10px] mt-2 text-blue-100 font-bold uppercase">
+                    Informe sua identificação nominal para acessar o WMS.
+                </p>
+            </div>
+
+            <div class="p-5 space-y-4">
+                <div>
+                    <label
+                        for="auth-operator-id"
+                        class="block text-[9px] font-black text-gray-500 mb-1.5 tracking-widest uppercase"
+                    >
+                        OPERADOR
+                    </label>
+
+                    <input
+                        id="auth-operator-id"
+                        type="text"
+                        autocomplete="username"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-3 text-base font-mono font-black outline-none focus:border-[#124191]"
+                        placeholder="ID DO OPERADOR"
+                    >
+                </div>
+
+                <div>
+                    <label
+                        for="auth-pin"
+                        class="block text-[9px] font-black text-gray-500 mb-1.5 tracking-widest uppercase"
+                    >
+                        PIN
+                    </label>
+
+                    <input
+                        id="auth-pin"
+                        type="password"
+                        inputmode="numeric"
+                        autocomplete="current-password"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-3 text-base font-mono font-black tracking-[0.35em] outline-none focus:border-[#124191]"
+                        placeholder="••••"
+                    >
+                </div>
+
+                <p
+                    id="auth-error"
+                    class="hidden text-[10px] font-black text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 uppercase"
+                ></p>
+
+                <button
+                    id="auth-submit"
+                    type="button"
+                    class="w-full bg-[#124191] text-white py-3.5 rounded-xl font-black text-sm uppercase shadow-md active:scale-[0.99]"
+                >
+                    ENTRAR NO WMS
+                </button>
+
+                <p class="text-[9px] leading-relaxed text-gray-400 text-center font-bold uppercase">
+                    Operações de estoque são vinculadas à sessão autenticada.
+                </p>
+            </div>
+        </div>
+    </div>
+
     <header class="bg-kippe-blue text-white p-3 shadow-md sticky top-0 z-40 flex justify-between items-center border-b-4 border-kippe-red">
         <div class="flex flex-col leading-none ml-1">
             <span class="text-2xl logo-kippe-sm">KIPPE</span>
             <span class="text-[8px] logo-supermercado mt-1">Supermercado</span>
         </div>
-        <button class="bg-[#124191] text-[10px] px-2 py-1.5 rounded-lg font-bold shadow-inner">ADMIN</button>
+        <button
+            id="operator-logout-btn"
+            type="button"
+            class="bg-[#124191] text-[9px] px-2 py-1.5 rounded-lg font-bold shadow-inner text-right"
+            aria-label="Encerrar sessão do operador"
+        >
+            <span class="block text-[7px] text-blue-200">OPERADOR</span>
+            <span id="header-operator-name">NÃO AUTENTICADO</span>
+        </button>
     </header>
 
     <main class="p-3 max-w-lg mx-auto space-y-3">
@@ -44,10 +136,17 @@ if ('serviceWorker' in navigator) {
         <section id="home-module-view" class="space-y-3">
             <div class="bg-[#124191] text-white rounded-xl p-4 shadow-md border-l-4 border-kippe-red flex justify-between items-center">
                 <div>
-                    <h2 class="text-xl font-black tracking-tight">Olá, ADMIN</h2>
+                    <h2 class="text-xl font-black tracking-tight">
+                        Olá, <span id="home-operator-name">NÃO AUTENTICADO</span>
+                    </h2>
                     <p class="text-blue-200 text-[9px] mt-0.5 font-bold">Painel Operacional WMS</p>
                 </div>
-                <span class="bg-white text-[#124191] text-[9px] px-2 py-1 rounded font-black">ADMIN</span>
+                <span
+                    id="home-operator-role"
+                    class="bg-white text-[#124191] text-[9px] px-2 py-1 rounded font-black"
+                >
+                    SEM SESSÃO
+                </span>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
