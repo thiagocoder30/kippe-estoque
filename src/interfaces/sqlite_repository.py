@@ -10,6 +10,89 @@ from src.domain.product import Product
 class SQLiteProductRepository:
     PRODUCT_SKU_SEQUENCE = "product"
 
+    DEFAULT_CATEGORIES = (
+        (
+            "MER",
+            "Mercearia",
+            10,
+        ),
+        (
+            "BEB",
+            "Bebidas",
+            20,
+        ),
+        (
+            "LAT",
+            "Laticínios e Refrigerados",
+            30,
+        ),
+        (
+            "CAR",
+            "Carnes e Açougue",
+            40,
+        ),
+        (
+            "FRI",
+            "Frios e Embutidos",
+            50,
+        ),
+        (
+            "HOR",
+            "Hortifruti",
+            60,
+        ),
+        (
+            "PAD",
+            "Padaria e Confeitaria",
+            70,
+        ),
+        (
+            "CON",
+            "Congelados",
+            80,
+        ),
+        (
+            "HIG",
+            "Higiene Pessoal",
+            90,
+        ),
+        (
+            "LIM",
+            "Limpeza",
+            100,
+        ),
+        (
+            "BAZ",
+            "Bazar e Utilidades",
+            110,
+        ),
+        (
+            "PET",
+            "Pet",
+            120,
+        ),
+        (
+            "INF",
+            "Infantil",
+            130,
+        ),
+        (
+            "COS",
+            "Perfumaria e Cosméticos",
+            140,
+        ),
+        (
+            "DES",
+            "Descartáveis e Embalagens",
+            150,
+        ),
+        (
+            "OUT",
+            "Outros",
+            160,
+        ),
+    )
+
     def __init__(
         self,
         db_path: str = "data/estoque_producao.db",
@@ -189,7 +272,73 @@ class SQLiteProductRepository:
                     """
                 )
 
+            self._insert_default_categories(
+                conn
+            )
+
             self._ensure_product_sku_sequence(
+                conn
+            )
+
+            conn.commit()
+
+    def _insert_default_categories(
+        self,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """
+        Insere somente categorias canônicas ausentes.
+
+        Categorias já existentes nunca são atualizadas pelo
+        bootstrap. Isso preserva customizações operacionais,
+        status, ordenação, descrições e regras locais.
+        """
+        rows = [
+            (
+                category_id,
+                name,
+                "",
+                None,
+                1,
+                sort_order,
+                "{}",
+            )
+            for (
+                category_id,
+                name,
+                sort_order,
+            )
+            in self.DEFAULT_CATEGORIES
+        ]
+
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO categories (
+                id,
+                name,
+                description,
+                parent_id,
+                active,
+                sort_order,
+                classification_rules
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
+    def ensure_default_categories(
+        self,
+    ) -> None:
+        """
+        Garante idempotentemente o catálogo mercantil mínimo.
+
+        A operação é insert-only: registros previamente
+        existentes permanecem integralmente sob controle da
+        operação.
+        """
+        with self._get_connection() as conn:
+            self._insert_default_categories(
                 conn
             )
 
