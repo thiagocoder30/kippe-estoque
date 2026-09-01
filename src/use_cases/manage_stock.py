@@ -39,13 +39,187 @@ class ManageStockUseCase:
             else AccessControl.ROLE_SYSTEM
         )
 
-    def _log_info(self, msg: str):
+    def _log_info(
+        self,
+        msg: str,
+    ):
         if self.logger:
-            self.logger.info(msg)
+            self.logger.info(
+                msg
+            )
 
-    def _log_warn(self, msg: str):
+    def _log_warn(
+        self,
+        msg: str,
+    ):
         if self.logger:
-            self.logger.warning(msg)
+            self.logger.warning(
+                msg
+            )
+
+    def register_product(
+        self,
+        name: str,
+        ean: str,
+        unit_of_measure: str = "un",
+        status: str = "ATIVO",
+        category_id: str = None,
+    ) -> Result[Dict[str, Any], str]:
+        """
+        Cadastro operacional de produto.
+
+        O operador não fornece o SKU. A identidade interna é
+        alocada atomicamente pela persistência.
+        """
+        op_id = self._get_op()
+        op_role = self._get_role()
+
+        if not AccessControl.can_manage_operational_catalog(
+            op_role
+        ):
+            self._log_warn(
+                f"RBAC Block: Operador [{op_id}] tentou "
+                "cadastrar novo produto sem privilégios."
+            )
+
+            return Result.fail(
+                "Autorização negada: Apenas GERENTES ou "
+                "ADMINISTRADORES DO SISTEMA podem cadastrar "
+                "novos SKUs."
+            )
+
+        normalized_name = str(
+            name or ""
+        ).strip()
+
+        normalized_ean = str(
+            ean or ""
+        ).strip()
+
+        normalized_unit = str(
+            unit_of_measure or "un"
+        ).strip().lower()
+
+        normalized_status = str(
+            status or "ATIVO"
+        ).strip().upper()
+
+        normalized_category = (
+            str(category_id).strip()
+            if category_id
+            else None
+        )
+
+        if not normalized_name:
+            return Result.fail(
+                "A descrição do produto é obrigatória."
+            )
+
+        if not normalized_ean:
+            return Result.fail(
+                "O EAN é obrigatório para o cadastro operacional."
+            )
+
+        get_by_ean = getattr(
+            self.repository,
+            "get_by_ean",
+            None,
+        )
+
+        if callable(
+            get_by_ean
+        ):
+            existing = get_by_ean(
+                normalized_ean
+            )
+
+            if existing:
+                self._log_warn(
+                    f"Cadastro Bloqueado: EAN "
+                    f"[{normalized_ean}] já pertence ao "
+                    f"SKU [{existing.id}]. "
+                    f"Operador: [{op_id}]"
+                )
+
+                return Result.fail(
+                    "EAN já cadastrado no produto "
+                    f"[{existing.id}] {existing.name}."
+                )
+
+        register_new_product = getattr(
+            self.repository,
+            "register_new_product",
+            None,
+        )
+
+        if not callable(
+            register_new_product
+        ):
+            return Result.fail(
+                "Repositório não suporta geração automática "
+                "de SKU."
+            )
+
+        try:
+            product = register_new_product(
+                name=normalized_name,
+                ean=normalized_ean,
+                unit_of_measure=normalized_unit,
+                status=normalized_status,
+                category_id=normalized_category,
+            )
+        except ValueError as exc:
+            self._log_warn(
+                "Cadastro Bloqueado: "
+                f"{str(exc)} "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                str(exc)
+            )
+        except Exception as exc:
+            self._log_warn(
+                "Falha de Persistência no cadastro "
+                f"automático de produto: {str(exc)}. "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                "Não foi possível cadastrar o produto."
+            )
+
+        self.repository.log_transaction(
+            product.id,
+            "CRIACAO DE PRODUTO",
+            0,
+            op_id,
+        )
+
+        self._log_info(
+            f"Produto Criado Automaticamente: "
+            f"SKU [{product.id}] - "
+            f"{product.name} "
+            f"({product.unit_of_measure}/"
+            f"{product.status}). "
+            f"EAN [{product.ean}]. "
+            f"Operador: [{op_id}]"
+        )
+
+        return Result.ok(
+            {
+                "id": product.id,
+                "ean": product.ean,
+                "name": product.name,
+                "unit_of_measure": (
+                    product.unit_of_measure
+                ),
+                "status": product.status,
+                "category_id": (
+                    product.category_id
+                ),
+            }
+        )
 
     def create_product(
         self,
@@ -56,6 +230,14 @@ class ManageStockUseCase:
         category_id: str = None,
         ean: str = "",
     ) -> Result[None, str]:
+        """
+        Contrato legado/interno com SKU explícito.
+
+        É preservado para compatibilidade de serviços, testes
+        e integrações que já possuem uma identidade de produto.
+        O fluxo operacional do frontend deve usar
+        register_product().
+        """
         op_id = self._get_op()
         op_role = self._get_role()
 
@@ -67,7 +249,9 @@ class ManageStockUseCase:
                 f"cadastrar SKU [{product_id}] sem privilégios."
             )
 
-            self._log_warn(msg)
+            self._log_warn(
+                msg
+            )
 
             return Result.fail(
                 "Autorização negada: Apenas GERENTES ou "
@@ -87,11 +271,42 @@ class ManageStockUseCase:
                 "Produto já cadastrado."
             )
 
+        normalized_ean = str(
+            ean or ""
+        ).strip()
+
+        if normalized_ean:
+            get_by_ean = getattr(
+                self.repository,
+                "get_by_ean",
+                None,
+            )
+
+            if callable(
+                get_by_ean
+            ):
+                existing = get_by_ean(
+                    normalized_ean
+                )
+
+                if existing:
+                    self._log_warn(
+                        f"Cadastro Bloqueado: EAN "
+                        f"[{normalized_ean}] já pertence ao "
+                        f"SKU [{existing.id}]. "
+                        f"Operador: [{op_id}]"
+                    )
+
+                    return Result.fail(
+                        "EAN já cadastrado no produto "
+                        f"[{existing.id}] {existing.name}."
+                    )
+
         try:
             product = Product(
                 id=product_id,
                 name=name,
-                ean=ean,
+                ean=normalized_ean,
                 quantity=0,
                 unit_of_measure=unit_of_measure,
                 status=status,
@@ -124,7 +339,9 @@ class ManageStockUseCase:
             f"Operador: [{op_id}]"
         )
 
-        return Result.ok(None)
+        return Result.ok(
+            None
+        )
 
     def execute_add(
         self,
@@ -425,7 +642,9 @@ class ManageStockUseCase:
         return Result.ok(
             {
                 "name": product.name,
-                "total_quantity": product.quantity,
+                "total_quantity": (
+                    product.quantity
+                ),
                 "instructions": (
                     product.get_picking_instructions()
                 ),

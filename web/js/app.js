@@ -439,29 +439,64 @@ class KippeApplication {
 
     async openNewProductRegistration(ean) {
         const modal =
-            document.getElementById('new-product-modal');
+            document.getElementById(
+                'new-product-modal'
+            );
+
+        const form =
+            document.getElementById(
+                'new-product-form'
+            );
+
+        const successPanel =
+            document.getElementById(
+                'new-product-success-panel'
+            );
+
+        const errorPanel =
+            document.getElementById(
+                'new-product-error'
+            );
 
         const eanInput =
-            document.getElementById('new-product-ean');
-
-        const skuInput =
-            document.getElementById('new-product-sku');
+            document.getElementById(
+                'new-product-ean'
+            );
 
         const nameInput =
-            document.getElementById('new-product-name');
+            document.getElementById(
+                'new-product-name'
+            );
 
         const unitInput =
-            document.getElementById('new-product-unit');
+            document.getElementById(
+                'new-product-unit'
+            );
 
         const categoryInput =
-            document.getElementById('new-product-category');
+            document.getElementById(
+                'new-product-category'
+            );
 
-        if (eanInput) {
-            eanInput.value = ean;
+        form?.classList.remove(
+            'hidden'
+        );
+
+        successPanel?.classList.add(
+            'hidden'
+        );
+
+        if (errorPanel) {
+            errorPanel.textContent = '';
+
+            errorPanel.classList.add(
+                'hidden'
+            );
         }
 
-        if (skuInput) {
-            skuInput.value = '';
+        if (eanInput) {
+            eanInput.value =
+                ean || '';
         }
 
         if (nameInput) {
@@ -480,15 +515,25 @@ class KippeApplication {
                 const categories =
                     await this.api.getCategories();
 
-                categories.forEach((category) => {
-                    const option =
-                        document.createElement('option');
+                categories.forEach(
+                    (category) => {
+                        const option =
+                            document.createElement(
+                                'option'
+                            );
 
-                    option.value = category.id;
-                    option.textContent = category.name;
+                        option.value =
+                            category.id;
 
-                    categoryInput.appendChild(option);
-                });
+                        option.textContent =
+                            category.name;
+
+                        categoryInput.appendChild(
+                            option
+                        );
+                    }
+                );
+
             } catch (error) {
                 console.warn(
                     '[PRODUCT REGISTRATION] Falha ao carregar categorias.',
@@ -497,7 +542,16 @@ class KippeApplication {
             }
         }
 
-        modal?.classList.remove('hidden');
+        modal?.classList.remove(
+            'hidden'
+        );
+
+        window.setTimeout(
+            () => {
+                nameInput?.focus();
+            },
+            50
+        );
     }
 
     async loadReceivingProduct(identifier) {
@@ -1171,67 +1225,209 @@ class KippeApplication {
 
         document.getElementById(
             'submit-new-product'
-        )?.addEventListener('click', async () => {
-            const ean =
-                document.getElementById('new-product-ean')?.value.trim();
+        )?.addEventListener(
+            'click',
+            async () => {
+                const ean =
+                    document.getElementById(
+                        'new-product-ean'
+                    )?.value.trim();
 
-            const sku =
-                document.getElementById('new-product-sku')?.value.trim();
+                const name =
+                    document.getElementById(
+                        'new-product-name'
+                    )?.value.trim();
 
-            const name =
-                document.getElementById('new-product-name')?.value.trim();
+                const categoryId =
+                    document.getElementById(
+                        'new-product-category'
+                    )?.value || null;
 
-            const categoryId =
-                document.getElementById('new-product-category')?.value || null;
+                const unit =
+                    document.getElementById(
+                        'new-product-unit'
+                    )?.value || 'un';
 
-            const unit =
-                document.getElementById('new-product-unit')?.value || 'un';
+                const errorPanel =
+                    document.getElementById(
+                        'new-product-error'
+                    );
 
-            if (!ean || !sku || !name) {
-                alert(
-                    'Preencha EAN, SKU interno e descrição.'
-                );
-                return;
-            }
+                const submitButton =
+                    document.getElementById(
+                        'submit-new-product'
+                    );
 
-            document.getElementById('loader')?.classList.remove('hidden');
+                if (!ean || !name) {
+                    if (errorPanel) {
+                        errorPanel.textContent =
+                            'Preencha EAN e descrição.';
 
-            try {
-                await this.api.createProduct({
-                    id: sku,
-                    name: name,
-                    ean: ean,
-                    unit_of_measure: unit,
-                    category_id: categoryId,
-                });
+                        errorPanel.classList.remove(
+                            'hidden'
+                        );
+                    }
 
-                document.getElementById('loader')?.classList.add('hidden');
-
-                newProductModal?.classList.add('hidden');
-
-                const recEan =
-                    document.getElementById('rec-ean');
-
-                if (recEan) {
-                    recEan.value = ean;
+                    return;
                 }
 
-                modalReceive?.classList.remove('hidden');
+                if (errorPanel) {
+                    errorPanel.textContent = '';
 
-                alert(
-                    '✅ PRODUTO CADASTRADO.\n\n' +
-                    'Continue o recebimento informando lote, validade, ' +
-                    'fornecedor e quantidade.'
-                );
-            } catch (error) {
-                document.getElementById('loader')?.classList.add('hidden');
+                    errorPanel.classList.add(
+                        'hidden'
+                    );
+                }
 
-                alert(
-                    'Erro ao cadastrar produto: ' +
-                    (error.message || 'Falha no cadastro.')
+                if (submitButton) {
+                    submitButton.disabled = true;
+
+                    submitButton.textContent =
+                        'CADASTRANDO...';
+                }
+
+                document.getElementById(
+                    'loader'
+                )?.classList.remove(
+                    'hidden'
                 );
+
+                try {
+                    const response =
+                        await this.api.createProduct({
+                            name: name,
+                            ean: ean,
+                            unit_of_measure: unit,
+                            category_id: categoryId,
+                        });
+
+                    const product =
+                        response.product;
+
+                    if (
+                        !product ||
+                        !product.id
+                    ) {
+                        throw new Error(
+                            'Backend não retornou o SKU gerado.'
+                        );
+                    }
+
+                    const successName =
+                        document.getElementById(
+                            'new-product-success-name'
+                        );
+
+                    const successSku =
+                        document.getElementById(
+                            'new-product-success-sku'
+                        );
+
+                    const successEan =
+                        document.getElementById(
+                            'new-product-success-ean'
+                        );
+
+                    if (successName) {
+                        successName.textContent =
+                            product.name ||
+                            name;
+                    }
+
+                    if (successSku) {
+                        successSku.textContent =
+                            product.id;
+                    }
+
+                    if (successEan) {
+                        successEan.textContent =
+                            product.ean ||
+                            ean;
+                    }
+
+                    document.getElementById(
+                        'new-product-form'
+                    )?.classList.add(
+                        'hidden'
+                    );
+
+                    document.getElementById(
+                        'new-product-success-panel'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+
+                } catch (error) {
+                    if (errorPanel) {
+                        errorPanel.textContent =
+                            'Erro ao cadastrar produto: ' +
+                            (
+                                error.message ||
+                                'Falha no cadastro.'
+                            );
+
+                        errorPanel.classList.remove(
+                            'hidden'
+                        );
+                    }
+
+                } finally {
+                    document.getElementById(
+                        'loader'
+                    )?.classList.add(
+                        'hidden'
+                    );
+
+                    if (submitButton) {
+                        submitButton.disabled =
+                            false;
+
+                        submitButton.textContent =
+                            'CADASTRAR PRODUTO';
+                    }
+                }
             }
-        });
+        );
+
+        document.getElementById(
+            'continue-new-product-receiving'
+        )?.addEventListener(
+            'click',
+            async () => {
+                const ean =
+                    document.getElementById(
+                        'new-product-ean'
+                    )?.value.trim();
+
+                if (!ean) {
+                    return;
+                }
+
+                const recEan =
+                    document.getElementById(
+                        'rec-ean'
+                    );
+
+                if (recEan) {
+                    recEan.value =
+                        ean;
+                }
+
+                newProductModal?.classList.add(
+                    'hidden'
+                );
+
+                modalReceive?.classList.remove(
+                    'hidden'
+                );
+
+                await this.loadReceivingProduct(
+                    ean
+                );
+
+                this.updateReceivingSummary();
+            }
+        );
 
         document.getElementById('btn-module-inbound')?.addEventListener('click', () => methodModal?.classList.remove('hidden'));
         document.getElementById('close-inbound-method')?.addEventListener('click', () => methodModal?.classList.add('hidden'));
