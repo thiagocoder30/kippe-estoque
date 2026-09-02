@@ -10,6 +10,32 @@ class KippeApplication {
         this.scannerTarget = 'search';
 
         this.scanner = new ScannerManager((decodedText) => {
+            if (this.scannerTarget === 'new-product') {
+                const newProductInput =
+                    document.getElementById(
+                        'new-product-ean'
+                    );
+
+                const newProductModal =
+                    document.getElementById(
+                        'new-product-modal'
+                    );
+
+                if (newProductInput) {
+                    newProductInput.value =
+                        decodedText;
+                }
+
+                newProductModal?.classList.remove(
+                    'hidden'
+                );
+
+                this.scannerTarget =
+                    'search';
+
+                return;
+            }
+
             if (this.scannerTarget === 'receive') {
                 const receiveInput =
                     document.getElementById('rec-ean');
@@ -435,6 +461,17 @@ class KippeApplication {
         document.getElementById('btn-back-dashboard')?.addEventListener('click', showHome);
         document.getElementById('btn-back-reports')?.addEventListener('click', showHome);
         document.getElementById('nav-home')?.addEventListener('click', showHome);
+
+        document.getElementById(
+            'btn-new-product-registration'
+        )?.addEventListener(
+            'click',
+            async () => {
+                await this.openNewProductRegistration(
+                    ''
+                );
+            }
+        );
     }
 
     async openNewProductRegistration(ean) {
@@ -1224,6 +1261,86 @@ class KippeApplication {
         });
 
         document.getElementById(
+            'btn-new-product-scanner'
+        )?.addEventListener(
+            'click',
+            async () => {
+                this.scannerTarget =
+                    'new-product';
+
+                newProductModal?.classList.add(
+                    'hidden'
+                );
+
+                try {
+                    await this.scanner.start();
+
+                    /*
+                     * ScannerManager absorve internamente falhas
+                     * de inicialização e retorna para IDLE.
+                     *
+                     * Portanto, o sucesso operacional precisa ser
+                     * confirmado pelo estado SCANNING.
+                     */
+                    if (
+                        this.scanner.status !==
+                        'SCANNING'
+                    ) {
+                        this.scannerTarget =
+                            'search';
+
+                        newProductModal?.classList.remove(
+                            'hidden'
+                        );
+
+                        const errorPanel =
+                            document.getElementById(
+                                'new-product-error'
+                            );
+
+                        if (errorPanel) {
+                            errorPanel.textContent =
+                                'Não foi possível abrir o scanner.';
+
+                            errorPanel.classList.remove(
+                                'hidden'
+                            );
+                        }
+
+                        return;
+                    }
+
+                } catch (error) {
+                    this.scannerTarget =
+                        'search';
+
+                    newProductModal?.classList.remove(
+                        'hidden'
+                    );
+
+                    const errorPanel =
+                        document.getElementById(
+                            'new-product-error'
+                        );
+
+                    if (errorPanel) {
+                        errorPanel.textContent =
+                            'Não foi possível abrir o scanner.';
+
+                        errorPanel.classList.remove(
+                            'hidden'
+                        );
+                    }
+
+                    console.error(
+                        '[NEW PRODUCT SCANNER]',
+                        error
+                    );
+                }
+            }
+        );
+
+        document.getElementById(
             'submit-new-product'
         )?.addEventListener(
             'click',
@@ -1791,7 +1908,31 @@ class KippeApplication {
     }
 
     bindScannerModule() {
+        document.getElementById(
+            'close-scanner-btn'
+        )?.addEventListener(
+            'click',
+            () => {
+                if (
+                    this.scannerTarget ===
+                    'new-product'
+                ) {
+                    document.getElementById(
+                        'new-product-modal'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+
+                    this.scannerTarget =
+                        'search';
+                }
+            }
+        );
+
         const openScanner = () => {
+            this.scannerTarget =
+                'search';
+
             this.scanner.start();
         };
 
