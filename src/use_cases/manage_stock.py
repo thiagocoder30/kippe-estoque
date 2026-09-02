@@ -7,6 +7,7 @@ from src.domain.services.inventory_adjustment_engine import (
     InventoryAdjustmentEngine,
 )
 from src.domain.services.putaway_engine import PutawayEngine
+from src.domain.services.fefo_selector import FEFOSelector
 from src.domain.services.stock_transfer_engine import (
     StockTransferEngine,
 )
@@ -625,6 +626,191 @@ class ManageStockUseCase:
         self,
     ) -> List[Product]:
         return self.repository.get_all()
+
+    def plan_replenishment(
+        self,
+        items,
+    ) -> Result[Dict[str, Any], str]:
+        """
+        Monta um plano FEFO para abastecimento da loja.
+
+        Este método é deliberadamente somente leitura:
+        - não altera Product.quantity;
+        - não altera Batch.quantity;
+        - não persiste produto;
+        - não registra transação.
+
+        O carrinho representa intenção operacional. A baixa de
+        estoque só ocorrerá em uma etapa posterior, após a
+        confirmação física da coleta.
+
+        SKUs repetidos são consolidados antes do cálculo FEFO.
+        A ordem final preserva a primeira ocorrência de cada SKU.
+        """
+        if not isinstance(
+            items,
+            list,
+        ) or not items:
+            return Result.fail(
+                "O carrinho de abastecimento está vazio."
+            )
+
+        consolidated = {}
+        ordered_skus = []
+
+        # ----------------------------------------------------
+        # 1. Validar e consolidar carrinho
+        # ----------------------------------------------------
+        for raw_item in items:
+            if not isinstance(
+                raw_item,
+                dict,
+            ):
+                return Result.fail(
+                    "Item de abastecimento inválido."
+                )
+
+            product_id = str(
+                raw_item.get(
+                    "sku",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not product_id:
+                return Result.fail(
+                    "O SKU é obrigatório."
+                )
+
+            raw_quantity = raw_item.get(
+                "quantity"
+            )
+
+            if (
+                isinstance(
+                    raw_quantity,
+                    bool,
+                )
+                or not isinstance(
+                    raw_quantity,
+                    int,
+                )
+            ):
+                return Result.fail(
+                    "Quantidade inválida."
+                )
+
+            if raw_quantity <= 0:
+                return Result.fail(
+                    "Quantidade deve ser maior que zero."
+                )
+
+            if product_id not in consolidated:
+                consolidated[
+                    product_id
+                ] = raw_quantity
+
+                ordered_skus.append(
+                    product_id
+                )
+            else:
+                consolidated[
+                    product_id
+                ] += raw_quantity
+
+        # ----------------------------------------------------
+        # 2. Resolver FEFO sobre quantidades já consolidadas
+        # ----------------------------------------------------
+        planned_items = []
+
+        for product_id in ordered_skus:
+            requested_quantity = (
+                consolidated[
+                    product_id
+                ]
+            )
+
+            product = self.repository.get_by_id(
+                product_id
+            )
+
+            if not product:
+                return Result.fail(
+                    f"Produto [{product_id}] não encontrado."
+                )
+
+            eligible_batches = (
+                FEFOSelector.get_eligible_batches(
+                    product.batches
+                )
+            )
+
+            available_quantity = sum(
+                batch.quantity
+                for batch in eligible_batches
+            )
+
+            if (
+                available_quantity
+                < requested_quantity
+            ):
+                return Result.fail(
+                    "Estoque insuficiente de lotes válidos."
+                )
+
+            remaining = (
+                requested_quantity
+            )
+
+            allocations = []
+
+            for batch in eligible_batches:
+                if remaining <= 0:
+                    break
+
+                allocated_quantity = min(
+                    batch.quantity,
+                    remaining,
+                )
+
+                allocations.append(
+                    {
+                        "batch_code": (
+                            batch.code
+                        ),
+                        "expiration_date": (
+                            batch.expiration_date
+                        ),
+                        "quantity": (
+                            allocated_quantity
+                        ),
+                        "location_id": (
+                            batch.location_id
+                        ),
+                    }
+                )
+
+                remaining -= (
+                    allocated_quantity
+                )
+
+            planned_items.append(
+                {
+                    "sku": product.id,
+                    "name": product.name,
+                    "requested_quantity": (
+                        requested_quantity
+                    ),
+                    "allocations": allocations,
+                }
+            )
+
+        return Result.ok(
+            {
+                "items": planned_items
+            }
+        )
 
     def get_picking_info(
         self,

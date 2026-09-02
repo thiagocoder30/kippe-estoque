@@ -474,6 +474,36 @@ def expiration_report():
     ), 200
 
 
+@app.route(
+    '/api/abastecimento/plano',
+    methods=['POST']
+)
+def replenishment_plan():
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    data = request.json or {}
+
+    res = (
+        container
+        .use_case
+        .plan_replenishment(
+            data.get('items')
+        )
+    )
+
+    if res.is_success:
+        return jsonify(
+            res.value
+        ), 200
+
+    return jsonify({
+        'error': res.error
+    }), 400
+
+
 @app.route('/api/putaway', methods=['POST'])
 def putaway_stock():
     if not _has_valid_session():
