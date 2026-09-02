@@ -906,6 +906,186 @@ class ManageStockUseCase:
             }
         )
 
+    def confirm_replenishment_pick(
+        self,
+        product_id: str,
+        batch_code: str,
+        quantity: int,
+    ) -> Result[Dict[str, Any], str]:
+        """
+        Confirma a quantidade fisicamente retirada de um lote
+        específico durante o abastecimento da loja.
+
+        Esta operação NÃO recalcula FEFO. O lote informado é a
+        verdade física confirmada pelo operador.
+
+        A confirmação:
+        - reduz exatamente Batch.quantity do lote informado;
+        - reduz Product.quantity na mesma quantidade;
+        - mantém lote zerado persistido;
+        - registra ABASTECIMENTO_LOJA no histórico canônico;
+        - não cria saldo numérico de loja.
+        """
+        op_id = self._get_op()
+
+        normalized_product_id = str(
+            product_id or ""
+        ).strip()
+
+        normalized_batch_code = str(
+            batch_code or ""
+        ).strip()
+
+        if not normalized_product_id:
+            return Result.fail(
+                "O SKU é obrigatório."
+            )
+
+        if not normalized_batch_code:
+            return Result.fail(
+                "O código do lote é obrigatório."
+            )
+
+        if (
+            isinstance(
+                quantity,
+                bool,
+            )
+            or not isinstance(
+                quantity,
+                int,
+            )
+        ):
+            return Result.fail(
+                "Quantidade inválida."
+            )
+
+        if quantity <= 0:
+            return Result.fail(
+                "Quantidade deve ser maior que zero."
+            )
+
+        product = self.repository.get_by_id(
+            normalized_product_id
+        )
+
+        if not product:
+            self._log_warn(
+                "Confirmação de Abastecimento Bloqueada: "
+                f"SKU [{normalized_product_id}] não encontrado. "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                "Produto não encontrado."
+            )
+
+        batch = product.batches.get(
+            normalized_batch_code
+        )
+
+        if not batch:
+            self._log_warn(
+                "Confirmação de Abastecimento Bloqueada: "
+                f"SKU [{normalized_product_id}] | "
+                f"Lote [{normalized_batch_code}] não encontrado. "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                "Lote não encontrado."
+            )
+
+        location_id = str(
+            batch.location_id or ""
+        ).strip()
+
+        if not location_id:
+            self._log_warn(
+                "Confirmação de Abastecimento Bloqueada: "
+                f"SKU [{normalized_product_id}] | "
+                f"Lote [{normalized_batch_code}] sem "
+                f"endereçamento físico. "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                "Lote sem endereçamento físico para coleta."
+            )
+
+        if batch.quantity < quantity:
+            self._log_warn(
+                "Confirmação de Abastecimento Bloqueada: "
+                f"SKU [{normalized_product_id}] | "
+                f"Lote [{normalized_batch_code}] | "
+                f"Disponível [{batch.quantity}] | "
+                f"Confirmado [{quantity}]. "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                "Quantidade confirmada superior ao estoque "
+                "disponível no lote."
+            )
+
+        if product.quantity < quantity:
+            self._log_warn(
+                "Confirmação de Abastecimento Bloqueada por "
+                "inconsistência de saldo: "
+                f"SKU [{normalized_product_id}] | "
+                f"Saldo produto [{product.quantity}] | "
+                f"Confirmado [{quantity}]. "
+                f"Operador: [{op_id}]"
+            )
+
+            return Result.fail(
+                "Quantidade confirmada superior ao estoque "
+                "controlado do produto."
+            )
+
+        # ----------------------------------------------------
+        # Mutação canônica e específica do lote físico
+        # ----------------------------------------------------
+        batch.quantity -= quantity
+        product.quantity -= quantity
+
+        self.repository.save(
+            product
+        )
+
+        self.repository.log_transaction(
+            normalized_product_id,
+            (
+                "ABASTECIMENTO_LOJA "
+                f"(Lote {normalized_batch_code})"
+            ),
+            quantity,
+            op_id,
+        )
+
+        self._log_info(
+            "Abastecimento de Loja Confirmado: "
+            f"SKU [{normalized_product_id}] | "
+            f"Lote [{normalized_batch_code}] | "
+            f"Local [{location_id}] | "
+            f"Qtd Confirmada: {quantity}. "
+            f"Operador: [{op_id}]"
+        )
+
+        return Result.ok(
+            {
+                "sku": normalized_product_id,
+                "batch_code": normalized_batch_code,
+                "confirmed_quantity": quantity,
+                "remaining_batch_quantity": (
+                    batch.quantity
+                ),
+                "remaining_product_quantity": (
+                    product.quantity
+                ),
+            }
+        )
+
     def get_picking_info(
         self,
         product_id: str,

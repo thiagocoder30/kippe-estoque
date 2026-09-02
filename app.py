@@ -534,6 +534,38 @@ def replenishment_pick_plan():
     }), 400
 
 
+@app.route(
+    '/api/abastecimento/coleta/confirmar',
+    methods=['POST']
+)
+def replenishment_pick_confirm():
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    data = request.json or {}
+
+    res = (
+        container
+        .use_case
+        .confirm_replenishment_pick(
+            data.get('sku'),
+            data.get('batch_code'),
+            data.get('quantity'),
+        )
+    )
+
+    if res.is_success:
+        return jsonify(
+            res.value
+        ), 200
+
+    return jsonify({
+        'error': res.error
+    }), 400
+
+
 @app.route('/api/putaway', methods=['POST'])
 def putaway_stock():
     if not _has_valid_session():
