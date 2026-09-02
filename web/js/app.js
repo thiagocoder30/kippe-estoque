@@ -1066,6 +1066,94 @@ class KippeApplication {
     }
 
 
+    resetReceivingForm() {
+        const setValue = (id, value = '') => {
+            const element = document.getElementById(id);
+
+            if (element) {
+                element.value = value;
+            }
+        };
+
+        const setText = (id, value = '') => {
+            const element = document.getElementById(id);
+
+            if (element) {
+                element.textContent = value;
+            }
+        };
+
+        const hide = (id) => {
+            document.getElementById(id)
+                ?.classList.add('hidden');
+        };
+
+        /*
+         * Estado de negócio.
+         *
+         * Cada nova operação de recebimento deve começar sem herdar
+         * informações da operação anterior.
+         */
+        setValue('rec-ean');
+        setValue('rec-batch');
+        setValue('rec-manufacturing');
+        setValue('rec-expiration');
+        setValue('rec-supplier');
+        setValue('rec-invoice');
+        setValue('rec-qty');
+        setValue('rec-units-per-package');
+        setValue('rec-package-qty');
+
+        const origin =
+            document.getElementById('rec-origin');
+
+        if (origin) {
+            origin.value = 'MANUAL';
+        }
+
+        /*
+         * Unidade é o modo inicial canônico.
+         */
+        const unitMode =
+            document.getElementById('rec-entry-mode-unit');
+
+        const packageMode =
+            document.getElementById('rec-entry-mode-package');
+
+        if (unitMode) {
+            unitMode.checked = true;
+        }
+
+        if (packageMode) {
+            packageMode.checked = false;
+        }
+
+        /*
+         * Produto anteriormente identificado.
+         */
+        setValue('rec-product-description');
+
+        setText('receive-product-name');
+        setText('receive-product-sku');
+        setText('receive-product-ean');
+        setText('receive-product-unit');
+
+        hide('receive-product-card');
+
+        /*
+         * Feedback da operação anterior nunca pertence à próxima entrada.
+         */
+        hide('receive-success-panel');
+
+        /*
+         * Recalcula todos os estados derivados a partir do formulário
+         * agora vazio.
+         */
+        this.updateReceivingQuantityMode();
+        this.updateReceivingExpirationIntelligence();
+        this.updateReceivingSummary();
+    }
+
     bindReceivingDetailedControls() {
         const watchIds = [
             'rec-ean',
@@ -1579,6 +1667,7 @@ class KippeApplication {
         document.getElementById('close-receive-modal')?.addEventListener('click', () => modalReceive?.classList.add('hidden'));
 
         document.getElementById('btn-inbound-traditional')?.addEventListener('click', () => {
+            this.resetReceivingForm();
             methodModal?.classList.add('hidden');
             const searchInput = document.getElementById('searchInput');
             const recEan = document.getElementById('rec-ean');
