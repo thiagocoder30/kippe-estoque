@@ -36,6 +36,34 @@ class KippeApplication {
                 return;
             }
 
+            if (this.scannerTarget === 'putaway') {
+                const putawayInput =
+                    document.getElementById('put-ean');
+
+                const putawayModal =
+                    document.getElementById(
+                        'putaway-modal'
+                    );
+
+                if (putawayInput) {
+                    putawayInput.value =
+                        decodedText;
+                }
+
+                putawayModal?.classList.remove(
+                    'hidden'
+                );
+
+                this.scannerTarget =
+                    'search';
+
+                this.loadPutawayProduct(
+                    decodedText
+                );
+
+                return;
+            }
+
             if (this.scannerTarget === 'receive') {
                 const receiveInput =
                     document.getElementById('rec-ean');
@@ -1727,98 +1755,513 @@ class KippeApplication {
         const btnPutaway =
             document.getElementById('btn-module-putaway');
 
+        const errorPanel =
+            document.getElementById('putaway-error');
+
+        const clearPutawayError = () => {
+            if (!errorPanel) {
+                return;
+            }
+
+            errorPanel.textContent = '';
+            errorPanel.classList.add('hidden');
+        };
+
+        const showPutawayError = (message) => {
+            if (!errorPanel) {
+                return;
+            }
+
+            errorPanel.textContent = message;
+            errorPanel.classList.remove('hidden');
+        };
+
+        const resetPutawayIdentification = () => {
+            document.getElementById(
+                'putaway-product-panel'
+            )?.classList.add('hidden');
+
+            document.getElementById(
+                'putaway-batch-panel'
+            )?.classList.add('hidden');
+
+            const putBatch =
+                document.getElementById('put-batch');
+
+            if (putBatch) {
+                putBatch.value = '';
+            }
+        };
+
+        this.loadPutawayProduct =
+            async (identifier) => {
+                const normalized =
+                    String(identifier || '').trim();
+
+                clearPutawayError();
+                resetPutawayIdentification();
+
+                if (!normalized) {
+                    return;
+                }
+
+                try {
+                    const data =
+                        await this.api.queryProduct(
+                            normalized
+                        );
+
+                    const putEan =
+                        document.getElementById(
+                            'put-ean'
+                        );
+
+                    /*
+                     * Após identificação, normalizamos o campo
+                     * para o SKU canônico. O backend de Putaway
+                     * trabalha com product_id/SKU.
+                     */
+                    if (putEan) {
+                        putEan.value =
+                            data.id ||
+                            data.sku ||
+                            normalized;
+                    }
+
+                    const productPanel =
+                        document.getElementById(
+                            'putaway-product-panel'
+                        );
+
+                    const productName =
+                        document.getElementById(
+                            'putaway-product-name'
+                        );
+
+                    const productSku =
+                        document.getElementById(
+                            'putaway-product-sku'
+                        );
+
+                    const productEan =
+                        document.getElementById(
+                            'putaway-product-ean'
+                        );
+
+                    if (productName) {
+                        productName.textContent =
+                            data.name ||
+                            'PRODUTO SEM DESCRIÇÃO';
+                    }
+
+                    if (productSku) {
+                        productSku.textContent =
+                            data.id ||
+                            data.sku ||
+                            '—';
+                    }
+
+                    if (productEan) {
+                        productEan.textContent =
+                            data.ean ||
+                            'NÃO INFORMADO';
+                    }
+
+                    productPanel?.classList.remove(
+                        'hidden'
+                    );
+
+                    const batches =
+                        Array.isArray(data.batches)
+                            ? data.batches
+                            : [];
+
+                    /*
+                     * Um lote é pendente de Putaway quando
+                     * ainda não possui localização física.
+                     *
+                     * A ordenação por expiration_date coloca
+                     * primeiro o lote de menor validade.
+                     * Isso é prioridade operacional; ainda não
+                     * é o motor completo de separação FEFO.
+                     */
+                    const pendingBatches =
+                        batches
+                            .filter(
+                                (batch) =>
+                                    !batch.location_id
+                            )
+                            .sort(
+                                (left, right) =>
+                                    String(
+                                        left.expiration_date ||
+                                        '9999-12-31'
+                                    ).localeCompare(
+                                        String(
+                                            right.expiration_date ||
+                                            '9999-12-31'
+                                        )
+                                    )
+                            );
+
+                    if (
+                        pendingBatches.length === 0
+                    ) {
+                        showPutawayError(
+                            'Este produto não possui lote ' +
+                            'pendente de armazenagem.'
+                        );
+
+                        return;
+                    }
+
+                    const selectedBatch =
+                        pendingBatches[0];
+
+                    const putBatch =
+                        document.getElementById(
+                            'put-batch'
+                        );
+
+                    if (putBatch) {
+                        putBatch.value =
+                            selectedBatch.code || '';
+                    }
+
+                    const batchExpiration =
+                        document.getElementById(
+                            'putaway-batch-expiration'
+                        );
+
+                    const batchQuantity =
+                        document.getElementById(
+                            'putaway-batch-quantity'
+                        );
+
+                    const batchStatus =
+                        document.getElementById(
+                            'putaway-batch-status'
+                        );
+
+                    const pendingCount =
+                        document.getElementById(
+                            'putaway-pending-count'
+                        );
+
+                    if (batchExpiration) {
+                        batchExpiration.textContent =
+                            selectedBatch
+                                .expiration_date ||
+                            'N/A';
+                    }
+
+                    if (batchQuantity) {
+                        batchQuantity.textContent =
+                            `${
+                                selectedBatch.quantity ?? 0
+                            } UN`;
+                    }
+
+                    if (batchStatus) {
+                        batchStatus.textContent =
+                            selectedBatch
+                                .expiration_status ||
+                            'NORMAL';
+                    }
+
+                    if (pendingCount) {
+                        pendingCount.textContent =
+                            pendingBatches.length === 1
+                                ? '1 LOTE PENDENTE'
+                                : `${pendingBatches.length} LOTES PENDENTES`;
+                    }
+
+                    document.getElementById(
+                        'putaway-batch-panel'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+
+                } catch (error) {
+                    resetPutawayIdentification();
+
+                    showPutawayError(
+                        error.message ||
+                        'Produto não encontrado.'
+                    );
+
+                    console.error(
+                        '[PUTAWAY PRODUCT]',
+                        error
+                    );
+                }
+            };
+
         if (btnPutaway) {
-            btnPutaway.addEventListener('click', () => {
-                const searchInput =
-                    document.getElementById('searchInput');
+            btnPutaway.addEventListener(
+                'click',
+                async () => {
+                    const searchInput =
+                        document.getElementById(
+                            'searchInput'
+                        );
 
-                const putEan =
-                    document.getElementById('put-ean');
+                    const putEan =
+                        document.getElementById(
+                            'put-ean'
+                        );
 
-                const putBatch =
-                    document.getElementById('put-batch');
+                    const putLocation =
+                        document.getElementById(
+                            'put-location'
+                        );
 
-                const putLocation =
-                    document.getElementById('put-location');
-
-                if (putEan) {
-                    putEan.value =
+                    const identifier =
                         searchInput
                             ? searchInput.value.trim()
                             : '';
-                }
 
-                if (putBatch) {
-                    putBatch.value = '';
-                }
+                    if (putEan) {
+                        putEan.value =
+                            identifier;
+                    }
 
-                if (putLocation) {
-                    putLocation.value = '';
-                }
+                    if (putLocation) {
+                        putLocation.value = '';
+                    }
 
-                modalPutaway?.classList.remove('hidden');
-            });
+                    clearPutawayError();
+                    resetPutawayIdentification();
+
+                    modalPutaway?.classList.remove(
+                        'hidden'
+                    );
+
+                    if (identifier) {
+                        await this.loadPutawayProduct(
+                            identifier
+                        );
+                    }
+                }
+            );
         }
 
         document.getElementById(
             'close-putaway-modal'
-        )?.addEventListener('click', () => {
-            modalPutaway?.classList.add('hidden');
-        });
+        )?.addEventListener(
+            'click',
+            () => {
+                modalPutaway?.classList.add(
+                    'hidden'
+                );
+            }
+        );
+
+        document.getElementById(
+            'put-ean'
+        )?.addEventListener(
+            'change',
+            async (event) => {
+                await this.loadPutawayProduct(
+                    event.target.value
+                );
+            }
+        );
+
+        document.getElementById(
+            'btn-putaway-scanner'
+        )?.addEventListener(
+            'click',
+            async () => {
+                clearPutawayError();
+
+                this.scannerTarget =
+                    'putaway';
+
+                modalPutaway?.classList.add(
+                    'hidden'
+                );
+
+                try {
+                    await this.scanner.start();
+
+                    /*
+                     * ScannerManager absorve internamente
+                     * falhas de inicialização. Por isso,
+                     * confirmamos explicitamente SCANNING.
+                     */
+                    if (
+                        this.scanner.status !==
+                        'SCANNING'
+                    ) {
+                        this.scannerTarget =
+                            'search';
+
+                        modalPutaway?.classList.remove(
+                            'hidden'
+                        );
+
+                        showPutawayError(
+                            'Não foi possível abrir o scanner.'
+                        );
+
+                        return;
+                    }
+
+                } catch (error) {
+                    this.scannerTarget =
+                        'search';
+
+                    modalPutaway?.classList.remove(
+                        'hidden'
+                    );
+
+                    showPutawayError(
+                        'Não foi possível abrir o scanner.'
+                    );
+
+                    console.error(
+                        '[PUTAWAY SCANNER]',
+                        error
+                    );
+                }
+            }
+        );
+
+        document.getElementById(
+            'btn-putaway-success-continue'
+        )?.addEventListener(
+            'click',
+            () => {
+                document.getElementById(
+                    'putaway-success-modal'
+                )?.classList.add(
+                    'hidden'
+                );
+            }
+        );
 
         document.getElementById(
             'submit-putaway'
-        )?.addEventListener('click', async () => {
-            const sku =
-                document.getElementById('put-ean')?.value.trim();
+        )?.addEventListener(
+            'click',
+            async () => {
+                const sku =
+                    document.getElementById(
+                        'put-ean'
+                    )?.value.trim();
 
-            const batchCode =
-                document.getElementById('put-batch')?.value.trim();
+                const batchCode =
+                    document.getElementById(
+                        'put-batch'
+                    )?.value.trim();
 
-            const locationId =
-                document.getElementById('put-location')?.value.trim();
+                const locationId =
+                    document.getElementById(
+                        'put-location'
+                    )?.value.trim();
 
-            if (
-                !sku ||
-                !batchCode ||
-                !locationId
-            ) {
-                alert(
-                    'Preencha EAN/SKU, lote e localização.'
+                clearPutawayError();
+
+                if (
+                    !sku ||
+                    !batchCode ||
+                    !locationId
+                ) {
+                    showPutawayError(
+                        'Informe o produto, o lote e ' +
+                        'selecione a localização.'
+                    );
+
+                    return;
+                }
+
+                document.getElementById(
+                    'loader'
+                )?.classList.remove(
+                    'hidden'
                 );
-                return;
+
+                try {
+                    await this.api.registerPutaway({
+                        sku: sku,
+                        batch_code: batchCode,
+                        location_id: locationId,
+                    });
+
+                    document.getElementById(
+                        'loader'
+                    )?.classList.add(
+                        'hidden'
+                    );
+
+                    modalPutaway?.classList.add(
+                        'hidden'
+                    );
+
+                    const successModal =
+                        document.getElementById(
+                            'putaway-success-modal'
+                        );
+
+                    const successProduct =
+                        document.getElementById(
+                            'putaway-success-product'
+                        );
+
+                    const successBatch =
+                        document.getElementById(
+                            'putaway-success-batch'
+                        );
+
+                    const successLocation =
+                        document.getElementById(
+                            'putaway-success-location'
+                        );
+
+                    const identifiedProduct =
+                        document.getElementById(
+                            'putaway-product-name'
+                        )?.textContent?.trim();
+
+                    if (successProduct) {
+                        successProduct.textContent =
+                            identifiedProduct ||
+                            sku;
+                    }
+
+                    if (successBatch) {
+                        successBatch.textContent =
+                            batchCode;
+                    }
+
+                    if (successLocation) {
+                        successLocation.textContent =
+                            locationId;
+                    }
+
+                    successModal?.classList.remove(
+                        'hidden'
+                    );
+
+                    this.fetchAndRenderSku(
+                        sku
+                    );
+
+                } catch (error) {
+                    document.getElementById(
+                        'loader'
+                    )?.classList.add(
+                        'hidden'
+                    );
+
+                    showPutawayError(
+                        error.message ||
+                        'Falha no Putaway.'
+                    );
+                }
             }
-
-            document.getElementById('loader')?.classList.remove('hidden');
-
-            try {
-                await this.api.registerPutaway({
-                    sku: sku,
-                    batch_code: batchCode,
-                    location_id: locationId,
-                });
-
-                document.getElementById('loader')?.classList.add('hidden');
-
-                modalPutaway?.classList.add('hidden');
-
-                alert(
-                    '✅ LOTE ENDEREÇADO.\n\n' +
-                    `Produto: ${sku}\n` +
-                    `Lote: ${batchCode}\n` +
-                    `Local: ${locationId}`
-                );
-
-                this.fetchAndRenderSku(sku);
-            } catch (error) {
-                document.getElementById('loader')?.classList.add('hidden');
-
-                alert(
-                    'Erro ao armazenar: ' +
-                    (error.message || 'Falha no Putaway.')
-                );
-            }
-        });
+        );
     }
 
     bindReportsModule() {
@@ -1919,6 +2362,22 @@ class KippeApplication {
                 ) {
                     document.getElementById(
                         'new-product-modal'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+
+                    this.scannerTarget =
+                        'search';
+
+                    return;
+                }
+
+                if (
+                    this.scannerTarget ===
+                    'putaway'
+                ) {
+                    document.getElementById(
+                        'putaway-modal'
                     )?.classList.remove(
                         'hidden'
                     );

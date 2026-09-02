@@ -1094,9 +1094,143 @@ if ('serviceWorker' in navigator) {
             </div>
             <div class="p-5 space-y-3">
                 <div>
-                    <label class="text-[10px] font-bold text-gray-500 uppercase">EAN / SKU DO PRODUTO</label>
-                    <input type="text" id="put-ean" class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1">
+                    <label
+                        class="text-[10px] font-bold text-gray-500 uppercase"
+                    >
+                        EAN / SKU DO PRODUTO
+                    </label>
+
+                    <div class="flex gap-2 mt-1">
+                        <input
+                            type="text"
+                            id="put-ean"
+                            class="flex-1 min-w-0 border rounded p-2 text-sm font-mono font-bold uppercase"
+                            placeholder="BIPAR OU INFORMAR..."
+                        >
+
+                        <button
+                            id="btn-putaway-scanner"
+                            type="button"
+                            class="shrink-0 bg-[#124191] text-white px-3 rounded-lg text-[10px] font-black active:scale-95 shadow-sm"
+                        >
+                            BIPAR
+                        </button>
+                    </div>
                 </div>
+
+                <div
+                    id="putaway-error"
+                    class="hidden bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-[10px] font-bold"
+                ></div>
+
+                <section
+                    id="putaway-product-panel"
+                    class="hidden bg-blue-50 border border-blue-200 rounded-xl p-3"
+                >
+                    <p class="text-[8px] font-black text-[#124191] tracking-widest">
+                        PRODUTO IDENTIFICADO
+                    </p>
+
+                    <p
+                        id="putaway-product-name"
+                        class="text-sm font-black text-gray-800 mt-1"
+                    >
+                        —
+                    </p>
+
+                    <div class="grid grid-cols-2 gap-2 mt-3 text-[9px]">
+                        <div>
+                            <p class="text-gray-400 font-bold">
+                                SKU
+                            </p>
+
+                            <p
+                                id="putaway-product-sku"
+                                class="font-mono font-black text-gray-800"
+                            >
+                                —
+                            </p>
+                        </div>
+
+                        <div>
+                            <p class="text-gray-400 font-bold">
+                                EAN
+                            </p>
+
+                            <p
+                                id="putaway-product-ean"
+                                class="font-mono font-black text-gray-800 break-all"
+                            >
+                                —
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    id="putaway-batch-panel"
+                    class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3"
+                >
+                    <div class="flex justify-between items-start gap-2">
+                        <div>
+                            <p class="text-[8px] font-black text-amber-700 tracking-widest">
+                                LOTE PRIORITÁRIO PENDENTE
+                            </p>
+
+                            <p class="text-[9px] text-amber-700 mt-1">
+                                Menor validade entre os lotes ainda não endereçados.
+                            </p>
+                        </div>
+
+                        <span
+                            id="putaway-pending-count"
+                            class="shrink-0 bg-white border border-amber-200 rounded px-2 py-1 text-[8px] font-black text-amber-800"
+                        >
+                            —
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 mt-3 text-[9px]">
+                        <div>
+                            <p class="text-gray-500 font-bold">
+                                VALIDADE
+                            </p>
+
+                            <p
+                                id="putaway-batch-expiration"
+                                class="font-black text-gray-800"
+                            >
+                                —
+                            </p>
+                        </div>
+
+                        <div>
+                            <p class="text-gray-500 font-bold">
+                                QUANTIDADE
+                            </p>
+
+                            <p
+                                id="putaway-batch-quantity"
+                                class="font-black text-gray-800"
+                            >
+                                —
+                            </p>
+                        </div>
+
+                        <div>
+                            <p class="text-gray-500 font-bold">
+                                STATUS
+                            </p>
+
+                            <p
+                                id="putaway-batch-status"
+                                class="font-black text-amber-800"
+                            >
+                                —
+                            </p>
+                        </div>
+                    </div>
+                </section>
                 <div>
                     <label class="text-[10px] font-bold text-gray-500 uppercase">TOPOLOGIA DO ESTOQUE</label>
                     <select id="put-location" class="w-full border border-gray-200 rounded-lg p-2.5 text-sm font-black text-[#1a56b6] uppercase mt-1 bg-gray-50 outline-none shadow-inner">
@@ -1154,9 +1288,105 @@ if ('serviceWorker' in navigator) {
                 </div>
                 <div>
                     <label class="text-[10px] font-bold text-gray-500 uppercase">LOTE</label>
-                    <input type="text" id="put-batch" class="w-full border rounded p-2 text-sm font-mono font-bold uppercase mt-1" placeholder="EX: L001">
+                    <input
+                        type="text"
+                        id="put-batch"
+                        readonly
+                        class="w-full border border-gray-200 rounded p-2 text-sm font-mono font-bold uppercase mt-1 bg-gray-50 text-gray-700"
+                        placeholder="IDENTIFIQUE O PRODUTO..."
+                    >
                 </div>
                 <button id="submit-putaway" class="w-full bg-[#1a56b6] text-white font-black p-3 rounded-lg mt-2 active:scale-95 shadow-md">CONFIRMAR LOCAL</button>
+            </div>
+        </div>
+    </div>
+
+    <div
+        id="putaway-success-modal"
+        class="hidden fixed inset-0 bg-black/60 z-[260] flex items-center justify-center p-5"
+    >
+        <div
+            class="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+        >
+            <div
+                class="bg-[#124191] px-6 py-5 text-white"
+            >
+                <p
+                    class="text-[10px] font-black tracking-[0.18em] uppercase opacity-80"
+                >
+                    ENDEREÇAMENTO
+                </p>
+
+                <h2
+                    class="text-xl font-black mt-1"
+                >
+                    ✓ LOTE ENDEREÇADO
+                </h2>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <div>
+                    <p
+                        class="text-[9px] font-black text-gray-400 uppercase tracking-widest"
+                    >
+                        PRODUTO
+                    </p>
+
+                    <p
+                        id="putaway-success-product"
+                        class="text-base font-black text-gray-800 mt-1"
+                    >
+                        —
+                    </p>
+                </div>
+
+                <div
+                    class="grid grid-cols-2 gap-4 bg-gray-50 rounded-2xl p-4"
+                >
+                    <div>
+                        <p
+                            class="text-[9px] font-black text-gray-400 uppercase tracking-widest"
+                        >
+                            LOTE
+                        </p>
+
+                        <p
+                            id="putaway-success-batch"
+                            class="text-sm font-mono font-black text-gray-800 mt-1"
+                        >
+                            —
+                        </p>
+                    </div>
+
+                    <div>
+                        <p
+                            class="text-[9px] font-black text-gray-400 uppercase tracking-widest"
+                        >
+                            LOCAL
+                        </p>
+
+                        <p
+                            id="putaway-success-location"
+                            class="text-sm font-mono font-black text-[#124191] mt-1"
+                        >
+                            —
+                        </p>
+                    </div>
+                </div>
+
+                <p
+                    class="text-xs text-gray-500 text-center font-medium"
+                >
+                    Endereçamento registrado com sucesso.
+                </p>
+
+                <button
+                    id="btn-putaway-success-continue"
+                    type="button"
+                    class="w-full bg-[#124191] text-white rounded-xl py-4 text-sm font-black active:scale-95 shadow-md"
+                >
+                    CONTINUAR
+                </button>
             </div>
         </div>
     </div>
