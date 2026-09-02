@@ -752,6 +752,36 @@ class KippeApplication {
     }
 
 
+    formatDateBR(value, fallback = 'N/A') {
+        const normalized =
+            String(value ?? '').trim();
+
+        if (!normalized) {
+            return fallback;
+        }
+
+        /*
+         * Datas operacionais continuam canonicamente em ISO
+         * YYYY-MM-DD no domínio, API, persistência e ordenação.
+         *
+         * Esta conversão existe somente para apresentação.
+         * Não usamos Date() para evitar qualquer interferência
+         * de timezone em datas civis.
+         */
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+            return normalized;
+        }
+
+        const [
+            year,
+            month,
+            day,
+        ] = normalized.split('-');
+
+        return `${day}/${month}/${year}`;
+    }
+
+
     updateReceivingExpirationIntelligence() {
         const expirationInput =
             document.getElementById(
@@ -1024,7 +1054,10 @@ class KippeApplication {
 
         setText(
             'receive-summary-expiration',
-            expiration
+            this.formatDateBR(
+                expiration,
+                '—'
+            )
         );
 
         setText(
@@ -2039,9 +2072,10 @@ class KippeApplication {
 
                     if (batchExpiration) {
                         batchExpiration.textContent =
-                            selectedBatch
-                                .expiration_date ||
-                            'N/A';
+                            this.formatDateBR(
+                                selectedBatch.expiration_date,
+                                'N/A'
+                            );
                     }
 
                     if (batchQuantity) {
@@ -2404,7 +2438,7 @@ class KippeApplication {
                                 </p>
 
                                 <p class="text-[9px] text-gray-500 font-bold uppercase mt-0.5">
-                                    VALIDADE: ${item.expiration || 'N/A'}
+                                    VALIDADE: ${this.formatDateBR(item.expiration, 'N/A')}
                                 </p>
 
                                 <p class="text-[9px] text-gray-500 font-bold uppercase mt-0.5">
@@ -2649,7 +2683,7 @@ class KippeApplication {
                                     </p>
 
                                     <p class="font-black text-gray-800">
-                                        ${batch.expiration_date || 'N/A'}
+                                        ${this.formatDateBR(batch.expiration_date, 'N/A')}
                                     </p>
                                 </div>
 
