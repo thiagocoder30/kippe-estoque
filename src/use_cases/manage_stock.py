@@ -812,6 +812,100 @@ class ManageStockUseCase:
             }
         )
 
+    def plan_replenishment_pick(
+        self,
+        items,
+    ) -> Result[Dict[str, Any], str]:
+        """
+        Converte o plano FEFO de abastecimento em uma rota
+        operacional de coleta.
+
+        Responsabilidades:
+        - reutilizar integralmente a resolução FEFO;
+        - exigir endereço físico para todo lote alocado;
+        - ordenar os passos por location_id;
+        - preservar lote, validade e quantidade FEFO;
+        - não alterar nem persistir estoque.
+        """
+        replenishment_plan = (
+            self.plan_replenishment(
+                items
+            )
+        )
+
+        if not replenishment_plan.is_success:
+            return Result.fail(
+                replenishment_plan.error
+            )
+
+        steps = []
+
+        for item in (
+            replenishment_plan
+            .value["items"]
+        ):
+            for allocation in (
+                item["allocations"]
+            ):
+                location_id = str(
+                    allocation.get(
+                        "location_id",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                if not location_id:
+                    return Result.fail(
+                        "Lote FEFO sem endereçamento "
+                        "físico para coleta."
+                    )
+
+                steps.append(
+                    {
+                        "location_id": (
+                            location_id
+                        ),
+                        "sku": item["sku"],
+                        "name": item["name"],
+                        "batch_code": (
+                            allocation[
+                                "batch_code"
+                            ]
+                        ),
+                        "expiration_date": (
+                            allocation[
+                                "expiration_date"
+                            ]
+                        ),
+                        "quantity": (
+                            allocation[
+                                "quantity"
+                            ]
+                        ),
+                    }
+                )
+
+        steps.sort(
+            key=lambda step: (
+                step["location_id"],
+                step["sku"],
+                step["batch_code"],
+            )
+        )
+
+        for index, step in enumerate(
+            steps,
+            start=1,
+        ):
+            step["sequence"] = index
+
+        return Result.ok(
+            {
+                "steps": steps
+            }
+        )
+
     def get_picking_info(
         self,
         product_id: str,
