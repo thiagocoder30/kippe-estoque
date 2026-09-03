@@ -181,6 +181,29 @@ class SQLiteProductRepository:
 
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS operational_audit_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    product_id TEXT NOT NULL,
+                    batch_code TEXT DEFAULT '',
+                    location_id TEXT DEFAULT '',
+                    quantity_planned INTEGER,
+                    quantity_actual INTEGER,
+                    quantity_before INTEGER,
+                    quantity_after INTEGER,
+                    quantity_divergence INTEGER,
+                    supplier TEXT DEFAULT '',
+                    document_id TEXT DEFAULT '',
+                    origin_document TEXT DEFAULT '',
+                    operator_id TEXT NOT NULL,
+                    occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    metadata_json TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS batches (
                     product_id TEXT NOT NULL,
                     batch_code TEXT NOT NULL,
@@ -1081,6 +1104,161 @@ class SQLiteProductRepository:
             )
 
             conn.commit()
+
+    def append_operational_audit_event(
+        self,
+        *,
+        event_type: str,
+        product_id: str,
+        batch_code: str = "",
+        location_id: str = "",
+        quantity_planned: Optional[int] = None,
+        quantity_actual: Optional[int] = None,
+        quantity_before: Optional[int] = None,
+        quantity_after: Optional[int] = None,
+        quantity_divergence: Optional[int] = None,
+        supplier: str = "",
+        document_id: str = "",
+        origin_document: str = "",
+        operator_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        """
+        Registra uma evidência documental operacional append-only.
+
+        Este método deliberadamente não altera Product, Batch,
+        saldo, reserva ou qualquer outra autoridade quantitativa.
+        """
+
+        normalized_event_type = str(
+            event_type or ""
+        ).strip()
+
+        normalized_product_id = str(
+            product_id or ""
+        ).strip()
+
+        normalized_operator_id = str(
+            operator_id or ""
+        ).strip()
+
+        if not normalized_event_type:
+            raise ValueError(
+                "event_type é obrigatório para auditoria operacional."
+            )
+
+        if not normalized_product_id:
+            raise ValueError(
+                "product_id é obrigatório para auditoria operacional."
+            )
+
+        if not normalized_operator_id:
+            raise ValueError(
+                "operator_id é obrigatório para auditoria operacional."
+            )
+
+        metadata_json = json.dumps(
+            metadata or {},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO operational_audit_events (
+                    event_type,
+                    product_id,
+                    batch_code,
+                    location_id,
+                    quantity_planned,
+                    quantity_actual,
+                    quantity_before,
+                    quantity_after,
+                    quantity_divergence,
+                    supplier,
+                    document_id,
+                    origin_document,
+                    operator_id,
+                    metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_event_type,
+                    normalized_product_id,
+                    str(batch_code or "").strip(),
+                    str(location_id or "").strip(),
+                    quantity_planned,
+                    quantity_actual,
+                    quantity_before,
+                    quantity_after,
+                    quantity_divergence,
+                    str(supplier or "").strip(),
+                    str(document_id or "").strip(),
+                    str(origin_document or "").strip(),
+                    normalized_operator_id,
+                    metadata_json,
+                ),
+            )
+
+            conn.commit()
+
+            return int(
+                cursor.lastrowid
+            )
+
+    def get_operational_audit_events_by_product(
+        self,
+        product_id: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lê somente evidências documentais de um produto.
+
+        A ordem é a ordem física de append do evento.
+        Nenhum saldo é calculado a partir desta tabela.
+        """
+
+        normalized_product_id = str(
+            product_id or ""
+        ).strip()
+
+        if not normalized_product_id:
+            return []
+
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    id,
+                    event_type,
+                    product_id,
+                    batch_code,
+                    location_id,
+                    quantity_planned,
+                    quantity_actual,
+                    quantity_before,
+                    quantity_after,
+                    quantity_divergence,
+                    supplier,
+                    document_id,
+                    origin_document,
+                    operator_id,
+                    occurred_at,
+                    metadata_json
+                FROM operational_audit_events
+                WHERE product_id = ?
+                ORDER BY id ASC
+                """,
+                (
+                    normalized_product_id,
+                ),
+            ).fetchall()
+
+            return [
+                dict(row)
+                for row in rows
+            ]
 
     def get_history(
         self,
