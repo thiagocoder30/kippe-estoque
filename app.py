@@ -639,6 +639,20 @@ def receive_stock():
         'MANUAL'
     )
 
+    operator_id = (
+        request.headers.get(
+            'X-Test-Operator-Override'
+        )
+        if (
+            container.config.ENV == 'testing'
+            and 'X-Test-Operator-Override'
+            in request.headers
+        )
+        else session.get(
+            'operator_id'
+        )
+    )
+
     res = container.receive_use_case.execute(
         identifier=product_id,
         quantity=amount,
@@ -657,6 +671,9 @@ def receive_stock():
         manufacturing_date=(
             manufacturing_date
         ),
+        invoice_id=invoice_id,
+        origin_document=origin_document,
+        operator_id=operator_id,
     )
 
     if res.is_success:

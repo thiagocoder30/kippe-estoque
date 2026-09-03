@@ -737,100 +737,110 @@ class SQLiteProductRepository:
 
             return product
 
+    def _save_product_on_connection(
+        self,
+        conn: sqlite3.Connection,
+        product: Product,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO products (
+                id,
+                name,
+                ean,
+                quantity,
+                unit_of_measure,
+                status,
+                category_id,
+                reserved_quantity,
+                allow_negative_stock
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                ean=excluded.ean,
+                quantity=excluded.quantity,
+                unit_of_measure=excluded.unit_of_measure,
+                status=excluded.status,
+                category_id=excluded.category_id,
+                reserved_quantity=
+                    excluded.reserved_quantity,
+                allow_negative_stock=
+                    excluded.allow_negative_stock
+            """,
+            (
+                product.id,
+                product.name,
+                product.ean,
+                product.quantity,
+                product.unit_of_measure,
+                product.status,
+                product.category_id,
+                product.reserved_quantity,
+                int(
+                    product.allow_negative_stock
+                ),
+            ),
+        )
+
+        conn.execute(
+            """
+            DELETE FROM batches
+            WHERE product_id = ?
+            """,
+            (
+                product.id,
+            ),
+        )
+
+        for batch in product.batches.values():
+            conn.execute(
+                """
+                INSERT INTO batches (
+                    product_id,
+                    batch_code,
+                    expiration_date,
+                    quantity,
+                    manufacturing_date,
+                    supplier,
+                    status,
+                    traceability_id,
+                    location_id,
+                    warehouse_id,
+                    cost_per_unit
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    product.id,
+                    batch.code,
+                    batch.expiration_date,
+                    batch.quantity,
+                    batch.manufacturing_date,
+                    batch.supplier,
+                    batch.status,
+                    batch.traceability_id,
+                    batch.location_id,
+                    batch.warehouse_id,
+                    float(
+                        getattr(
+                            batch,
+                            "cost_per_unit",
+                            0.0,
+                        )
+                    ),
+                ),
+            )
+
     def save(
         self,
         product: Product,
     ) -> None:
         with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO products (
-                    id,
-                    name,
-                    ean,
-                    quantity,
-                    unit_of_measure,
-                    status,
-                    category_id,
-                    reserved_quantity,
-                    allow_negative_stock
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    name=excluded.name,
-                    ean=excluded.ean,
-                    quantity=excluded.quantity,
-                    unit_of_measure=excluded.unit_of_measure,
-                    status=excluded.status,
-                    category_id=excluded.category_id,
-                    reserved_quantity=
-                        excluded.reserved_quantity,
-                    allow_negative_stock=
-                        excluded.allow_negative_stock
-                """,
-                (
-                    product.id,
-                    product.name,
-                    product.ean,
-                    product.quantity,
-                    product.unit_of_measure,
-                    product.status,
-                    product.category_id,
-                    product.reserved_quantity,
-                    int(
-                        product.allow_negative_stock
-                    ),
-                ),
+            self._save_product_on_connection(
+                conn,
+                product,
             )
-
-            conn.execute(
-                """
-                DELETE FROM batches
-                WHERE product_id = ?
-                """,
-                (
-                    product.id,
-                ),
-            )
-
-            for batch in product.batches.values():
-                conn.execute(
-                    """
-                    INSERT INTO batches (
-                        product_id,
-                        batch_code,
-                        expiration_date,
-                        quantity,
-                        manufacturing_date,
-                        supplier,
-                        status,
-                        traceability_id,
-                        location_id,
-                        warehouse_id,
-                        cost_per_unit
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        product.id,
-                        batch.code,
-                        batch.expiration_date,
-                        batch.quantity,
-                        batch.manufacturing_date,
-                        batch.supplier,
-                        batch.status,
-                        batch.traceability_id,
-                        batch.location_id,
-                        batch.warehouse_id,
-                        float(
-                            getattr(
-                                batch,
-                                "cost_per_unit",
-                                0.0,
-                            )
-                        ),
-                    ),
-                )
 
             conn.commit()
 
@@ -1105,8 +1115,9 @@ class SQLiteProductRepository:
 
             conn.commit()
 
-    def append_operational_audit_event(
+    def _append_operational_audit_event_on_connection(
         self,
+        conn: sqlite3.Connection,
         *,
         event_type: str,
         product_id: str,
@@ -1123,13 +1134,6 @@ class SQLiteProductRepository:
         operator_id: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> int:
-        """
-        Registra uma evidência documental operacional append-only.
-
-        Este método deliberadamente não altera Product, Batch,
-        saldo, reserva ou qualquer outra autoridade quantitativa.
-        """
-
         normalized_event_type = str(
             event_type or ""
         ).strip()
@@ -1163,50 +1167,161 @@ class SQLiteProductRepository:
             sort_keys=True,
         )
 
+        cursor = conn.execute(
+            """
+            INSERT INTO operational_audit_events (
+                event_type,
+                product_id,
+                batch_code,
+                location_id,
+                quantity_planned,
+                quantity_actual,
+                quantity_before,
+                quantity_after,
+                quantity_divergence,
+                supplier,
+                document_id,
+                origin_document,
+                operator_id,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalized_event_type,
+                normalized_product_id,
+                str(batch_code or "").strip(),
+                str(location_id or "").strip(),
+                quantity_planned,
+                quantity_actual,
+                quantity_before,
+                quantity_after,
+                quantity_divergence,
+                str(supplier or "").strip(),
+                str(document_id or "").strip(),
+                str(origin_document or "").strip(),
+                normalized_operator_id,
+                metadata_json,
+            ),
+        )
+
+        return int(
+            cursor.lastrowid
+        )
+
+    def append_operational_audit_event(
+        self,
+        *,
+        event_type: str,
+        product_id: str,
+        batch_code: str = "",
+        location_id: str = "",
+        quantity_planned: Optional[int] = None,
+        quantity_actual: Optional[int] = None,
+        quantity_before: Optional[int] = None,
+        quantity_after: Optional[int] = None,
+        quantity_divergence: Optional[int] = None,
+        supplier: str = "",
+        document_id: str = "",
+        origin_document: str = "",
+        operator_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        """
+        Registra evidência documental sem alterar
+        qualquer autoridade quantitativa.
+        """
+
         with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO operational_audit_events (
-                    event_type,
-                    product_id,
-                    batch_code,
-                    location_id,
-                    quantity_planned,
-                    quantity_actual,
-                    quantity_before,
-                    quantity_after,
-                    quantity_divergence,
-                    supplier,
-                    document_id,
-                    origin_document,
-                    operator_id,
-                    metadata_json
+            event_id = (
+                self._append_operational_audit_event_on_connection(
+                    conn,
+                    event_type=event_type,
+                    product_id=product_id,
+                    batch_code=batch_code,
+                    location_id=location_id,
+                    quantity_planned=quantity_planned,
+                    quantity_actual=quantity_actual,
+                    quantity_before=quantity_before,
+                    quantity_after=quantity_after,
+                    quantity_divergence=quantity_divergence,
+                    supplier=supplier,
+                    document_id=document_id,
+                    origin_document=origin_document,
+                    operator_id=operator_id,
+                    metadata=metadata,
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    normalized_event_type,
-                    normalized_product_id,
-                    str(batch_code or "").strip(),
-                    str(location_id or "").strip(),
-                    quantity_planned,
-                    quantity_actual,
-                    quantity_before,
-                    quantity_after,
-                    quantity_divergence,
-                    str(supplier or "").strip(),
-                    str(document_id or "").strip(),
-                    str(origin_document or "").strip(),
-                    normalized_operator_id,
-                    metadata_json,
-                ),
             )
 
             conn.commit()
 
-            return int(
-                cursor.lastrowid
-            )
+            return event_id
+
+    def save_product_with_operational_audit(
+        self,
+        product: Product,
+        *,
+        event_type: str,
+        product_id: str,
+        batch_code: str = "",
+        location_id: str = "",
+        quantity_planned: Optional[int] = None,
+        quantity_actual: Optional[int] = None,
+        quantity_before: Optional[int] = None,
+        quantity_after: Optional[int] = None,
+        quantity_divergence: Optional[int] = None,
+        supplier: str = "",
+        document_id: str = "",
+        origin_document: str = "",
+        operator_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        """
+        Persiste Product/Batch e sua evidência documental
+        na mesma transação SQLite.
+
+        Product/Batch continua sendo a autoridade quantitativa.
+        O evento é somente evidência documental append-only.
+        """
+
+        with self._get_connection() as conn:
+            try:
+                conn.execute(
+                    "BEGIN IMMEDIATE"
+                )
+
+                self._save_product_on_connection(
+                    conn,
+                    product,
+                )
+
+                event_id = (
+                    self._append_operational_audit_event_on_connection(
+                        conn,
+                        event_type=event_type,
+                        product_id=product_id,
+                        batch_code=batch_code,
+                        location_id=location_id,
+                        quantity_planned=quantity_planned,
+                        quantity_actual=quantity_actual,
+                        quantity_before=quantity_before,
+                        quantity_after=quantity_after,
+                        quantity_divergence=quantity_divergence,
+                        supplier=supplier,
+                        document_id=document_id,
+                        origin_document=origin_document,
+                        operator_id=operator_id,
+                        metadata=metadata,
+                    )
+                )
+
+                conn.commit()
+
+                return event_id
+
+            except Exception:
+                conn.rollback()
+                raise
 
     def get_operational_audit_events_by_product(
         self,
