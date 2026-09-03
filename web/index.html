@@ -158,13 +158,28 @@ if ('serviceWorker' in navigator) {
                     <div class="bg-[#124191] text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg></div>
                     <h3 class="font-black text-[#124191] text-[11px] text-center">2. ARMAZENAR</h3>
                 </button>
+
+                <button
+                    id="btn-module-replenishment"
+                    type="button"
+                    class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col items-center justify-center active:scale-95"
+                >
+                    <div class="bg-[#124191] text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16v14H4zM8 3h8v3H8zM8 10h8M8 14h8"></path>
+                        </svg>
+                    </div>
+                    <h3 class="font-black text-[#124191] text-[11px] text-center">
+                        3. ABASTECER
+                    </h3>
+                </button>
                 <button id="btn-module-scan" class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col items-center justify-center active:scale-95">
                     <div class="bg-[#124191] text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg></div>
-                    <h3 class="font-black text-[#124191] text-[11px] text-center">3. CONSULTA</h3>
+                    <h3 class="font-black text-[#124191] text-[11px] text-center">4. CONSULTA</h3>
                 </button>
                 <button class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col items-center justify-center active:scale-95" id="btn-module-reports">
                     <div class="bg-[#124191] text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div>
-                    <h3 class="font-black text-[#124191] text-[11px] text-center">4. RELATÓRIOS</h3>
+                    <h3 class="font-black text-[#124191] text-[11px] text-center">5. RELATÓRIOS</h3>
                 </button>
             </div>
 
@@ -234,6 +249,553 @@ if ('serviceWorker' in navigator) {
             </div>
         </section>
     
+        <!-- ABASTECIMENTO DE LOJA / COLETA FEFO -->
+        <section
+            id="replenishment-view"
+            class="hidden space-y-3 pb-24"
+        >
+            <div class="flex items-center justify-between gap-3">
+                <button
+                    id="btn-back-replenishment"
+                    type="button"
+                    class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase"
+                >
+                    VOLTAR
+                </button>
+
+                <span class="text-[9px] font-black text-[#124191] bg-blue-50 border border-blue-100 px-2 py-1 rounded">
+                    FEFO
+                </span>
+            </div>
+
+            <section
+                id="replenishment-cart-view"
+                class="space-y-3"
+            >
+                <div class="bg-[#124191] text-white rounded-xl p-4 shadow-md border-l-4 border-kippe-red">
+                    <p class="text-[9px] font-black tracking-[0.18em] text-blue-200">
+                        ABASTECIMENTO • NOVA COLETA
+                    </p>
+                    <h2 class="text-lg font-black mt-1">
+                        CARRINHO DE REPOSIÇÃO
+                    </h2>
+                    <p class="text-[9px] text-blue-100 mt-1">
+                        Bipe ou informe os produtos que precisam ir para a loja.
+                    </p>
+                </div>
+
+                <section class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                    <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                        01 • PRODUTO
+                    </p>
+
+                    <div class="flex gap-2 mt-2">
+                        <input
+                            id="replenishment-product-input"
+                            type="text"
+                            autocomplete="off"
+                            class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono font-black uppercase outline-none focus:border-[#124191]"
+                            placeholder="EAN / SKU"
+                        >
+
+                        <button
+                            id="btn-replenishment-scanner"
+                            type="button"
+                            class="shrink-0 bg-[#124191] text-white px-4 rounded-lg text-[10px] font-black active:scale-95 shadow-sm"
+                        >
+                            BIPAR
+                        </button>
+                    </div>
+
+                    <div
+                        id="replenishment-error"
+                        class="hidden mt-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-[10px] font-bold"
+                    ></div>
+
+                    <div
+                        id="replenishment-unknown-product-panel"
+                        class="hidden mt-3 bg-red-50 border border-red-200 rounded-xl p-3"
+                    >
+                        <p class="text-[9px] font-black text-red-700 tracking-widest">
+                            PRODUTO NÃO CADASTRADO
+                        </p>
+
+                        <p
+                            id="replenishment-unknown-product-ean"
+                            class="text-[10px] font-mono font-black text-gray-800 mt-2 break-all"
+                        >
+                            —
+                        </p>
+
+                        <p class="text-[9px] text-red-700 mt-2">
+                            Este código não existe no catálogo KIPPE.
+                        </p>
+
+                        <button
+                            id="btn-replenishment-register-product"
+                            type="button"
+                            class="w-full mt-3 bg-[#124191] text-white rounded-lg py-2.5 text-[10px] font-black active:scale-95"
+                        >
+                            CADASTRAR PRODUTO
+                        </button>
+                    </div>
+
+                    <div
+                        id="replenishment-zero-stock-panel"
+                        class="hidden mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3"
+                    >
+                        <p class="text-[9px] font-black text-amber-800 tracking-widest">
+                            SEM ESTOQUE PARA ABASTECIMENTO
+                        </p>
+
+                        <p
+                            id="replenishment-zero-stock-product"
+                            class="text-sm font-black text-gray-900 mt-2"
+                        >
+                            —
+                        </p>
+
+                        <div class="grid grid-cols-2 gap-2 mt-2 text-[9px]">
+                            <div>
+                                <p class="text-gray-500 font-bold">SKU</p>
+                                <p
+                                    id="replenishment-zero-stock-sku"
+                                    class="font-mono font-black text-gray-800"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div>
+                                <p class="text-gray-500 font-bold">
+                                    ESTOQUE CONTROLADO
+                                </p>
+                                <p class="font-black text-amber-800">
+                                    0 UN
+                                </p>
+                            </div>
+                        </div>
+
+                        <p class="text-[9px] text-amber-800 font-bold mt-3">
+                            PODE AINDA ESTAR PRESENTE NA LOJA
+                        </p>
+
+                        <p class="text-[9px] text-amber-700 mt-1">
+                            Não há quantidade disponível no estoque controlado para coleta.
+                        </p>
+                    </div>
+
+                    <div
+                        id="replenishment-product-panel"
+                        class="hidden mt-3 bg-green-50 border border-green-200 rounded-xl p-3"
+                    >
+                        <p class="text-[8px] font-black text-green-700 tracking-widest">
+                            PRODUTO IDENTIFICADO
+                        </p>
+
+                        <p
+                            id="replenishment-product-name"
+                            class="text-sm font-black text-gray-900 mt-1"
+                        >
+                            —
+                        </p>
+
+                        <div class="grid grid-cols-2 gap-2 mt-2 text-[9px]">
+                            <div>
+                                <p class="text-gray-400 font-bold">SKU</p>
+                                <p
+                                    id="replenishment-product-sku"
+                                    class="font-mono font-black text-gray-800"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div>
+                                <p class="text-gray-400 font-bold">EAN</p>
+                                <p
+                                    id="replenishment-product-ean"
+                                    class="font-mono font-black text-gray-800 break-all"
+                                >
+                                    —
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <label
+                                for="replenishment-quantity"
+                                class="text-[9px] font-bold text-gray-500"
+                            >
+                                QUANTIDADE DESEJADA
+                            </label>
+
+                            <input
+                                id="replenishment-quantity"
+                                type="number"
+                                min="1"
+                                step="1"
+                                value="1"
+                                inputmode="numeric"
+                                class="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2.5 text-xl text-center font-black text-[#124191]"
+                            >
+                        </div>
+
+                        <button
+                            id="btn-replenishment-add"
+                            type="button"
+                            class="w-full mt-3 bg-green-600 text-white rounded-xl py-3 font-black text-xs active:scale-95 shadow-sm"
+                        >
+                            ADICIONAR AO CARRINHO
+                        </button>
+                    </div>
+                </section>
+
+                <section
+                    id="replenishment-route-error-panel"
+                    class="hidden bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm"
+                >
+                    <p class="text-[9px] font-black text-red-700 tracking-widest">
+                        COLETA NÃO PODE SER INICIADA
+                    </p>
+
+                    <p
+                        id="replenishment-route-error-product"
+                        class="text-sm font-black text-gray-900 mt-2"
+                    >
+                        —
+                    </p>
+
+                    <div class="mt-2 text-[9px]">
+                        <span class="text-gray-500 font-bold">LOTE:</span>
+                        <strong
+                            id="replenishment-route-error-batch"
+                            class="font-mono text-gray-800"
+                        >
+                            —
+                        </strong>
+                    </div>
+
+                    <p class="text-[9px] text-red-700 mt-3">
+                        O lote FEFO selecionado ainda não possui endereço físico no depósito.
+                    </p>
+
+                    <p class="text-[9px] text-red-700 font-black mt-1">
+                        Faça o endereçamento antes de iniciar a coleta.
+                    </p>
+                </section>
+
+                <section
+                    id="replenishment-cart"
+                    class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
+                >
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                                02 • CARRINHO
+                            </p>
+                            <p class="text-[9px] text-gray-500 mt-0.5">
+                                Intenção de abastecimento. Ainda não altera estoque.
+                            </p>
+                        </div>
+
+                        <span
+                            id="replenishment-cart-count"
+                            class="bg-gray-100 text-gray-600 text-[9px] font-black rounded-full px-2 py-1"
+                        >
+                            0 ITENS
+                        </span>
+                    </div>
+
+                    <div
+                        id="replenishment-cart-empty"
+                        class="py-6 text-center text-[10px] font-bold text-gray-400"
+                    >
+                        CARRINHO VAZIO
+                    </div>
+
+                    <div
+                        id="replenishment-cart-items"
+                        class="hidden mt-3 space-y-2"
+                    ></div>
+
+                    <button
+                        id="btn-replenishment-start-pick"
+                        type="button"
+                        disabled
+                        class="w-full mt-3 bg-gray-300 text-gray-500 rounded-xl py-3.5 font-black text-xs cursor-not-allowed"
+                    >
+                        INICIAR COLETA
+                    </button>
+                </section>
+            </section>
+
+            <section
+                id="replenishment-pick-view"
+                class="hidden space-y-3"
+            >
+                <div class="bg-[#124191] text-white rounded-xl p-4 shadow-md">
+                    <div class="flex justify-between items-start gap-3">
+                        <div>
+                            <p class="text-[9px] font-black tracking-[0.18em] text-blue-200">
+                                ROTA DE COLETA
+                            </p>
+                            <h2 class="text-lg font-black mt-1">
+                                COLETA FÍSICA
+                            </h2>
+                        </div>
+
+                        <span
+                            id="replenishment-pick-progress"
+                            class="bg-white text-[#124191] rounded-lg px-3 py-1.5 text-[10px] font-black"
+                        >
+                            0 / 0
+                        </span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div class="bg-amber-50 border-b border-amber-200 p-4 text-center">
+                        <p class="text-[9px] font-black text-amber-700 tracking-widest">
+                            IR PARA
+                        </p>
+                        <p
+                            id="replenishment-pick-location"
+                            class="text-3xl font-black text-amber-900 mt-1"
+                        >
+                            —
+                        </p>
+                    </div>
+
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <p class="text-[9px] font-black text-gray-400 tracking-widest">
+                                PRODUTO
+                            </p>
+                            <p
+                                id="replenishment-pick-product"
+                                class="text-base font-black text-gray-900 mt-1"
+                            >
+                                —
+                            </p>
+                            <p
+                                id="replenishment-pick-sku"
+                                class="text-[9px] font-mono font-black text-[#124191] mt-1"
+                            >
+                                —
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2 bg-gray-50 rounded-xl p-3">
+                            <div>
+                                <p class="text-[8px] font-black text-gray-400">
+                                    LOTE
+                                </p>
+                                <p
+                                    id="replenishment-pick-batch"
+                                    class="text-[10px] font-mono font-black text-gray-800 mt-1 break-all"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div>
+                                <p class="text-[8px] font-black text-gray-400">
+                                    VALIDADE
+                                </p>
+                                <p
+                                    id="replenishment-pick-expiration"
+                                    class="text-[10px] font-black text-gray-800 mt-1"
+                                >
+                                    —
+                                </p>
+                            </div>
+
+                            <div>
+                                <p class="text-[8px] font-black text-gray-400">
+                                    COLETAR
+                                </p>
+                                <p
+                                    id="replenishment-pick-planned-quantity"
+                                    class="text-xl font-black text-[#124191] mt-1"
+                                >
+                                    —
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label
+                                for="replenishment-pick-confirmed-quantity"
+                                class="text-[9px] font-black text-gray-500"
+                            >
+                                QUANTIDADE REALMENTE ENCONTRADA
+                            </label>
+
+                            <input
+                                id="replenishment-pick-confirmed-quantity"
+                                type="number"
+                                min="1"
+                                step="1"
+                                inputmode="numeric"
+                                class="w-full mt-1 border-2 border-[#124191] rounded-xl px-3 py-3 text-3xl text-center font-black text-[#124191]"
+                            >
+
+                            <p class="text-[8px] text-gray-400 font-bold mt-1 text-center">
+                                Confirme somente o que foi coletado fisicamente.
+                            </p>
+                        </div>
+
+                        <div
+                            id="replenishment-pick-error"
+                            class="hidden bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-[10px] font-bold"
+                        ></div>
+
+                        <button
+                            id="btn-replenishment-confirm-pick"
+                            type="button"
+                            class="w-full bg-green-600 text-white rounded-xl py-4 font-black text-sm active:scale-95 shadow-md"
+                        >
+                            CONFIRMAR COLETA
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section
+                id="replenishment-success-panel"
+                class="hidden bg-green-50 rounded-2xl border border-green-200 p-6 text-center shadow-sm"
+            >
+                <div
+                    id="replenishment-completion-normal"
+                >
+                    <div class="text-5xl text-green-600">
+                        ✓
+                    </div>
+
+                    <h2 class="text-lg font-black text-green-800 mt-2">
+                        COLETA CONCLUÍDA
+                    </h2>
+
+                    <p class="text-[10px] text-green-700 font-bold mt-2">
+                        Os passos confirmados foram baixados do estoque controlado.
+                    </p>
+
+                    <p class="text-[9px] text-gray-500 mt-2">
+                        A validade dos lotes permanece em acompanhamento.
+                    </p>
+                </div>
+
+                <div
+                    id="replenishment-completion-divergence"
+                    class="hidden text-left"
+                >
+                    <div class="text-5xl text-amber-600 text-center">
+                        !
+                    </div>
+
+                    <h2 class="text-lg font-black text-amber-800 mt-2 text-center">
+                        COLETA CONCLUÍDA COM DIVERGÊNCIA
+                    </h2>
+
+                    <div class="grid grid-cols-3 gap-2 mt-4">
+                        <div class="bg-white rounded-lg border p-2 text-center">
+                            <p class="text-[8px] font-black text-gray-500">
+                                PLANEJADO
+                            </p>
+                            <p
+                                id="replenishment-completion-planned"
+                                class="font-black text-[#124191] mt-1"
+                            >
+                                —
+                            </p>
+                        </div>
+
+                        <div class="bg-white rounded-lg border p-2 text-center">
+                            <p class="text-[8px] font-black text-gray-500">
+                                COLETADO
+                            </p>
+                            <p
+                                id="replenishment-completion-confirmed"
+                                class="font-black text-green-700 mt-1"
+                            >
+                                —
+                            </p>
+                        </div>
+
+                        <div class="bg-white rounded-lg border p-2 text-center">
+                            <p class="text-[8px] font-black text-gray-500">
+                                NÃO ENCONTRADO
+                            </p>
+                            <p
+                                id="replenishment-completion-missing"
+                                class="font-black text-red-700 mt-1"
+                            >
+                                —
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border p-3 mt-3 space-y-1">
+                        <p
+                            id="replenishment-completion-product"
+                            class="text-xs font-black text-gray-900"
+                        >
+                            —
+                        </p>
+
+                        <p class="text-[9px] text-gray-600">
+                            LOTE:
+                            <strong
+                                id="replenishment-completion-batch"
+                                class="font-mono"
+                            >
+                                —
+                            </strong>
+                        </p>
+
+                        <p class="text-[9px] text-gray-600">
+                            LOCAL:
+                            <strong
+                                id="replenishment-completion-location"
+                                class="font-mono"
+                            >
+                                —
+                            </strong>
+                        </p>
+                    </div>
+
+                    <div class="bg-amber-100 rounded-xl p-3 mt-3">
+                        <p
+                            id="replenishment-completion-deducted-text"
+                            class="text-[9px] font-black text-amber-900"
+                        >
+                            FORAM BAIXADAS DO ESTOQUE CONTROLADO.
+                        </p>
+
+                        <p
+                            id="replenishment-completion-missing-text"
+                            class="text-[9px] font-black text-red-700 mt-1"
+                        >
+                            NÃO FORAM LOCALIZADAS.
+                        </p>
+                    </div>
+
+                    <p class="text-[9px] text-gray-500 mt-3 text-center">
+                        A validade do lote permanece em acompanhamento.
+                    </p>
+                </div>
+
+                <button
+                    id="btn-replenishment-new-cart"
+                    type="button"
+                    class="w-full bg-[#124191] text-white rounded-xl py-3.5 font-black text-xs mt-5 active:scale-95 shadow-md"
+                >
+                    NOVO ABASTECIMENTO
+                </button>
+            </section>
+        </section>
+
         <!-- TELA DE RELATÓRIOS -->
         <section id="reports-view" class="hidden space-y-3 pb-24">
             <button id="btn-back-reports" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase mb-2">VOLTAR AO PAINEL</button>

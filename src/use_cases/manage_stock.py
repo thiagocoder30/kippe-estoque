@@ -857,8 +857,11 @@ class ManageStockUseCase:
 
                 if not location_id:
                     return Result.fail(
-                        "Lote FEFO sem endereçamento "
-                        "físico para coleta."
+                        "LOTE_FEFO_SEM_ENDERECAMENTO"
+                        f"|{item['sku']}"
+                        f"|{item['name']}"
+                        f"|{allocation['batch_code']}"
+                        "|Lote FEFO sem endereçamento físico para coleta."
                     )
 
                 steps.append(

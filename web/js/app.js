@@ -7,6 +7,19 @@ class KippeApplication {
 
         this.currentOperator = null;
 
+        /*
+         * REPLENISHMENT-UX-001
+         *
+         * Carrinho = intenção.
+         * Plano de coleta = recomendação.
+         * Confirmação física = mutação.
+         */
+        this.replenishmentCart = [];
+        this.replenishmentProduct = null;
+        this.replenishmentPickSteps = [];
+        this.replenishmentPickIndex = 0;
+        this.replenishmentCompletion = [];
+
         this.scannerTarget = 'search';
 
         this.scanner = new ScannerManager((decodedText) => {
@@ -32,6 +45,33 @@ class KippeApplication {
 
                 this.scannerTarget =
                     'search';
+
+                return;
+            }
+
+            if (this.scannerTarget === 'replenishment') {
+                const replenishmentInput =
+                    document.getElementById(
+                        'replenishment-product-input'
+                    );
+
+                if (replenishmentInput) {
+                    replenishmentInput.value =
+                        decodedText;
+                }
+
+                document.getElementById(
+                    'replenishment-view'
+                )?.classList.remove(
+                    'hidden'
+                );
+
+                this.scannerTarget =
+                    'search';
+
+                this.loadReplenishmentProduct(
+                    decodedText
+                );
 
                 return;
             }
@@ -106,6 +146,7 @@ class KippeApplication {
         this.bindInboundModule();
         this.bindReceivingDetailedControls();
         this.bindPutawayModule();
+        this.bindReplenishmentModule();
         this.bindScannerModule();
         this.bindReportsModule();
 
@@ -475,7 +516,12 @@ class KippeApplication {
         }
 
         const hideAllViews = () => {
-            ['home-module-view', 'dashboard-view', 'reports-view'].forEach(id => {
+            [
+                'home-module-view',
+                'dashboard-view',
+                'reports-view',
+                'replenishment-view',
+            ].forEach(id => {
                 const el = document.getElementById(id);
                 if(el) el.classList.add('hidden');
             });
@@ -488,6 +534,7 @@ class KippeApplication {
 
         document.getElementById('btn-back-dashboard')?.addEventListener('click', showHome);
         document.getElementById('btn-back-reports')?.addEventListener('click', showHome);
+        document.getElementById('btn-back-replenishment')?.addEventListener('click', showHome);
         document.getElementById('nav-home')?.addEventListener('click', showHome);
 
         document.getElementById(
@@ -1868,6 +1915,1418 @@ class KippeApplication {
                 }
             });
         }
+    }
+
+    resetReplenishmentFlow() {
+        this.replenishmentCart = [];
+        this.replenishmentProduct = null;
+        this.replenishmentPickSteps = [];
+        this.replenishmentPickIndex = 0;
+        this.replenishmentCompletion = [];
+
+        const input =
+            document.getElementById(
+                'replenishment-product-input'
+            );
+
+        const quantity =
+            document.getElementById(
+                'replenishment-quantity'
+            );
+
+        const productPanel =
+            document.getElementById(
+                'replenishment-product-panel'
+            );
+
+        const error =
+            document.getElementById(
+                'replenishment-error'
+            );
+
+        const pickError =
+            document.getElementById(
+                'replenishment-pick-error'
+            );
+
+        if (input) {
+            input.value = '';
+        }
+
+        if (quantity) {
+            quantity.value = '1';
+        }
+
+        productPanel?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-unknown-product-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-zero-stock-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-route-error-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        if (error) {
+            error.textContent = '';
+            error.classList.add(
+                'hidden'
+            );
+        }
+
+        if (pickError) {
+            pickError.textContent = '';
+            pickError.classList.add(
+                'hidden'
+            );
+        }
+
+        document.getElementById(
+            'replenishment-cart-view'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-pick-view'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-success-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        this.renderReplenishmentCart();
+    }
+
+    showReplenishmentError(
+        message
+    ) {
+        const error =
+            document.getElementById(
+                'replenishment-error'
+            );
+
+        if (!error) {
+            return;
+        }
+
+        error.textContent =
+            message || '';
+
+        error.classList.toggle(
+            'hidden',
+            !message
+        );
+    }
+
+    showReplenishmentRouteError(
+        message
+    ) {
+        const panel =
+            document.getElementById(
+                'replenishment-route-error-panel'
+            );
+
+        panel?.classList.add(
+            'hidden'
+        );
+
+        const normalized =
+            String(
+                message || ''
+            );
+
+        if (
+            !normalized.startsWith(
+                'LOTE_FEFO_SEM_ENDERECAMENTO|'
+            )
+        ) {
+            return false;
+        }
+
+        const parts =
+            normalized.split(
+                '|'
+            );
+
+        const sku =
+            parts[1] || '';
+
+        const name =
+            parts[2] || sku;
+
+        const batch =
+            parts[3] || '';
+
+        const productElement =
+            document.getElementById(
+                'replenishment-route-error-product'
+            );
+
+        const batchElement =
+            document.getElementById(
+                'replenishment-route-error-batch'
+            );
+
+        if (productElement) {
+            productElement.textContent =
+                name || sku || 'PRODUTO';
+        }
+
+        if (batchElement) {
+            batchElement.textContent =
+                batch || '—';
+        }
+
+        panel?.classList.remove(
+            'hidden'
+        );
+
+        return true;
+    }
+
+    showReplenishmentPickError(
+        message
+    ) {
+        const error =
+            document.getElementById(
+                'replenishment-pick-error'
+            );
+
+        if (!error) {
+            return;
+        }
+
+        error.textContent =
+            message || '';
+
+        error.classList.toggle(
+            'hidden',
+            !message
+        );
+    }
+
+    async loadReplenishmentProduct(
+        identifier
+    ) {
+        const normalized =
+            String(
+                identifier || ''
+            ).trim();
+
+        this.replenishmentProduct =
+            null;
+
+        this.showReplenishmentError(
+            ''
+        );
+
+        const panel =
+            document.getElementById(
+                'replenishment-product-panel'
+            );
+
+        panel?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-unknown-product-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-zero-stock-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        if (!normalized) {
+            return;
+        }
+
+        document.getElementById(
+            'loader'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        try {
+            const data =
+                await this.api.queryProduct(
+                    normalized
+                );
+
+            const sku =
+                data.id ||
+                data.sku ||
+                '';
+
+            if (!sku) {
+                throw new Error(
+                    'Produto sem SKU canônico.'
+                );
+            }
+
+            const controlledQuantity =
+                Number(data.quantity || 0);
+
+            if (
+                !Number.isFinite(controlledQuantity) ||
+                controlledQuantity <= 0
+            ) {
+                this.replenishmentProduct =
+                    null;
+
+                const zeroPanel =
+                    document.getElementById(
+                        'replenishment-zero-stock-panel'
+                    );
+
+                const zeroProduct =
+                    document.getElementById(
+                        'replenishment-zero-stock-product'
+                    );
+
+                const zeroSku =
+                    document.getElementById(
+                        'replenishment-zero-stock-sku'
+                    );
+
+                if (zeroProduct) {
+                    zeroProduct.textContent =
+                        data.name ||
+                        'PRODUTO SEM DESCRIÇÃO';
+                }
+
+                if (zeroSku) {
+                    zeroSku.textContent =
+                        sku;
+                }
+
+                zeroPanel?.classList.remove(
+                    'hidden'
+                );
+
+                return;
+            }
+
+            this.replenishmentProduct = {
+                sku: sku,
+                name:
+                    data.name ||
+                    'PRODUTO SEM DESCRIÇÃO',
+                ean:
+                    data.ean ||
+                    '',
+            };
+
+            const input =
+                document.getElementById(
+                    'replenishment-product-input'
+                );
+
+            if (input) {
+                /*
+                 * A partir daqui o estado do carrinho usa
+                 * exclusivamente o SKU canônico.
+                 */
+                input.value =
+                    sku;
+            }
+
+            const setText = (
+                id,
+                value
+            ) => {
+                const element =
+                    document.getElementById(
+                        id
+                    );
+
+                if (element) {
+                    element.textContent =
+                        value || '—';
+                }
+            };
+
+            setText(
+                'replenishment-product-name',
+                this.replenishmentProduct.name
+            );
+
+            setText(
+                'replenishment-product-sku',
+                this.replenishmentProduct.sku
+            );
+
+            setText(
+                'replenishment-product-ean',
+                this.replenishmentProduct.ean ||
+                    'NÃO INFORMADO'
+            );
+
+            panel?.classList.remove(
+                'hidden'
+            );
+
+            const quantity =
+                document.getElementById(
+                    'replenishment-quantity'
+                );
+
+            if (quantity) {
+                quantity.value = '1';
+
+                window.setTimeout(
+                    () => {
+                        quantity.focus();
+                        quantity.select();
+                    },
+                    50
+                );
+            }
+
+        } catch (error) {
+            if (
+                error.message ===
+                'PRODUTO_NAO_CADASTRADO'
+            ) {
+                this.replenishmentProduct =
+                    null;
+
+                const unknownPanel =
+                    document.getElementById(
+                        'replenishment-unknown-product-panel'
+                    );
+
+                const unknownEan =
+                    document.getElementById(
+                        'replenishment-unknown-product-ean'
+                    );
+
+                if (unknownEan) {
+                    unknownEan.textContent =
+                        normalized;
+                }
+
+                unknownPanel?.classList.remove(
+                    'hidden'
+                );
+
+                this.showReplenishmentError(
+                    ''
+                );
+
+                return;
+            }
+
+            this.showReplenishmentError(
+                error.message ||
+                'Produto não encontrado.'
+            );
+
+        } finally {
+            document.getElementById(
+                'loader'
+            )?.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    renderReplenishmentCart() {
+        const items =
+            document.getElementById(
+                'replenishment-cart-items'
+            );
+
+        const empty =
+            document.getElementById(
+                'replenishment-cart-empty'
+            );
+
+        const count =
+            document.getElementById(
+                'replenishment-cart-count'
+            );
+
+        const start =
+            document.getElementById(
+                'btn-replenishment-start-pick'
+            );
+
+        const total =
+            this.replenishmentCart.length;
+
+        if (count) {
+            count.textContent =
+                `${total} ${
+                    total === 1
+                        ? 'ITEM'
+                        : 'ITENS'
+                }`;
+        }
+
+        if (!items) {
+            return;
+        }
+
+        if (total === 0) {
+            items.innerHTML = '';
+            items.classList.add(
+                'hidden'
+            );
+
+            empty?.classList.remove(
+                'hidden'
+            );
+
+            if (start) {
+                start.disabled = true;
+                start.className =
+                    'w-full mt-3 bg-gray-300 text-gray-500 rounded-xl py-3.5 font-black text-xs cursor-not-allowed';
+            }
+
+            return;
+        }
+
+        empty?.classList.add(
+            'hidden'
+        );
+
+        items.classList.remove(
+            'hidden'
+        );
+
+        items.innerHTML =
+            '';
+
+        this.replenishmentCart.forEach(
+            (item, index) => {
+                const card =
+                    document.createElement(
+                        'div'
+                    );
+
+                card.className =
+                    'border border-gray-200 rounded-xl p-3 flex justify-between items-center gap-3';
+
+                const info =
+                    document.createElement(
+                        'div'
+                    );
+
+                info.className =
+                    'min-w-0';
+
+                const name =
+                    document.createElement(
+                        'p'
+                    );
+
+                name.className =
+                    'text-[11px] font-black text-gray-800 truncate';
+
+                name.textContent =
+                    item.name ||
+                    item.sku;
+
+                const sku =
+                    document.createElement(
+                        'p'
+                    );
+
+                sku.className =
+                    'text-[8px] font-mono font-bold text-gray-400 mt-1';
+
+                sku.textContent =
+                    item.sku;
+
+                info.appendChild(
+                    name
+                );
+
+                info.appendChild(
+                    sku
+                );
+
+                const controls =
+                    document.createElement(
+                        'div'
+                    );
+
+                controls.className =
+                    'shrink-0 flex items-center gap-2';
+
+                const quantity =
+                    document.createElement(
+                        'span'
+                    );
+
+                quantity.className =
+                    'bg-blue-50 text-[#124191] border border-blue-100 rounded-lg px-2 py-1 text-[10px] font-black';
+
+                quantity.textContent =
+                    `${item.quantity} UN`;
+
+                const remove =
+                    document.createElement(
+                        'button'
+                    );
+
+                remove.type =
+                    'button';
+
+                remove.className =
+                    'text-red-600 border border-red-200 bg-red-50 rounded-lg px-2 py-1 text-[9px] font-black';
+
+                remove.textContent =
+                    'REMOVER';
+
+                remove.addEventListener(
+                    'click',
+                    () => {
+                        this.replenishmentCart.splice(
+                            index,
+                            1
+                        );
+
+                        this.renderReplenishmentCart();
+                    }
+                );
+
+                controls.appendChild(
+                    quantity
+                );
+
+                controls.appendChild(
+                    remove
+                );
+
+                card.appendChild(
+                    info
+                );
+
+                card.appendChild(
+                    controls
+                );
+
+                items.appendChild(
+                    card
+                );
+            }
+        );
+
+        if (start) {
+            start.disabled = false;
+            start.className =
+                'w-full mt-3 bg-[#124191] text-white rounded-xl py-3.5 font-black text-xs active:scale-95 shadow-md';
+        }
+    }
+
+    async addReplenishmentProduct() {
+        const product =
+            this.replenishmentProduct;
+
+        const quantityInput =
+            document.getElementById(
+                'replenishment-quantity'
+            );
+
+        const quantity =
+            Number.parseInt(
+                quantityInput?.value,
+                10
+            );
+
+        if (!product) {
+            this.showReplenishmentError(
+                'Identifique um produto antes de adicionar.'
+            );
+
+            return;
+        }
+
+        if (
+            !Number.isInteger(quantity) ||
+            quantity <= 0
+        ) {
+            this.showReplenishmentError(
+                'Informe uma quantidade maior que zero.'
+            );
+
+            return;
+        }
+
+        const candidate =
+            this.replenishmentCart.map(
+                (item) => ({
+                    sku: item.sku,
+                    quantity: item.quantity,
+                })
+            );
+
+        candidate.push({
+            sku: product.sku,
+            quantity: quantity,
+        });
+
+        document.getElementById(
+            'loader'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        try {
+            /*
+             * O backend consolida SKUs repetidos e valida
+             * a disponibilidade FEFO. O frontend não
+             * recalcula lotes.
+             */
+            const plan =
+                await this.api.planReplenishment({
+                    items: candidate,
+                });
+
+            const plannedItems =
+                Array.isArray(
+                    plan.items
+                )
+                    ? plan.items
+                    : [];
+
+            this.replenishmentCart =
+                plannedItems.map(
+                    (item) => ({
+                        sku: item.sku,
+                        name:
+                            item.name ||
+                            item.sku,
+                        quantity:
+                            item.requested_quantity,
+                    })
+                );
+
+            this.replenishmentProduct =
+                null;
+
+            const input =
+                document.getElementById(
+                    'replenishment-product-input'
+                );
+
+            if (input) {
+                input.value = '';
+            }
+
+            if (quantityInput) {
+                quantityInput.value =
+                    '1';
+            }
+
+            document.getElementById(
+                'replenishment-product-panel'
+            )?.classList.add(
+                'hidden'
+            );
+
+            this.showReplenishmentError(
+                ''
+            );
+
+            this.renderReplenishmentCart();
+
+            input?.focus();
+
+        } catch (error) {
+            this.showReplenishmentError(
+                error.message ||
+                'Não foi possível adicionar o produto.'
+            );
+
+        } finally {
+            document.getElementById(
+                'loader'
+            )?.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    async startReplenishmentPick() {
+        if (
+            this.replenishmentCart.length ===
+            0
+        ) {
+            this.showReplenishmentError(
+                'Adicione produtos ao carrinho.'
+            );
+
+            return;
+        }
+
+        const items =
+            this.replenishmentCart.map(
+                (item) => ({
+                    sku: item.sku,
+                    quantity: item.quantity,
+                })
+            );
+
+        document.getElementById(
+            'replenishment-route-error-panel'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'loader'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        try {
+            /*
+             * FEFO + rota física pertencem ao backend.
+             * Aqui apenas conservamos a sequência recebida.
+             */
+            const plan =
+                await this.api.planReplenishmentPick({
+                    items: items,
+                });
+
+            this.replenishmentPickSteps =
+                Array.isArray(
+                    plan.steps
+                )
+                    ? plan.steps
+                    : [];
+
+            if (
+                this.replenishmentPickSteps.length ===
+                0
+            ) {
+                throw new Error(
+                    'Plano de coleta vazio.'
+                );
+            }
+
+            this.replenishmentPickIndex =
+                0;
+
+            document.getElementById(
+                'replenishment-cart-view'
+            )?.classList.add(
+                'hidden'
+            );
+
+            document.getElementById(
+                'replenishment-success-panel'
+            )?.classList.add(
+                'hidden'
+            );
+
+            document.getElementById(
+                'replenishment-pick-view'
+            )?.classList.remove(
+                'hidden'
+            );
+
+            this.renderReplenishmentPickStep();
+
+        } catch (error) {
+            const routeErrorMessage =
+                String(
+                    error.message || ''
+                );
+
+            if (
+                routeErrorMessage.startsWith(
+                    'LOTE_FEFO_SEM_ENDERECAMENTO|'
+                ) &&
+                this.showReplenishmentRouteError(
+                    routeErrorMessage
+                )
+            ) {
+                this.showReplenishmentError(
+                    ''
+                );
+
+                return;
+            }
+
+            this.showReplenishmentError(
+                error.message ||
+                'Não foi possível gerar a coleta.'
+            );
+
+        } finally {
+            document.getElementById(
+                'loader'
+            )?.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    renderReplenishmentPickStep() {
+        const step =
+            this.replenishmentPickSteps[
+                this.replenishmentPickIndex
+            ];
+
+        if (!step) {
+            this.finishReplenishmentPick();
+            return;
+        }
+
+        this.showReplenishmentPickError(
+            ''
+        );
+
+        const setText = (
+            id,
+            value
+        ) => {
+            const element =
+                document.getElementById(
+                    id
+                );
+
+            if (element) {
+                element.textContent =
+                    value ?? '—';
+            }
+        };
+
+        setText(
+            'replenishment-pick-progress',
+            `${this.replenishmentPickIndex + 1} / ${this.replenishmentPickSteps.length}`
+        );
+
+        setText(
+            'replenishment-pick-location',
+            step.location_id
+        );
+
+        setText(
+            'replenishment-pick-product',
+            step.name
+        );
+
+        setText(
+            'replenishment-pick-sku',
+            step.sku
+        );
+
+        setText(
+            'replenishment-pick-batch',
+            step.batch_code
+        );
+
+        setText(
+            'replenishment-pick-expiration',
+            this.formatDateBR(
+                step.expiration_date,
+                'N/A'
+            )
+        );
+
+        setText(
+            'replenishment-pick-planned-quantity',
+            `${step.quantity} UN`
+        );
+
+        const confirmed =
+            document.getElementById(
+                'replenishment-pick-confirmed-quantity'
+            );
+
+        if (confirmed) {
+            confirmed.value =
+                String(
+                    step.quantity
+                );
+
+            confirmed.max =
+                String(
+                    step.quantity
+                );
+
+            window.setTimeout(
+                () => {
+                    confirmed.focus();
+                    confirmed.select();
+                },
+                50
+            );
+        }
+    }
+
+    async confirmReplenishmentPickStep() {
+        const step =
+            this.replenishmentPickSteps[
+                this.replenishmentPickIndex
+            ];
+
+        if (!step) {
+            return;
+        }
+
+        const plannedQuantity =
+            Number(step.quantity);
+
+        const quantity =
+            Number.parseInt(
+                document.getElementById(
+                    'replenishment-pick-confirmed-quantity'
+                )?.value,
+                10
+            );
+
+        const actualQuantity =
+            quantity;
+
+        if (
+            !Number.isInteger(quantity) ||
+            quantity <= 0
+        ) {
+            this.showReplenishmentPickError(
+                'Informe a quantidade realmente coletada.'
+            );
+
+            return;
+        }
+
+        if (
+            quantity >
+            step.quantity
+        ) {
+            this.showReplenishmentPickError(
+                'A quantidade confirmada não pode superar a quantidade planejada.'
+            );
+
+            return;
+        }
+
+        document.getElementById(
+            'loader'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        try {
+            /*
+             * Confirma exatamente o lote físico apresentado.
+             * Não há nova resolução FEFO nesta etapa.
+             */
+            await this.api.confirmReplenishmentPick({
+                sku: step.sku,
+                batch_code:
+                    step.batch_code,
+                quantity: quantity,
+            });
+
+            const missingQuantity =
+                Math.max(
+                    0,
+                    plannedQuantity - actualQuantity
+                );
+
+            this.replenishmentCompletion.push({
+                sku: step.sku,
+                name:
+                    step.name ||
+                    step.sku,
+                batch_code:
+                    step.batch_code,
+                location_id:
+                    step.location_id ||
+                    '',
+                planned_quantity:
+                    plannedQuantity,
+                confirmed_quantity:
+                    actualQuantity,
+                missing_quantity:
+                    missingQuantity,
+                has_divergence:
+                    actualQuantity !== plannedQuantity,
+            });
+
+            this.replenishmentPickIndex +=
+                1;
+
+            if (
+                this.replenishmentPickIndex >=
+                this.replenishmentPickSteps.length
+            ) {
+                this.finishReplenishmentPick();
+                return;
+            }
+
+            this.renderReplenishmentPickStep();
+
+        } catch (error) {
+            this.showReplenishmentPickError(
+                error.message ||
+                'Não foi possível confirmar a coleta.'
+            );
+
+        } finally {
+            document.getElementById(
+                'loader'
+            )?.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    finishReplenishmentPick() {
+        document.getElementById(
+            'replenishment-pick-view'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'replenishment-cart-view'
+        )?.classList.add(
+            'hidden'
+        );
+
+        const successPanel =
+            document.getElementById(
+                'replenishment-success-panel'
+            );
+
+        const normalCompletion =
+            document.getElementById(
+                'replenishment-completion-normal'
+            );
+
+        const divergenceCompletion =
+            document.getElementById(
+                'replenishment-completion-divergence'
+            );
+
+        const divergence =
+            this.replenishmentCompletion.find(
+                (item) =>
+                    item.has_divergence
+            );
+
+        if (divergence) {
+            normalCompletion?.classList.add(
+                'hidden'
+            );
+
+            divergenceCompletion?.classList.remove(
+                'hidden'
+            );
+
+            const planned =
+                document.getElementById(
+                    'replenishment-completion-planned'
+                );
+
+            const confirmed =
+                document.getElementById(
+                    'replenishment-completion-confirmed'
+                );
+
+            const missing =
+                document.getElementById(
+                    'replenishment-completion-missing'
+                );
+
+            const product =
+                document.getElementById(
+                    'replenishment-completion-product'
+                );
+
+            const batch =
+                document.getElementById(
+                    'replenishment-completion-batch'
+                );
+
+            const location =
+                document.getElementById(
+                    'replenishment-completion-location'
+                );
+
+            const deductedText =
+                document.getElementById(
+                    'replenishment-completion-deducted-text'
+                );
+
+            const missingText =
+                document.getElementById(
+                    'replenishment-completion-missing-text'
+                );
+
+            if (planned) {
+                planned.textContent =
+                    `${divergence.planned_quantity} UN`;
+            }
+
+            if (confirmed) {
+                confirmed.textContent =
+                    `${divergence.confirmed_quantity} UN`;
+            }
+
+            if (missing) {
+                missing.textContent =
+                    `${divergence.missing_quantity} UN`;
+            }
+
+            if (product) {
+                product.textContent =
+                    divergence.name;
+            }
+
+            if (batch) {
+                batch.textContent =
+                    divergence.batch_code ||
+                    '—';
+            }
+
+            if (location) {
+                location.textContent =
+                    divergence.location_id ||
+                    '—';
+            }
+
+            if (deductedText) {
+                deductedText.textContent =
+                    `${divergence.confirmed_quantity} UN FORAM BAIXADAS DO ESTOQUE CONTROLADO.`;
+            }
+
+            if (missingText) {
+                missingText.textContent =
+                    `${divergence.missing_quantity} UN NÃO FORAM LOCALIZADAS.`;
+            }
+
+        } else {
+            divergenceCompletion?.classList.add(
+                'hidden'
+            );
+
+            normalCompletion?.classList.remove(
+                'hidden'
+            );
+        }
+
+        successPanel?.classList.remove(
+            'hidden'
+        );
+    }
+
+    bindReplenishmentModule() {
+        const moduleButton =
+            document.getElementById(
+                'btn-module-replenishment'
+            );
+
+        const view =
+            document.getElementById(
+                'replenishment-view'
+            );
+
+        const input =
+            document.getElementById(
+                'replenishment-product-input'
+            );
+
+        moduleButton?.addEventListener(
+            'click',
+            () => {
+                [
+                    'home-module-view',
+                    'dashboard-view',
+                    'reports-view',
+                ].forEach(
+                    (id) => {
+                        document.getElementById(
+                            id
+                        )?.classList.add(
+                            'hidden'
+                        );
+                    }
+                );
+
+                this.resetReplenishmentFlow();
+
+                view?.classList.remove(
+                    'hidden'
+                );
+
+                window.setTimeout(
+                    () => input?.focus(),
+                    50
+                );
+            }
+        );
+
+        document.getElementById(
+            'btn-replenishment-scanner'
+        )?.addEventListener(
+            'click',
+            async () => {
+                this.scannerTarget = 'replenishment';
+
+                view?.classList.add(
+                    'hidden'
+                );
+
+                try {
+                    await this.scanner.start();
+
+                    if (
+                        this.scanner.status !==
+                        'SCANNING'
+                    ) {
+                        this.scannerTarget =
+                            'search';
+
+                        view?.classList.remove(
+                            'hidden'
+                        );
+                    }
+
+                } catch (error) {
+                    this.scannerTarget =
+                        'search';
+
+                    view?.classList.remove(
+                        'hidden'
+                    );
+
+                    this.showReplenishmentError(
+                        error.message ||
+                        'Não foi possível abrir o scanner.'
+                    );
+                }
+            }
+        );
+
+        input?.addEventListener(
+            'change',
+            async () => {
+                await this.loadReplenishmentProduct(
+                    input.value
+                );
+            }
+        );
+
+        input?.addEventListener(
+            'keydown',
+            async (event) => {
+                if (
+                    event.key ===
+                    'Enter'
+                ) {
+                    event.preventDefault();
+
+                    await this.loadReplenishmentProduct(
+                        input.value
+                    );
+                }
+            }
+        );
+
+        document.getElementById(
+            'btn-replenishment-register-product'
+        )?.addEventListener(
+            'click',
+            async () => {
+                const identifier =
+                    document.getElementById(
+                        'replenishment-product-input'
+                    )?.value.trim() || '';
+
+                document.getElementById(
+                    'replenishment-view'
+                )?.classList.add(
+                    'hidden'
+                );
+
+                await this.openNewProductRegistration(
+                    identifier
+                );
+            }
+        );
+
+        document.getElementById(
+            'btn-replenishment-add'
+        )?.addEventListener(
+            'click',
+            async () => {
+                await this.addReplenishmentProduct();
+            }
+        );
+
+        document.getElementById(
+            'replenishment-quantity'
+        )?.addEventListener(
+            'keydown',
+            async (event) => {
+                if (
+                    event.key ===
+                    'Enter'
+                ) {
+                    event.preventDefault();
+
+                    await this.addReplenishmentProduct();
+                }
+            }
+        );
+
+        document.getElementById(
+            'btn-replenishment-start-pick'
+        )?.addEventListener(
+            'click',
+            async () => {
+                await this.startReplenishmentPick();
+            }
+        );
+
+        document.getElementById(
+            'btn-replenishment-confirm-pick'
+        )?.addEventListener(
+            'click',
+            async () => {
+                await this.confirmReplenishmentPickStep();
+            }
+        );
+
+        document.getElementById(
+            'btn-replenishment-new-cart'
+        )?.addEventListener(
+            'click',
+            () => {
+                this.resetReplenishmentFlow();
+
+                input?.focus();
+            }
+        );
     }
 
     bindPutawayModule() {

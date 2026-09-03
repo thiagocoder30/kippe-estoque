@@ -144,6 +144,39 @@ export class APIClient {
     }
 
     /**
+     * Valida e resolve o carrinho de abastecimento por FEFO.
+     * Não altera estoque.
+     */
+    async planReplenishment(payload) {
+        return this._request('/api/abastecimento/plano', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    }
+
+    /**
+     * Gera a rota física de coleta a partir do carrinho.
+     * FEFO e ordem física são decididos pelo backend.
+     */
+    async planReplenishmentPick(payload) {
+        return this._request('/api/abastecimento/coleta/plano', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    }
+
+    /**
+     * Confirma um único passo físico da coleta.
+     * Esta operação altera o estoque controlado.
+     */
+    async confirmReplenishmentPick(payload) {
+        return this._request('/api/abastecimento/coleta/confirmar', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    }
+
+    /**
      * Ajuste canônico.
      */
     async registerAdjustment(payload) {
