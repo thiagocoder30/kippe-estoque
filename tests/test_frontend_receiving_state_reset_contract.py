@@ -161,7 +161,7 @@ def test_receiving_reset_hides_previous_success():
     source = compact(reset_block())
 
     assert (
-        "hide('receive-success-panel')"
+        "hide('receive-success-modal')"
         in source
     )
 

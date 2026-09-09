@@ -36,10 +36,10 @@ def test_putaway_has_kippe_success_panel():
     assert 'id="putaway-success-location"' in html
 
 
-def test_putaway_success_panel_has_continue_action():
+def test_putaway_success_panel_has_finalize_action():
     html = _read("web/index.html")
 
-    assert 'id="btn-putaway-success-continue"' in html
+    assert 'id="btn-putaway-success-finalize"' in html
 
     assert (
         "CONTINUAR"
@@ -104,13 +104,13 @@ def test_putaway_success_closes_operational_modal():
     )
 
 
-def test_putaway_continue_closes_success_panel():
+def test_putaway_finalize_closes_success_panel():
     javascript = _compact(
         _putaway_block()
     )
 
     assert (
-        "btn-putaway-success-continue"
+        "btn-putaway-success-finalize"
         in javascript
     )
 

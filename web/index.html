@@ -954,8 +954,11 @@ if ('serviceWorker' in navigator) {
             </div>
 
             <div
-                id="new-product-success-panel"
-                class="hidden p-5"
+                id="new-product-success-modal"
+                class="hidden fixed inset-0 z-[210] bg-black/80 flex items-center justify-center p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Produto cadastrado com sucesso"
             >
                 <div class="rounded-xl bg-green-50 border border-green-200 p-4 text-center">
                     <div class="text-4xl text-green-600">
@@ -1072,6 +1075,7 @@ if ('serviceWorker' in navigator) {
                         <input
                             type="text"
                             id="rec-ean"
+                            inputmode="numeric"
                             autocomplete="off"
                             class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono font-black uppercase outline-none focus:border-[#124191]"
                             placeholder="DIGITE OU BIPAR"
@@ -1562,18 +1566,29 @@ if ('serviceWorker' in navigator) {
 
                 <!-- RESULTADO OPERACIONAL -->
                 <section
-                    id="receive-success-panel"
-                    class="hidden bg-green-50 rounded-xl border border-green-200 p-4 text-center"
+                    id="receive-success-modal"
+                    class="hidden fixed inset-0 z-[220] bg-black/80 flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Recebimento realizado com sucesso"
                 >
-                    <div class="text-3xl text-green-600">✓</div>
+                    <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        <div class="bg-green-600 text-white px-5 py-4">
+                            <p class="text-[9px] font-black tracking-[0.18em]">
+                                RECEBIMENTO
+                            </p>
 
-                    <p class="text-sm font-black text-green-800 mt-1">
-                        RECEBIMENTO REGISTRADO
-                    </p>
+                            <h2 class="text-lg font-black mt-1">
+                                ✓ RECEBIMENTO REALIZADO
+                            </h2>
+                        </div>
+
+                        <div class="p-5 text-center">
+                    <div class="text-3xl text-green-600">✓</div>
 
                     <p
                         id="receive-success-details"
-                        class="text-[10px] text-green-700 mt-2"
+                        class="text-[11px] font-black text-gray-800 mt-3"
                     >
                         —
                     </p>
@@ -1584,6 +1599,24 @@ if ('serviceWorker' in navigator) {
                     >
                         PENDENTE DE ARMAZENAGEM
                     </p>
+
+                    <button
+                        id="btn-receive-putaway-now"
+                        type="button"
+                        class="w-full bg-[#124191] text-white rounded-xl py-3.5 text-xs font-black mt-5 active:scale-95 shadow-md"
+                    >
+                        ENDEREÇAR AGORA
+                    </button>
+
+                    <button
+                        id="btn-receive-putaway-later"
+                        type="button"
+                        class="w-full bg-white border border-gray-300 text-gray-600 rounded-xl py-3 text-[10px] font-black mt-2 active:scale-95"
+                    >
+                        ENDEREÇAR DEPOIS
+                    </button>
+                        </div>
+                    </div>
                 </section>
             </div>
         </div>
@@ -1735,11 +1768,17 @@ if ('serviceWorker' in navigator) {
                 >
                     <div class="flex justify-between items-start gap-2">
                         <div>
-                            <p class="text-[8px] font-black text-amber-700 tracking-widest">
+                            <p
+                                id="putaway-batch-heading"
+                                class="text-[8px] font-black text-amber-700 tracking-widest"
+                            >
                                 LOTE PRIORITÁRIO PENDENTE
                             </p>
 
-                            <p class="text-[9px] text-amber-700 mt-1">
+                            <p
+                                id="putaway-batch-description"
+                                class="text-[9px] text-amber-700 mt-1"
+                            >
                                 Menor validade entre os lotes ainda não endereçados.
                             </p>
                         </div>
@@ -1943,11 +1982,11 @@ if ('serviceWorker' in navigator) {
                 </p>
 
                 <button
-                    id="btn-putaway-success-continue"
+                    id="btn-putaway-success-finalize"
                     type="button"
                     class="w-full bg-[#124191] text-white rounded-xl py-4 text-sm font-black active:scale-95 shadow-md"
                 >
-                    CONTINUAR
+                    FINALIZAR
                 </button>
             </div>
         </div>

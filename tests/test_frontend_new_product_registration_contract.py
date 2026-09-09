@@ -72,7 +72,7 @@ def test_new_product_registration_requires_ean_and_description_only():
 def test_new_product_success_feedback_has_canonical_fields():
     html = read_html()
 
-    assert 'id="new-product-success-panel"' in html
+    assert 'id="new-product-success-modal"' in html
     assert 'id="new-product-success-name"' in html
     assert 'id="new-product-success-sku"' in html
     assert 'id="new-product-success-ean"' in html

@@ -128,19 +128,19 @@ class ProductSearchController {
 
             item.className =
                 'p-3 active:bg-blue-50 cursor-pointer flex ' +
-                'justify-between items-center gap-3';
+                'justify-between items-start gap-3';
 
             const description = document.createElement('div');
             description.className = 'min-w-0 flex-1';
 
             const name = document.createElement('p');
             name.className =
-                'text-sm font-black text-gray-800 truncate';
+                'text-sm font-black text-gray-800 whitespace-normal break-words leading-snug';
             name.textContent = product.name || 'Produto';
 
             const ean = document.createElement('p');
             ean.className =
-                'text-[9px] text-gray-400 font-mono mt-1 truncate';
+                'text-[9px] text-gray-400 font-mono mt-1 break-all';
             ean.textContent = product.ean
                 ? `EAN: ${product.ean}`
                 : 'EAN não informado';
@@ -151,7 +151,7 @@ class ProductSearchController {
             const sku = document.createElement('span');
             sku.className =
                 'text-[9px] font-black font-mono text-[#124191] ' +
-                'bg-blue-50 px-2 py-1 rounded';
+                'bg-blue-50 px-2 py-1 rounded shrink-0 self-start';
             sku.textContent = product.id;
 
             item.appendChild(description);

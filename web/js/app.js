@@ -8,6 +8,17 @@ class KippeApplication {
         this.currentOperator = null;
 
         /*
+         * RECEIVING-UX-002
+         *
+         * Mantém somente o resultado do recebimento corrente
+         * enquanto o operador decide entre endereçar agora
+         * ou deixar o lote pendente.
+         */
+        this.lastReceivingResult = null;
+        this.assistedPutaway = false;
+        this.preferredBatchCode = null;
+
+        /*
          * REPLENISHMENT-UX-001
          *
          * Carrinho = intenção.
@@ -562,7 +573,7 @@ class KippeApplication {
 
         const successPanel =
             document.getElementById(
-                'new-product-success-panel'
+                'new-product-success-modal'
             );
 
         const errorPanel =
@@ -1147,6 +1158,8 @@ class KippeApplication {
 
 
     resetReceivingForm() {
+        this.lastReceivingResult = null;
+
         const setValue = (id, value = '') => {
             const element = document.getElementById(id);
 
@@ -1223,7 +1236,7 @@ class KippeApplication {
         /*
          * Feedback da operação anterior nunca pertence à próxima entrada.
          */
-        hide('receive-success-panel');
+        hide('receive-success-modal');
 
         /*
          * Recalcula todos os estados derivados a partir do formulário
@@ -1665,7 +1678,7 @@ class KippeApplication {
                     );
 
                     document.getElementById(
-                        'new-product-success-panel'
+                        'new-product-success-modal'
                     )?.classList.remove(
                         'hidden'
                     );
@@ -1778,6 +1791,77 @@ class KippeApplication {
             }
         });
 
+        document.getElementById(
+            'btn-receive-putaway-now'
+        )?.addEventListener(
+            'click',
+            async () => {
+                const receiving =
+                    this.lastReceivingResult;
+
+                if (
+                    !receiving ||
+                    !receiving.sku ||
+                    !receiving.batch_code
+                ) {
+                    alert(
+                        'Não foi possível identificar o lote recém-recebido.'
+                    );
+                    return;
+                }
+
+                await this.openAssistedPutaway(
+                    receiving
+                );
+            }
+        );
+
+        document.getElementById(
+            'btn-receive-putaway-later'
+        )?.addEventListener(
+            'click',
+            () => {
+                /*
+                 * O recebimento já está persistido.
+                 * Nenhuma mutação de Putaway ocorre neste caminho.
+                 */
+                modalReceive?.classList.add(
+                    'hidden'
+                );
+
+                document.getElementById(
+                    'receive-success-modal'
+                )?.classList.add(
+                    'hidden'
+                );
+
+                this.lastReceivingResult =
+                    null;
+
+                this.resetReceivingForm();
+
+                [
+                    'dashboard-view',
+                    'reports-view',
+                    'replenishment-view',
+                ].forEach(
+                    (id) => {
+                        document.getElementById(
+                            id
+                        )?.classList.add(
+                            'hidden'
+                        );
+                    }
+                );
+
+                document.getElementById(
+                    'home-module-view'
+                )?.classList.remove(
+                    'hidden'
+                );
+            }
+        );
+
         /*
          * Entrada por NF/IA reservada para implementação futura.
          *
@@ -1857,6 +1941,20 @@ class KippeApplication {
                     const receiving =
                         response.receiving;
 
+                    if (receiving) {
+                        /*
+                         * A resposta do backend é a fonte do lote
+                         * recém-recebido. Não recalculamos isso
+                         * pelo histórico nem por FEFO.
+                         */
+                        receiving.sku =
+                            receiving.sku ||
+                            sku;
+
+                        this.lastReceivingResult =
+                            receiving;
+                    }
+
                     document.getElementById(
                         'loader'
                     )?.classList.add('hidden');
@@ -1887,7 +1985,7 @@ class KippeApplication {
                         }
 
                         document.getElementById(
-                            'receive-success-panel'
+                            'receive-success-modal'
                         )?.classList.remove('hidden');
                     }
 
@@ -3329,6 +3427,84 @@ class KippeApplication {
         );
     }
 
+    /*
+     * assisted-putaway
+     *
+     * O recebimento já determinou o SKU e o lote físico.
+     * Nesta etapa o operador deve selecionar somente o endereço.
+     */
+    async openAssistedPutaway(receiving) {
+        if (
+            !receiving ||
+            !receiving.sku ||
+            !receiving.batch_code
+        ) {
+            return;
+        }
+
+        this.assistedPutaway = true;
+        this.preferredBatchCode =
+            receiving.batch_code;
+
+        document.getElementById(
+            'receive-modal'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'receive-success-modal'
+        )?.classList.add(
+            'hidden'
+        );
+
+        const modal =
+            document.getElementById(
+                'putaway-modal'
+            );
+
+        const putEan =
+            document.getElementById(
+                'put-ean'
+            );
+
+        const putLocation =
+            document.getElementById(
+                'put-location'
+            );
+
+        const scannerButton =
+            document.getElementById(
+                'btn-putaway-scanner'
+            );
+
+        if (putEan) {
+            putEan.value =
+                receiving.sku;
+
+            putEan.setAttribute('readonly', 'readonly');
+        }
+
+        if (scannerButton) {
+            scannerButton.classList.add(
+                'hidden'
+            );
+        }
+
+        if (putLocation) {
+            putLocation.value = '';
+        }
+
+        modal?.classList.remove(
+            'hidden'
+        );
+
+        await this.loadPutawayProduct(
+            receiving.sku,
+            this.preferredBatchCode
+        );
+    }
+
     bindPutawayModule() {
         const modalPutaway =
             document.getElementById('putaway-modal');
@@ -3375,7 +3551,10 @@ class KippeApplication {
         };
 
         this.loadPutawayProduct =
-            async (identifier) => {
+            async (
+                identifier,
+                preferredBatchCode = null
+            ) => {
                 const normalized =
                     String(identifier || '').trim();
 
@@ -3457,6 +3636,50 @@ class KippeApplication {
                             ? data.batches
                             : [];
 
+                    const batchHeading =
+                        document.getElementById(
+                            'putaway-batch-heading'
+                        );
+
+                    const batchDescription =
+                        document.getElementById(
+                            'putaway-batch-description'
+                        );
+
+                    /*
+                     * A semântica visual acompanha a origem
+                     * desta operação:
+                     *
+                     * - Putaway assistido:
+                     *   o lote é exatamente o que acabou de
+                     *   ser recebido.
+                     *
+                     * - Putaway manual:
+                     *   preservamos a orientação operacional
+                     *   pela menor validade pendente.
+                     */
+                    if (preferredBatchCode) {
+                        if (batchHeading) {
+                            batchHeading.textContent =
+                                'LOTE DESTE RECEBIMENTO';
+                        }
+
+                        if (batchDescription) {
+                            batchDescription.textContent =
+                                'Lote recém-recebido aguardando endereçamento.';
+                        }
+                    } else {
+                        if (batchHeading) {
+                            batchHeading.textContent =
+                                'LOTE PRIORITÁRIO PENDENTE';
+                        }
+
+                        if (batchDescription) {
+                            batchDescription.textContent =
+                                'Menor validade entre os lotes ainda não endereçados.';
+                        }
+                    }
+
                     /*
                      * Um lote é pendente de Putaway quando
                      * ainda não possui localização física.
@@ -3496,7 +3719,28 @@ class KippeApplication {
                         return;
                     }
 
+                    const preferredBatch =
+                        preferredBatchCode
+                            ? pendingBatches.find(
+                                (batch) =>
+                                    batch.code ===
+                                    preferredBatchCode
+                            )
+                            : null;
+
+                    if (
+                        preferredBatchCode &&
+                        !preferredBatch
+                    ) {
+                        showPutawayError(
+                            'O lote recém-recebido não está mais pendente de armazenagem.'
+                        );
+
+                        return;
+                    }
+
                     const selectedBatch =
+                        preferredBatch ||
                         pendingBatches[0];
 
                     const putBatch =
@@ -3583,6 +3827,30 @@ class KippeApplication {
             btnPutaway.addEventListener(
                 'click',
                 async () => {
+                    this.assistedPutaway =
+                        false;
+
+                    this.preferredBatchCode =
+                        null;
+
+                    const manualPutEan =
+                        document.getElementById(
+                            'put-ean'
+                        );
+
+                    const manualScanner =
+                        document.getElementById(
+                            'btn-putaway-scanner'
+                        );
+
+                    manualPutEan?.removeAttribute(
+                        'readonly'
+                    );
+
+                    manualScanner?.classList.remove(
+                        'hidden'
+                    );
+
                     const searchInput =
                         document.getElementById(
                             'searchInput'
@@ -3636,6 +3904,23 @@ class KippeApplication {
                 modalPutaway?.classList.add(
                     'hidden'
                 );
+
+                if (
+                    this.assistedPutaway &&
+                    this.lastReceivingResult
+                ) {
+                    document.getElementById(
+                        'receive-modal'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+
+                    document.getElementById(
+                        'receive-success-modal'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+                }
             }
         );
 
@@ -3711,13 +3996,59 @@ class KippeApplication {
         );
 
         document.getElementById(
-            'btn-putaway-success-continue'
+            'btn-putaway-success-finalize'
         )?.addEventListener(
             'click',
             () => {
                 document.getElementById(
                     'putaway-success-modal'
                 )?.classList.add(
+                    'hidden'
+                );
+
+                this.assistedPutaway =
+                    false;
+
+                this.preferredBatchCode =
+                    null;
+
+                this.lastReceivingResult =
+                    null;
+
+                const putEan =
+                    document.getElementById(
+                        'put-ean'
+                    );
+
+                putEan?.removeAttribute(
+                    'readonly'
+                );
+
+                document.getElementById(
+                    'btn-putaway-scanner'
+                )?.classList.remove(
+                    'hidden'
+                );
+
+                this.resetReceivingForm();
+
+                [
+                    'dashboard-view',
+                    'reports-view',
+                    'replenishment-view',
+                ].forEach(
+                    (id) => {
+                        document.getElementById(
+                            id
+                        )?.classList.add(
+                            'hidden'
+                        );
+                    }
+                );
+
+                document.getElementById(
+                    'home-module-view'
+                )?.classList.remove(
                     'hidden'
                 );
             }
