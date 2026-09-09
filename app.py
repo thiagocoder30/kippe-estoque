@@ -407,6 +407,72 @@ def query_product():
 
 
 @app.route(
+    '/api/products/<product_id>/history',
+    methods=['GET']
+)
+def product_operational_history(product_id):
+    if not _has_valid_session():
+        return jsonify({
+            'success': False,
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    normalized_product_id = str(
+        product_id
+    ).strip()
+
+    product = (
+        container
+        .repository
+        .get_by_id(
+            normalized_product_id
+        )
+    )
+
+    if product is None:
+        return jsonify({
+            'success': False,
+            'error': 'PRODUTO_NAO_CADASTRADO',
+            'product_id': normalized_product_id,
+        }), 404
+
+    events = (
+        container
+        .repository
+        .get_operational_audit_events_by_product(
+            normalized_product_id
+        )
+    )
+
+    events = sorted(
+        list(events or []),
+        key=lambda event: (
+            int(event.get('id') or 0)
+        ),
+    )
+
+    receiving_events = [
+        event
+        for event in events
+        if event.get('event_type')
+        == 'RECEBIMENTO'
+    ]
+
+    latest_receiving = (
+        receiving_events[-1]
+        if receiving_events
+        else None
+    )
+
+    return jsonify({
+        'success': True,
+        'product_id': normalized_product_id,
+        'latest_receiving': latest_receiving,
+        'events': events,
+    }), 200
+
+
+@app.route(
     '/api/relatorios/vencimentos',
     methods=['GET']
 )
