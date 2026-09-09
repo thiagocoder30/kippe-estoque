@@ -228,6 +228,99 @@ if ('serviceWorker' in navigator) {
                 </div>
             </div>
 
+            <div
+                id="product-audit-summary"
+                class="bg-white p-4 rounded-xl shadow-sm border border-gray-100"
+            >
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-[9px] font-black tracking-widest text-[#124191]">
+                            ÚLTIMO RECEBIMENTO
+                        </p>
+                        <p class="text-[8px] text-gray-400 font-bold mt-0.5">
+                            EVIDÊNCIA DOCUMENTAL MAIS RECENTE
+                        </p>
+                    </div>
+
+                    <span
+                        id="product-audit-summary-status"
+                        class="text-[8px] font-black bg-gray-100 text-gray-500 px-2 py-1 rounded"
+                    >
+                        CARREGANDO
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-x-3 gap-y-3 mt-4">
+                    <div>
+                        <p class="text-[8px] font-black text-gray-400 tracking-wider">
+                            DATA / HORA
+                        </p>
+                        <p
+                            id="product-audit-latest-receiving-date"
+                            class="text-[10px] font-black text-gray-800 mt-0.5 break-words"
+                        >
+                            —
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="text-[8px] font-black text-gray-400 tracking-wider">
+                            QUANTIDADE
+                        </p>
+                        <p
+                            id="product-audit-latest-receiving-quantity"
+                            class="text-[10px] font-black text-gray-800 mt-0.5"
+                        >
+                            —
+                        </p>
+                    </div>
+
+                    <div class="col-span-2">
+                        <p class="text-[8px] font-black text-gray-400 tracking-wider">
+                            FORNECEDOR
+                        </p>
+                        <p
+                            id="product-audit-latest-receiving-supplier"
+                            class="text-[10px] font-black text-gray-800 mt-0.5 break-words"
+                        >
+                            —
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="text-[8px] font-black text-gray-400 tracking-wider">
+                            NF / DOCUMENTO
+                        </p>
+                        <p
+                            id="product-audit-latest-receiving-document"
+                            class="text-[10px] font-black text-gray-800 mt-0.5 break-all"
+                        >
+                            —
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="text-[8px] font-black text-gray-400 tracking-wider">
+                            LOTE
+                        </p>
+                        <p
+                            id="product-audit-latest-receiving-batch"
+                            class="text-[10px] font-black font-mono text-gray-800 mt-0.5 break-all"
+                        >
+                            —
+                        </p>
+                    </div>
+                </div>
+
+                <button
+                    id="btn-product-audit-history"
+                    type="button"
+                    class="w-full mt-4 bg-[#124191] text-white rounded-lg px-3 py-2.5 text-[10px] font-black tracking-wider active:scale-[0.98]"
+                >
+                    VER HISTÓRICO
+                </button>
+            </div>
+
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                 <div class="flex justify-between items-center mb-3">
                     <div>
@@ -249,6 +342,65 @@ if ('serviceWorker' in navigator) {
             </div>
         </section>
     
+        <!-- HISTÓRICO OPERACIONAL DO PRODUTO -->
+        <div
+            id="product-audit-history-modal"
+            class="hidden fixed inset-0 z-[80] bg-black/50 p-3 overflow-y-auto"
+        >
+            <div class="min-h-full flex items-end sm:items-center justify-center">
+                <section
+                    class="w-full max-w-lg bg-gray-50 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="product-audit-history-title"
+                >
+                    <header class="bg-[#124191] text-white p-4 flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-[8px] font-black tracking-[0.18em] text-blue-200">
+                                RASTREABILIDADE OPERACIONAL
+                            </p>
+                            <h2
+                                id="product-audit-history-title"
+                                class="text-base font-black mt-1 break-words"
+                            >
+                                HISTÓRICO DO PRODUTO
+                            </h2>
+                        </div>
+
+                        <button
+                            id="btn-close-product-audit-history"
+                            type="button"
+                            class="shrink-0 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-[10px] font-black"
+                            aria-label="Fechar histórico"
+                        >
+                            FECHAR
+                        </button>
+                    </header>
+
+                    <div class="p-4 max-h-[75vh] overflow-y-auto">
+                        <div
+                            id="product-audit-history-error"
+                            class="hidden mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-[10px] font-bold text-red-700"
+                        ></div>
+
+                        <div
+                            id="product-audit-history-empty"
+                            class="hidden p-5 rounded-xl bg-white border border-gray-200 text-center"
+                        >
+                            <p class="text-[10px] font-black text-gray-500">
+                                AINDA NÃO HÁ HISTÓRICO DOCUMENTAL PARA ESTE PRODUTO
+                            </p>
+                        </div>
+
+                        <div
+                            id="product-audit-history-timeline"
+                            class="space-y-3"
+                        ></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
         <!-- ABASTECIMENTO DE LOJA / COLETA FEFO -->
         <section
             id="replenishment-view"

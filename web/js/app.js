@@ -4347,6 +4347,575 @@ class KippeApplication {
         }
     }
 
+    escapeProductAuditText(value, fallback = 'N/A') {
+        const normalized =
+            value === null ||
+            value === undefined ||
+            value === ''
+                ? fallback
+                : String(value);
+
+        return normalized
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    formatProductAuditDate(value) {
+        if (!value) {
+            return 'N/A';
+        }
+
+        const normalized =
+            String(value).includes('T')
+                ? String(value)
+                : String(value).replace(
+                    ' ',
+                    'T'
+                ) + 'Z';
+
+        const date =
+            new Date(normalized);
+
+        if (
+            Number.isNaN(
+                date.getTime()
+            )
+        ) {
+            return String(value);
+        }
+
+        return date.toLocaleString(
+            'pt-BR',
+            {
+                dateStyle: 'short',
+                timeStyle: 'short',
+            }
+        );
+    }
+
+    resetProductAuditSummary() {
+        const values = {
+            'product-audit-latest-receiving-date': '—',
+            'product-audit-latest-receiving-supplier': '—',
+            'product-audit-latest-receiving-document': '—',
+            'product-audit-latest-receiving-batch': '—',
+            'product-audit-latest-receiving-quantity': '—',
+        };
+
+        Object.entries(
+            values
+        ).forEach(
+            ([id, value]) => {
+                const element =
+                    document.getElementById(
+                        id
+                    );
+
+                if (element) {
+                    element.textContent =
+                        value;
+                }
+            }
+        );
+
+        const status =
+            document.getElementById(
+                'product-audit-summary-status'
+            );
+
+        if (status) {
+            status.textContent =
+                'SEM REGISTRO';
+
+            status.className =
+                'text-[8px] font-black bg-gray-100 text-gray-500 px-2 py-1 rounded';
+        }
+    }
+
+    renderLatestReceivingSummary(
+        latest_receiving
+    ) {
+        this.resetProductAuditSummary();
+
+        if (!latest_receiving) {
+            return;
+        }
+
+        const setText = (
+            id,
+            value,
+            fallback = 'N/A'
+        ) => {
+            const element =
+                document.getElementById(
+                    id
+                );
+
+            if (element) {
+                element.textContent =
+                    value === null ||
+                    value === undefined ||
+                    value === ''
+                        ? fallback
+                        : String(value);
+            }
+        };
+
+        setText(
+            'product-audit-latest-receiving-date',
+            this.formatProductAuditDate(
+                latest_receiving.occurred_at
+            )
+        );
+
+        setText(
+            'product-audit-latest-receiving-supplier',
+            latest_receiving.supplier,
+            'NÃO INFORMADO'
+        );
+
+        setText(
+            'product-audit-latest-receiving-document',
+            latest_receiving.document_id,
+            'NÃO INFORMADO'
+        );
+
+        setText(
+            'product-audit-latest-receiving-batch',
+            latest_receiving.batch_code,
+            'N/A'
+        );
+
+        setText(
+            'product-audit-latest-receiving-quantity',
+            latest_receiving.quantity_actual,
+            'N/A'
+        );
+
+        const status =
+            document.getElementById(
+                'product-audit-summary-status'
+            );
+
+        if (status) {
+            status.textContent =
+                'LOCALIZADO';
+
+            status.className =
+                'text-[8px] font-black bg-green-100 text-green-700 px-2 py-1 rounded';
+        }
+    }
+
+    async loadProductAuditHistory(
+        productId
+    ) {
+        this.currentProductAuditHistory =
+            null;
+
+        this.currentProductAuditId =
+            productId;
+
+        this.resetProductAuditSummary();
+
+        const historyButton =
+            document.getElementById(
+                'btn-product-audit-history'
+            );
+
+        if (historyButton) {
+            historyButton.onclick =
+                () => {
+                    this.openProductAuditHistory();
+                };
+        }
+
+        try {
+            const data =
+                await this.api.getProductHistory(
+                    productId
+                );
+
+            this.currentProductAuditHistory =
+                data;
+
+            this.renderLatestReceivingSummary(
+                data.latest_receiving
+            );
+        } catch (error) {
+            console.warn(
+                '[PRODUCT AUDIT] Não foi possível carregar histórico.',
+                error
+            );
+
+            this.showProductAuditHistoryError(
+                'Não foi possível carregar o histórico documental.'
+            );
+        }
+    }
+
+    showProductAuditHistoryError(
+        message
+    ) {
+        const error =
+            document.getElementById(
+                'product-audit-history-error'
+            );
+
+        if (!error) {
+            return;
+        }
+
+        error.textContent =
+            message ||
+            'Não foi possível carregar o histórico.';
+
+        error.classList.remove(
+            'hidden'
+        );
+    }
+
+    closeProductAuditHistory() {
+        const modal =
+            document.getElementById(
+                'product-audit-history-modal'
+            );
+
+        modal?.classList.add(
+            'hidden'
+        );
+    }
+
+    openProductAuditHistory() {
+        const modal =
+            document.getElementById(
+                'product-audit-history-modal'
+            );
+
+        const closeButton =
+            document.getElementById(
+                'btn-close-product-audit-history'
+            );
+
+        const title =
+            document.getElementById(
+                'product-audit-history-title'
+            );
+
+        if (closeButton) {
+            closeButton.onclick =
+                () => {
+                    this.closeProductAuditHistory();
+                };
+        }
+
+        if (title) {
+            const sku =
+                this.currentProductAuditId
+                || '';
+
+            title.textContent =
+                sku
+                    ? `HISTÓRICO • ${sku}`
+                    : 'HISTÓRICO DO PRODUTO';
+        }
+
+        modal?.classList.remove(
+            'hidden'
+        );
+
+        this.renderProductAuditHistory();
+    }
+
+    renderProductAuditHistory() {
+        const timeline =
+            document.getElementById(
+                'product-audit-history-timeline'
+            );
+
+        const empty =
+            document.getElementById(
+                'product-audit-history-empty'
+            );
+
+        const error =
+            document.getElementById(
+                'product-audit-history-error'
+            );
+
+        if (!timeline) {
+            return;
+        }
+
+        timeline.innerHTML = '';
+
+        empty?.classList.add(
+            'hidden'
+        );
+
+        error?.classList.add(
+            'hidden'
+        );
+
+        const events =
+            Array.isArray(
+                this.currentProductAuditHistory
+                    ?.events
+            )
+                ? this.currentProductAuditHistory.events
+                : [];
+
+        if (events.length === 0) {
+            empty?.classList.remove(
+                'hidden'
+            );
+
+            return;
+        }
+
+        events.forEach(
+            (event) => {
+                timeline.appendChild(
+                    this.createProductAuditEventCard(
+                        event
+                    )
+                );
+            }
+        );
+    }
+
+    createProductAuditEventCard(
+        event
+    ) {
+        const card =
+            document.createElement(
+                'article'
+            );
+
+        const eventType =
+            String(
+                event.event_type
+                || 'EVENTO'
+            );
+
+        const typeConfig = {
+            RECEBIMENTO: {
+                label: 'RECEBIMENTO',
+                badge:
+                    'bg-green-100 text-green-700 border-green-200',
+            },
+            PUTAWAY: {
+                label: 'ENDEREÇAMENTO',
+                badge:
+                    'bg-blue-100 text-blue-700 border-blue-200',
+            },
+            ABASTECIMENTO_LOJA: {
+                label: 'ABASTECIMENTO DA LOJA',
+                badge:
+                    'bg-amber-100 text-amber-800 border-amber-200',
+            },
+        };
+
+        const config =
+            typeConfig[eventType]
+            || {
+                label: eventType,
+                badge:
+                    'bg-gray-100 text-gray-700 border-gray-200',
+            };
+
+        const safe = (
+            value,
+            fallback = 'N/A'
+        ) => this.escapeProductAuditText(
+            value,
+            fallback
+        );
+
+        const date =
+            safe(
+                this.formatProductAuditDate(
+                    event.occurred_at
+                )
+            );
+
+        const common = `
+            <div class="grid grid-cols-2 gap-2 mt-3 text-[9px]">
+                <div>
+                    <p class="font-black text-gray-400">
+                        LOTE
+                    </p>
+                    <p class="font-black font-mono text-gray-800 break-all">
+                        ${safe(event.batch_code)}
+                    </p>
+                </div>
+
+                <div>
+                    <p class="font-black text-gray-400">
+                        OPERADOR
+                    </p>
+                    <p class="font-black text-gray-800 break-all">
+                        ${safe(event.operator_id)}
+                    </p>
+                </div>
+            </div>
+        `;
+
+        let specific = '';
+
+        if (
+            eventType
+            === 'RECEBIMENTO'
+        ) {
+            specific = `
+                <div class="grid grid-cols-2 gap-2 mt-3 text-[9px]">
+                    <div class="col-span-2">
+                        <p class="font-black text-gray-400">
+                            FORNECEDOR
+                        </p>
+                        <p class="font-black text-gray-800 break-words">
+                            ${safe(
+                                event.supplier,
+                                'NÃO INFORMADO'
+                            )}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="font-black text-gray-400">
+                            NF / DOCUMENTO
+                        </p>
+                        <p class="font-black text-gray-800 break-all">
+                            ${safe(
+                                event.document_id,
+                                'NÃO INFORMADO'
+                            )}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="font-black text-gray-400">
+                            ORIGEM
+                        </p>
+                        <p class="font-black text-gray-800 break-words">
+                            ${safe(
+                                event.origin_document,
+                                'NÃO INFORMADO'
+                            )}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="font-black text-gray-400">
+                            QTD. RECEBIDA
+                        </p>
+                        <p class="font-black text-gray-800">
+                            ${safe(
+                                event.quantity_actual
+                            )}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (
+            eventType
+            === 'PUTAWAY'
+        ) {
+            specific = `
+                <div class="mt-3 text-[9px]">
+                    <p class="font-black text-gray-400">
+                        ENDEREÇO
+                    </p>
+                    <p class="font-black text-gray-800 break-all">
+                        ${safe(
+                            event.location_id,
+                            'NÃO INFORMADO'
+                        )}
+                    </p>
+                </div>
+            `;
+        }
+
+        if (
+            eventType
+            === 'ABASTECIMENTO_LOJA'
+        ) {
+            specific = `
+                <div class="grid grid-cols-2 gap-2 mt-3 text-[9px]">
+                    <div>
+                        <p class="font-black text-gray-400">
+                            QTD. PLANEJADA
+                        </p>
+                        <p class="font-black text-gray-800">
+                            ${safe(
+                                event.quantity_planned
+                            )}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="font-black text-gray-400">
+                            QTD. CONFIRMADA
+                        </p>
+                        <p class="font-black text-gray-800">
+                            ${safe(
+                                event.quantity_actual
+                            )}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="font-black text-gray-400">
+                            DIVERGÊNCIA
+                        </p>
+                        <p class="font-black text-gray-800">
+                            ${safe(
+                                event.quantity_divergence,
+                                'SEM REGISTRO'
+                            )}
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="font-black text-gray-400">
+                            ENDEREÇO DE ORIGEM
+                        </p>
+                        <p class="font-black text-gray-800 break-all">
+                            ${safe(
+                                event.location_id,
+                                'NÃO INFORMADO'
+                            )}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        card.className =
+            'bg-white rounded-xl border border-gray-200 p-3 shadow-sm';
+
+        card.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+                <span class="text-[8px] font-black border px-2 py-1 rounded ${config.badge}">
+                    ${safe(config.label)}
+                </span>
+
+                <span class="text-[8px] font-bold text-gray-400 text-right">
+                    ${date}
+                </span>
+            </div>
+
+            ${common}
+            ${specific}
+        `;
+
+        return card;
+    }
+
     async fetchAndRenderSku(identifier) {
         document.getElementById('loader')?.classList.remove('hidden');
 
@@ -4386,6 +4955,10 @@ class KippeApplication {
             if (stockTotal) {
                 stockTotal.textContent = data.quantity ?? 0;
             }
+
+            await this.loadProductAuditHistory(
+                data.id || identifier
+            );
 
             if (batchesContainer) {
                 batchesContainer.innerHTML = '';

@@ -90,6 +90,19 @@ export class APIClient {
     }
 
     /**
+     * Histórico documental autenticado do produto.
+     * Não representa autoridade quantitativa de estoque.
+     */
+    async getProductHistory(productId) {
+        return this._request(
+            `/api/products/${encodeURIComponent(productId)}/history`,
+            {
+                method: 'GET',
+            }
+        );
+    }
+
+    /**
      * Busca digitada / autocomplete.
      * Retorna até 10 sugestões ranqueadas pelo backend.
      */
