@@ -425,6 +425,21 @@ class ManageStockUseCase:
                 "Produto não encontrado."
             )
 
+        quantity_before = product.quantity
+
+        batch_before = product.batches.get(
+            batch_code
+        )
+
+        previous_location_id = (
+            str(
+                batch_before.location_id
+                if batch_before
+                else ""
+            )
+            .strip()
+        )
+
         res = PutawayEngine.execute_putaway(
             product,
             batch_code,
@@ -432,9 +447,53 @@ class ManageStockUseCase:
         )
 
         if res.is_success:
-            self.repository.save(
-                product
+            audit_event = {
+                "event_type": "PUTAWAY",
+                "product_id": product_id,
+                "batch_code": batch_code,
+                "location_id": location_id,
+                "quantity_planned": None,
+                "quantity_actual": None,
+                "quantity_before": quantity_before,
+                "quantity_after": product.quantity,
+                "quantity_divergence": None,
+                "supplier": "",
+                "document_id": "",
+                "origin_document": "",
+                "operator_id": op_id,
+                "metadata": {
+                    "previous_location_id": (
+                        previous_location_id
+                    ),
+                },
+            }
+
+            atomic_writer = getattr(
+                self.repository,
+                "save_product_with_operational_audit",
+                None,
             )
+
+            if callable(atomic_writer):
+                atomic_writer(
+                    product,
+                    **audit_event,
+                )
+            else:
+                self.repository.save(
+                    product
+                )
+
+                audit_writer = getattr(
+                    self.repository,
+                    "append_operational_audit_event",
+                    None,
+                )
+
+                if callable(audit_writer):
+                    audit_writer(
+                        **audit_event
+                    )
 
             self.repository.log_transaction(
                 product_id,
@@ -1049,12 +1108,77 @@ class ManageStockUseCase:
         # ----------------------------------------------------
         # Mutação canônica e específica do lote físico
         # ----------------------------------------------------
+        product_quantity_before = (
+            product.quantity
+        )
+
+        batch_quantity_before = (
+            batch.quantity
+        )
+
         batch.quantity -= quantity
         product.quantity -= quantity
 
-        self.repository.save(
-            product
+        audit_event = {
+            "event_type": (
+                "ABASTECIMENTO_LOJA"
+            ),
+            "product_id": (
+                normalized_product_id
+            ),
+            "batch_code": (
+                normalized_batch_code
+            ),
+            "location_id": location_id,
+            "quantity_planned": None,
+            "quantity_actual": quantity,
+            "quantity_before": (
+                product_quantity_before
+            ),
+            "quantity_after": (
+                product.quantity
+            ),
+            "quantity_divergence": None,
+            "supplier": "",
+            "document_id": "",
+            "origin_document": "",
+            "operator_id": op_id,
+            "metadata": {
+                "batch_quantity_before": (
+                    batch_quantity_before
+                ),
+                "batch_quantity_after": (
+                    batch.quantity
+                ),
+            },
+        }
+
+        atomic_writer = getattr(
+            self.repository,
+            "save_product_with_operational_audit",
+            None,
         )
+
+        if callable(atomic_writer):
+            atomic_writer(
+                product,
+                **audit_event,
+            )
+        else:
+            self.repository.save(
+                product
+            )
+
+            audit_writer = getattr(
+                self.repository,
+                "append_operational_audit_event",
+                None,
+            )
+
+            if callable(audit_writer):
+                audit_writer(
+                    **audit_event
+                )
 
         self.repository.log_transaction(
             normalized_product_id,
