@@ -5,6 +5,7 @@ from src.interfaces.sqlite_repository import SQLiteProductRepository
 from src.interfaces.sqlite_operator_repository import SQLiteOperatorRepository
 from src.use_cases.manage_stock import ManageStockUseCase
 from src.use_cases.receive_stock import ReceivingUseCase
+from src.use_cases.existing_stock_onboarding import ExistingStockOnboardingUseCase
 from src.use_cases.query_product import ProductQueryUseCase
 from src.use_cases.suggest_products import ProductSuggestionUseCase
 from src.use_cases.manage_operators import ManageOperatorsUseCase
@@ -18,6 +19,7 @@ class Container:
         self._operator_repository = None
         self._manage_stock_use_case = None
         self._receiving_use_case = None
+        self._existing_stock_onboarding_use_case = None
         self._product_query_use_case = None
         self._product_suggestion_use_case = None
         self._manage_operators_use_case = None
@@ -53,6 +55,20 @@ class Container:
                 repository=self.product_repository
             )
         return self._receiving_use_case
+
+    @property
+    def existing_stock_onboarding_use_case(
+        self,
+    ) -> ExistingStockOnboardingUseCase:
+        if not self._existing_stock_onboarding_use_case:
+            self._existing_stock_onboarding_use_case = (
+                ExistingStockOnboardingUseCase(
+                    repository=self.product_repository,
+                    identity_provider=self.identity_provider,
+                )
+            )
+
+        return self._existing_stock_onboarding_use_case
 
     @property
     def product_query_use_case(self) -> ProductQueryUseCase:

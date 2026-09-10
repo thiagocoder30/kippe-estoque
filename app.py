@@ -671,6 +671,159 @@ def putaway_stock():
     }), 400
 
 
+@app.route('/api/stock/onboarding', methods=['POST'])
+def onboard_existing_stock():
+    """
+    Incorpora ao controle do Kippe estoque que já existia
+    fisicamente antes de sua entrada no sistema.
+
+    Esta rota é semanticamente distinta de o fluxo de recebimento físico:
+    ela nunca representa chegada física ocorrendo agora.
+    """
+
+    if not _has_valid_session():
+        return jsonify({
+            'error': (
+                'Operador não autenticado.'
+            )
+        }), 401
+
+    data = request.json or {}
+
+    product_id = (
+        data.get('sku')
+        or data.get('id')
+    )
+
+    result = (
+        container
+        .existing_stock_onboarding_use_case
+        .execute(
+            product_id=product_id,
+            quantity=data.get(
+                'quantity'
+            ),
+            batch_code=data.get(
+                'batch_code',
+                '',
+            ),
+            expiration_date=data.get(
+                'expiration_date',
+                '',
+            ),
+            manufacturing_date=data.get(
+                'manufacturing_date',
+                '',
+            ),
+            supplier=data.get(
+                'supplier',
+                '',
+            ),
+            location_id=(
+                data.get(
+                    'location_id'
+                )
+                or data.get(
+                    'location'
+                )
+                or ''
+            ),
+            historical_receipt_date=(
+                data.get(
+                    'historical_receipt_date'
+                )
+            ),
+            historical_date_basis=(
+                data.get(
+                    'historical_date_basis'
+                )
+            ),
+            document_id=data.get(
+                'document_id',
+                '',
+            ),
+        )
+    )
+
+    if result.is_success:
+        onboarded = result.value
+
+        return jsonify({
+            'message': (
+                'Estoque existente incorporado.'
+            ),
+            'onboarding': {
+                'status': onboarded[
+                    'status'
+                ],
+                'event_type': onboarded[
+                    'event_type'
+                ],
+                'sku': onboarded[
+                    'product_id'
+                ],
+                'batch_code': onboarded[
+                    'batch_code'
+                ],
+                'quantity': onboarded[
+                    'quantity'
+                ],
+                'quantity_before': onboarded[
+                    'quantity_before'
+                ],
+                'quantity_after': onboarded[
+                    'quantity_after'
+                ],
+                'location_id': onboarded[
+                    'location_id'
+                ],
+                'supplier': onboarded[
+                    'supplier'
+                ],
+                'document_id': onboarded[
+                    'document_id'
+                ],
+                'historical_receipt_date': (
+                    onboarded[
+                        'historical_receipt_date'
+                    ]
+                ),
+                'historical_date_basis': (
+                    onboarded[
+                        'historical_date_basis'
+                    ]
+                ),
+            }
+        }), 200
+
+    error = str(
+        result.error
+        or 'Falha ao implantar estoque existente.'
+    )
+
+    normalized_error = (
+        error.lower()
+    )
+
+    if (
+        'sem privilégio'
+        in normalized_error
+        or 'sem privilegio'
+        in normalized_error
+        or 'autorização negada'
+        in normalized_error
+        or 'autorizacao negada'
+        in normalized_error
+    ):
+        return jsonify({
+            'error': error
+        }), 403
+
+    return jsonify({
+        'error': error
+    }), 400
+
+
 @app.route('/api/receive', methods=['POST'])
 def receive_stock():
     if not _has_valid_session():
