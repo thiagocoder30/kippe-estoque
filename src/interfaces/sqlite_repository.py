@@ -204,6 +204,43 @@ class SQLiteProductRepository:
 
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS document_attachments (
+                    id TEXT PRIMARY KEY,
+                    business_document_number TEXT DEFAULT '',
+                    supplier TEXT DEFAULT '',
+                    original_filename TEXT NOT NULL,
+                    stored_filename TEXT NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    byte_size INTEGER NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    operator_id TEXT NOT NULL
+                )
+                """
+            )
+
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS operational_audit_event_attachments (
+                    event_id INTEGER NOT NULL,
+                    attachment_id TEXT NOT NULL,
+                    linked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    operator_id TEXT NOT NULL,
+                    PRIMARY KEY (
+                        event_id,
+                        attachment_id
+                    ),
+                    FOREIGN KEY(event_id)
+                        REFERENCES operational_audit_events(id),
+                    FOREIGN KEY(attachment_id)
+                        REFERENCES document_attachments(id)
+                )
+                """
+            )
+
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS batches (
                     product_id TEXT NOT NULL,
                     batch_code TEXT NOT NULL,
@@ -1322,6 +1359,334 @@ class SQLiteProductRepository:
             except Exception:
                 conn.rollback()
                 raise
+
+    def create_document_attachment(
+        self,
+        *,
+        attachment_id: str,
+        business_document_number: str = "",
+        supplier: str = "",
+        original_filename: str,
+        stored_filename: str,
+        relative_path: str,
+        mime_type: str,
+        byte_size: int,
+        sha256: str,
+        operator_id: str,
+    ) -> str:
+        """
+        Persiste somente metadados técnicos do documento.
+
+        O conteúdo físico do arquivo não pertence ao SQLite.
+        Nenhuma autoridade quantitativa de Product/Batch é
+        alterada por esta operação.
+        """
+
+        normalized_attachment_id = str(
+            attachment_id or ""
+        ).strip()
+
+        normalized_original_filename = str(
+            original_filename or ""
+        ).strip()
+
+        normalized_stored_filename = str(
+            stored_filename or ""
+        ).strip()
+
+        normalized_relative_path = str(
+            relative_path or ""
+        ).strip()
+
+        normalized_mime_type = str(
+            mime_type or ""
+        ).strip()
+
+        normalized_sha256 = str(
+            sha256 or ""
+        ).strip()
+
+        normalized_operator_id = str(
+            operator_id or ""
+        ).strip()
+
+        if not normalized_attachment_id:
+            raise ValueError(
+                "attachment_id é obrigatório."
+            )
+
+        if not normalized_original_filename:
+            raise ValueError(
+                "original_filename é obrigatório."
+            )
+
+        if not normalized_stored_filename:
+            raise ValueError(
+                "stored_filename é obrigatório."
+            )
+
+        if not normalized_relative_path:
+            raise ValueError(
+                "relative_path é obrigatório."
+            )
+
+        if not normalized_mime_type:
+            raise ValueError(
+                "mime_type é obrigatório."
+            )
+
+        if not normalized_sha256:
+            raise ValueError(
+                "sha256 é obrigatório."
+            )
+
+        if not normalized_operator_id:
+            raise ValueError(
+                "operator_id é obrigatório."
+            )
+
+        normalized_byte_size = int(
+            byte_size
+        )
+
+        if normalized_byte_size < 0:
+            raise ValueError(
+                "byte_size não pode ser negativo."
+            )
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO document_attachments (
+                    id,
+                    business_document_number,
+                    supplier,
+                    original_filename,
+                    stored_filename,
+                    relative_path,
+                    mime_type,
+                    byte_size,
+                    sha256,
+                    operator_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_attachment_id,
+                    str(
+                        business_document_number
+                        or ""
+                    ).strip(),
+                    str(
+                        supplier
+                        or ""
+                    ).strip(),
+                    normalized_original_filename,
+                    normalized_stored_filename,
+                    normalized_relative_path,
+                    normalized_mime_type,
+                    normalized_byte_size,
+                    normalized_sha256,
+                    normalized_operator_id,
+                ),
+            )
+
+            conn.commit()
+
+        return normalized_attachment_id
+
+    def get_document_attachment(
+        self,
+        attachment_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Recupera metadados de um documento pelo seu ID técnico.
+        """
+
+        normalized_attachment_id = str(
+            attachment_id or ""
+        ).strip()
+
+        if not normalized_attachment_id:
+            return None
+
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    id,
+                    business_document_number,
+                    supplier,
+                    original_filename,
+                    stored_filename,
+                    relative_path,
+                    mime_type,
+                    byte_size,
+                    sha256,
+                    uploaded_at,
+                    operator_id
+                FROM document_attachments
+                WHERE id = ?
+                """,
+                (
+                    normalized_attachment_id,
+                ),
+            ).fetchone()
+
+            if row is None:
+                return None
+
+            return dict(
+                row
+            )
+
+    def link_document_attachment_to_audit_event(
+        self,
+        *,
+        event_id: int,
+        attachment_id: str,
+        operator_id: str,
+    ) -> None:
+        """
+        Vincula um documento técnico a um evento RECEBIMENTO.
+
+        O vínculo pode ocorrer após o recebimento e não modifica
+        retroativamente a evidência append-only nem Product/Batch.
+        """
+
+        normalized_attachment_id = str(
+            attachment_id or ""
+        ).strip()
+
+        normalized_operator_id = str(
+            operator_id or ""
+        ).strip()
+
+        if not normalized_attachment_id:
+            raise ValueError(
+                "attachment_id é obrigatório."
+            )
+
+        if not normalized_operator_id:
+            raise ValueError(
+                "operator_id é obrigatório."
+            )
+
+        normalized_event_id = int(
+            event_id
+        )
+
+        with self._get_connection() as conn:
+            event = conn.execute(
+                """
+                SELECT
+                    id,
+                    event_type
+                FROM operational_audit_events
+                WHERE id = ?
+                """,
+                (
+                    normalized_event_id,
+                ),
+            ).fetchone()
+
+            if event is None:
+                raise ValueError(
+                    "Evento de auditoria não encontrado."
+                )
+
+            if (
+                str(
+                    event["event_type"]
+                    or ""
+                ).strip()
+                != "RECEBIMENTO"
+            ):
+                raise ValueError(
+                    "Documento fiscal só pode ser vinculado "
+                    "a evento RECEBIMENTO."
+                )
+
+            attachment = conn.execute(
+                """
+                SELECT id
+                FROM document_attachments
+                WHERE id = ?
+                """,
+                (
+                    normalized_attachment_id,
+                ),
+            ).fetchone()
+
+            if attachment is None:
+                raise ValueError(
+                    "Documento técnico não encontrado."
+                )
+
+            conn.execute(
+                """
+                INSERT INTO operational_audit_event_attachments (
+                    event_id,
+                    attachment_id,
+                    operator_id
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    normalized_event_id,
+                    normalized_attachment_id,
+                    normalized_operator_id,
+                ),
+            )
+
+            conn.commit()
+
+    def get_document_attachments_by_event(
+        self,
+        event_id: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lista documentos vinculados a um evento documental.
+        """
+
+        normalized_event_id = int(
+            event_id
+        )
+
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    d.id,
+                    d.business_document_number,
+                    d.supplier,
+                    d.original_filename,
+                    d.stored_filename,
+                    d.relative_path,
+                    d.mime_type,
+                    d.byte_size,
+                    d.sha256,
+                    d.uploaded_at,
+                    d.operator_id,
+                    l.linked_at,
+                    l.operator_id AS linked_by_operator_id
+                FROM operational_audit_event_attachments l
+                JOIN document_attachments d
+                    ON d.id = l.attachment_id
+                WHERE l.event_id = ?
+                ORDER BY
+                    l.linked_at ASC,
+                    d.id ASC
+                """,
+                (
+                    normalized_event_id,
+                ),
+            ).fetchall()
+
+            return [
+                dict(row)
+                for row in rows
+            ]
 
     def get_operational_audit_events_by_product(
         self,
