@@ -130,6 +130,18 @@ export class APIClient {
     }
 
     /**
+     * Incorporação canônica de estoque fisicamente preexistente.
+     *
+     * Não representa recebimento de mercadoria.
+     */
+    async onboardExistingStock(payload) {
+        return this._request('/api/stock/onboarding', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    }
+
+    /**
      * Recebimento canônico.
      */
     async registerReceive(payload) {

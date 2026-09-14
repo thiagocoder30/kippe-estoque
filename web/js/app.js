@@ -8,6 +8,15 @@ class KippeApplication {
         this.currentOperator = null;
 
         /*
+         * STOCK-ONBOARDING-001C
+         *
+         * Produto-alvo da implantação física e
+         * último produto carregado no cartão operacional.
+         */
+        this.existingStockProduct = null;
+        this.currentCatalogProduct = null;
+
+        /*
          * RECEIVING-UX-002
          *
          * Mantém somente o resultado do recebimento corrente
@@ -154,6 +163,7 @@ class KippeApplication {
 
         this.checkGlobalFefoAlerts();
         this.bindNavigation();
+        this.bindExistingStockOnboarding();
         this.bindInboundModule();
         this.bindReceivingDetailedControls();
         this.bindPutawayModule();
@@ -333,6 +343,7 @@ class KippeApplication {
             ) {
                 this.currentOperator =
                     session.operator;
+                this.updateExistingStockActionVisibility();
 
                 this.renderOperatorIdentity();
                 this.hideAuthenticationModal();
@@ -341,6 +352,7 @@ class KippeApplication {
             }
 
             this.currentOperator = null;
+            this.updateExistingStockActionVisibility();
             this.renderOperatorIdentity();
 
             this.showAuthenticationModal();
@@ -354,6 +366,7 @@ class KippeApplication {
             );
 
             this.currentOperator = null;
+            this.updateExistingStockActionVisibility();
             this.renderOperatorIdentity();
 
             this.showAuthenticationModal(
@@ -435,6 +448,7 @@ class KippeApplication {
 
             this.currentOperator =
                 operator;
+            this.updateExistingStockActionVisibility();
 
             this.renderOperatorIdentity();
 
@@ -453,6 +467,7 @@ class KippeApplication {
             );
 
             this.currentOperator = null;
+            this.updateExistingStockActionVisibility();
             this.renderOperatorIdentity();
 
             if (pinInput) {
@@ -492,6 +507,7 @@ class KippeApplication {
         }
 
         this.currentOperator = null;
+        this.updateExistingStockActionVisibility();
         this.renderOperatorIdentity();
 
         const operatorId =
@@ -558,6 +574,585 @@ class KippeApplication {
                 );
             }
         );
+    }
+
+    canManageExistingStock() {
+        const role = String(
+            this.currentOperator?.role || ''
+        ).trim();
+
+        return (
+            role === 'GERENTE'
+            || role === 'ADMIN_SISTEMA'
+            || role === 'SYSTEM'
+        );
+    }
+
+    updateExistingStockActionVisibility() {
+        const allowed =
+            this.canManageExistingStock();
+
+        const catalogButton =
+            document.getElementById(
+                'btn-existing-stock-onboarding'
+            );
+
+        if (catalogButton) {
+            catalogButton.classList.toggle(
+                'hidden',
+                !(
+                    allowed
+                    && this.currentCatalogProduct
+                )
+            );
+        }
+
+        const newProductButton =
+            document.getElementById(
+                'continue-new-product-existing-stock'
+            );
+
+        if (newProductButton) {
+            newProductButton.classList.toggle(
+                'hidden',
+                !allowed
+            );
+        }
+    }
+
+    resetExistingStockForm() {
+        const fields = [
+            'existing-stock-quantity',
+            'existing-stock-batch',
+            'existing-stock-expiration',
+            'existing-stock-manufacturing',
+            'existing-stock-location',
+            'existing-stock-supplier',
+            'existing-stock-document',
+            'existing-stock-historical-date',
+            'existing-stock-historical-basis',
+        ];
+
+        fields.forEach(
+            (id) => {
+                const element =
+                    document.getElementById(id);
+
+                if (element) {
+                    element.value = '';
+                }
+            }
+        );
+
+        const errorPanel =
+            document.getElementById(
+                'existing-stock-error'
+            );
+
+        if (errorPanel) {
+            errorPanel.textContent = '';
+            errorPanel.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    closeExistingStockOnboarding() {
+        document.getElementById(
+            'existing-stock-modal'
+        )?.classList.add(
+            'hidden'
+        );
+
+        this.resetExistingStockForm();
+
+        this.existingStockProduct = null;
+    }
+
+    async openExistingStockOnboarding(
+        product
+    ) {
+        if (!this.canManageExistingStock()) {
+            return;
+        }
+
+        let target = product;
+
+        if (
+            typeof target === 'string'
+        ) {
+            try {
+                target =
+                    await this.api.queryProduct(
+                        target
+                    );
+            } catch (error) {
+                alert(
+                    'Não foi possível identificar o produto.'
+                );
+
+                return;
+            }
+        }
+
+        if (
+            !target
+            || !(
+                target.id
+                || target.sku
+            )
+        ) {
+            return;
+        }
+
+        this.existingStockProduct =
+            target;
+
+        this.resetExistingStockForm();
+
+        const sku =
+            target.id
+            || target.sku
+            || '';
+
+        const ean =
+            target.ean
+            || target.barcode
+            || '';
+
+        const name =
+            target.name
+            || target.description
+            || 'PRODUTO';
+
+        const setText = (
+            id,
+            value
+        ) => {
+            const element =
+                document.getElementById(
+                    id
+                );
+
+            if (element) {
+                element.textContent =
+                    value || '—';
+            }
+        };
+
+        setText(
+            'existing-stock-product-name',
+            name
+        );
+
+        setText(
+            'existing-stock-product-sku',
+            sku
+        );
+
+        setText(
+            'existing-stock-product-ean',
+            ean
+        );
+
+        document.getElementById(
+            'new-product-success-modal'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'existing-stock-success-modal'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'existing-stock-modal'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        window.setTimeout(
+            () => {
+                document.getElementById(
+                    'existing-stock-quantity'
+                )?.focus();
+            },
+            50
+        );
+    }
+
+    showExistingStockError(
+        message
+    ) {
+        const panel =
+            document.getElementById(
+                'existing-stock-error'
+            );
+
+        if (!panel) {
+            return;
+        }
+
+        panel.textContent =
+            message
+            || 'Não foi possível incorporar o estoque existente.';
+
+        panel.classList.remove(
+            'hidden'
+        );
+    }
+
+    bindExistingStockOnboarding() {
+        document.getElementById(
+            'continue-new-product-existing-stock'
+        )?.addEventListener(
+            'click',
+            async () => {
+                let product =
+                    this.existingStockProduct;
+
+                if (!product) {
+                    const sku =
+                        document.getElementById(
+                            'new-product-success-sku'
+                        )?.textContent?.trim();
+
+                    const ean =
+                        document.getElementById(
+                            'new-product-success-ean'
+                        )?.textContent?.trim();
+
+                    const name =
+                        document.getElementById(
+                            'new-product-success-name'
+                        )?.textContent?.trim();
+
+                    if (
+                        !sku
+                        || sku === '—'
+                    ) {
+                        return;
+                    }
+
+                    product = {
+                        sku,
+                        ean:
+                            ean === '—'
+                                ? ''
+                                : ean,
+                        name:
+                            name === '—'
+                                ? ''
+                                : name,
+                    };
+
+                    this.existingStockProduct =
+                        product;
+                }
+
+                await this.openExistingStockOnboarding(
+                    product
+                );
+            }
+        );
+
+        document.getElementById(
+            'btn-existing-stock-onboarding'
+        )?.addEventListener(
+            'click',
+            async () => {
+                if (
+                    !this.currentCatalogProduct
+                ) {
+                    return;
+                }
+
+                await this.openExistingStockOnboarding(
+                    this.currentCatalogProduct
+                );
+            }
+        );
+
+        document.getElementById(
+            'close-existing-stock-modal'
+        )?.addEventListener(
+            'click',
+            () => {
+                this.closeExistingStockOnboarding();
+            }
+        );
+
+        document.getElementById(
+            'cancel-existing-stock'
+        )?.addEventListener(
+            'click',
+            () => {
+                this.closeExistingStockOnboarding();
+            }
+        );
+
+        document.getElementById(
+            'finish-existing-stock'
+        )?.addEventListener(
+            'click',
+            () => {
+                document.getElementById(
+                    'existing-stock-success-modal'
+                )?.classList.add(
+                    'hidden'
+                );
+
+                this.existingStockProduct = null;
+            }
+        );
+
+        document.getElementById(
+            'submit-existing-stock'
+        )?.addEventListener(
+            'click',
+            async () => {
+                const product =
+                    this.existingStockProduct;
+
+                if (!product) {
+                    this.showExistingStockError(
+                        'Produto não identificado.'
+                    );
+
+                    return;
+                }
+
+                const read = (
+                    id
+                ) => {
+                    return (
+                        document.getElementById(
+                            id
+                        )?.value?.trim()
+                        || ''
+                    );
+                };
+
+                const quantity =
+                    Number(
+                        read(
+                            'existing-stock-quantity'
+                        )
+                    );
+
+                const batchCode =
+                    read(
+                        'existing-stock-batch'
+                    );
+
+                const expirationDate =
+                    read(
+                        'existing-stock-expiration'
+                    );
+
+                const manufacturingDate =
+                    read(
+                        'existing-stock-manufacturing'
+                    );
+
+                const locationId =
+                    read(
+                        'existing-stock-location'
+                    );
+
+                const supplier =
+                    read(
+                        'existing-stock-supplier'
+                    );
+
+                const documentId =
+                    read(
+                        'existing-stock-document'
+                    );
+
+                const historicalReceiptDate =
+                    read(
+                        'existing-stock-historical-date'
+                    );
+
+                const historicalDateBasis =
+                    read(
+                        'existing-stock-historical-basis'
+                    );
+
+                if (
+                    !Number.isInteger(
+                        quantity
+                    )
+                    || quantity <= 0
+                ) {
+                    this.showExistingStockError(
+                        'Informe uma quantidade física válida, maior que zero.'
+                    );
+
+                    return;
+                }
+
+                if (
+                    !batchCode
+                    || !expirationDate
+                ) {
+                    this.showExistingStockError(
+                        'Informe lote e validade.'
+                    );
+
+                    return;
+                }
+
+                /*
+                 * Historical evidence is optional.
+                 *
+                 * Nunca inferimos uma data histórica.
+                 * Se houver data histórica, a fonte da
+                 * evidência também precisa ser declarada.
+                 */
+                if (
+                    historicalReceiptDate
+                    && !historicalDateBasis
+                ) {
+                    this.showExistingStockError(
+                        'Selecione a base da informação histórica.'
+                    );
+
+                    return;
+                }
+
+                if (
+                    historicalDateBasis
+                    && !historicalReceiptDate
+                ) {
+                    this.showExistingStockError(
+                        'Informe a data histórica correspondente.'
+                    );
+
+                    return;
+                }
+
+                if (
+                    historicalDateBasis === 'DOCUMENT'
+                    && !documentId
+                ) {
+                    this.showExistingStockError(
+                        'Uma informação histórica baseada em DOCUMENT exige NF ou documento.'
+                    );
+
+                    return;
+                }
+
+                const errorPanel =
+                    document.getElementById(
+                        'existing-stock-error'
+                    );
+
+                errorPanel?.classList.add(
+                    'hidden'
+                );
+
+                const submitButton =
+                    document.getElementById(
+                        'submit-existing-stock'
+                    );
+
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent =
+                        'INCORPORANDO...';
+                }
+
+                try {
+                    const sku =
+                        product.id
+                        || product.sku;
+
+                    const payload = {
+                        sku,
+                        quantity,
+                        batch_code:
+                            batchCode,
+                        expiration_date:
+                            expirationDate,
+                        manufacturing_date:
+                            manufacturingDate || null,
+                        location_id:
+                            locationId || null,
+                        supplier:
+                            supplier || null,
+                        document_id:
+                            documentId || null,
+                        historical_receipt_date:
+                            historicalReceiptDate || null,
+                        historical_date_basis:
+                            historicalDateBasis || null,
+                    };
+
+                    const response =
+                        await this.api.onboardExistingStock(
+                            payload
+                        );
+
+                    const onboarding =
+                        response.onboarding
+                        || response.stock_onboarding
+                        || response;
+
+                    const details =
+                        document.getElementById(
+                            'existing-stock-success-details'
+                        );
+
+                    if (details) {
+                        details.textContent =
+                            `${
+                                onboarding.quantity
+                                ?? quantity
+                            } UN • LOTE ${
+                                onboarding.batch_code
+                                || batchCode
+                            }`;
+                    }
+
+                    document.getElementById(
+                        'existing-stock-modal'
+                    )?.classList.add(
+                        'hidden'
+                    );
+
+                    document.getElementById(
+                        'existing-stock-success-modal'
+                    )?.classList.remove(
+                        'hidden'
+                    );
+
+                    await this.fetchAndRenderSku(
+                        sku
+                    );
+
+                } catch (error) {
+                    this.showExistingStockError(
+                        error.message
+                        || 'Falha ao incorporar estoque existente.'
+                    );
+
+                } finally {
+                    if (submitButton) {
+                        submitButton.disabled =
+                            false;
+
+                        submitButton.textContent =
+                            'INCORPORAR ESTOQUE EXISTENTE';
+                    }
+                }
+            }
+        );
+
+        this.updateExistingStockActionVisibility();
     }
 
     async openNewProductRegistration(ean) {
@@ -1629,6 +2224,8 @@ class KippeApplication {
 
                     const product =
                         response.product;
+
+                    this.existingStockProduct = product;
 
                     if (
                         !product ||
@@ -4921,6 +5518,9 @@ class KippeApplication {
 
         try {
             const data = await this.api.queryProduct(identifier);
+
+            this.currentCatalogProduct = data;
+            this.updateExistingStockActionVisibility();
 
             document.getElementById('loader')?.classList.add('hidden');
 

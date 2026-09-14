@@ -319,6 +319,14 @@ if ('serviceWorker' in navigator) {
                 >
                     VER HISTÓRICO
                 </button>
+                <button
+                    id="btn-existing-stock-onboarding"
+                    type="button"
+                    class="hidden w-full mt-2 bg-amber-600 text-white rounded-lg px-3 py-2.5 text-[10px] font-black tracking-wider active:scale-[0.98]"
+                >
+                    CADASTRAR ESTOQUE JÁ EXISTENTE
+                </button>
+
             </div>
 
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -1158,11 +1166,337 @@ if ('serviceWorker' in navigator) {
                         id="continue-new-product-receiving"
                         type="button"
                         class="w-full bg-[#124191] text-white font-black p-3 rounded-lg mt-4 active:scale-95 shadow-md"
+                        aria-label="CONTINUAR RECEBIMENTO — mercadoria chegando agora"
                     >
-                        CONTINUAR RECEBIMENTO
+                        RECEBER MERCADORIA
                     </button>
+
+                    <p
+                        id="new-product-receiving-explanation"
+                        class="text-[9px] text-[#124191] font-bold mt-2 leading-relaxed"
+                    >
+                        Use quando a mercadoria está chegando agora ao estabelecimento.
+                        Esta ação registra um novo recebimento.
+                    </p>
+
+                    <button
+                        id="continue-new-product-existing-stock"
+                        type="button"
+                        class="w-full bg-amber-600 text-white font-black p-3 rounded-lg mt-3 active:scale-95 shadow-md"
+                    >
+                        CADASTRAR ESTOQUE JÁ EXISTENTE
+                    </button>
+
+                    <p
+                        id="new-product-existing-stock-explanation"
+                        class="text-[9px] text-amber-700 font-bold mt-2 leading-relaxed"
+                    >
+                        Use somente quando o produto já estava fisicamente no estoque
+                        antes de ser controlado pelo Kippe.
+                    </p>
                 </div>
             </div>
+        </div>
+    </div>
+
+
+    <!-- STOCK-ONBOARDING-001C — IMPLANTAÇÃO DE ESTOQUE EXISTENTE -->
+    <div
+        id="existing-stock-modal"
+        class="hidden fixed inset-0 z-[205] bg-black/80 flex items-center justify-center p-2 sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Implantação de estoque existente"
+    >
+        <div class="bg-gray-50 rounded-2xl w-full max-w-md max-h-[94vh] overflow-hidden shadow-2xl flex flex-col">
+
+            <div class="bg-amber-600 px-4 py-3 flex justify-between items-center text-white shrink-0">
+                <div>
+                    <p class="text-[9px] font-bold tracking-[0.18em] text-amber-100">
+                        CONTAGEM FÍSICA • ESTOQUE PREEXISTENTE
+                    </p>
+                    <h2 class="text-sm font-black">
+                        IMPLANTAÇÃO DE ESTOQUE EXISTENTE
+                    </h2>
+                </div>
+
+                <button
+                    id="close-existing-stock-modal"
+                    type="button"
+                    class="text-2xl font-black leading-none"
+                    aria-label="Fechar implantação de estoque existente"
+                >
+                    ×
+                </button>
+            </div>
+
+            <div class="overflow-y-auto p-3 space-y-3">
+
+                <section class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <p class="text-[9px] font-black text-amber-800 tracking-widest">
+                        PRODUTO JÁ EXISTENTE
+                    </p>
+
+                    <p
+                        id="existing-stock-product-name"
+                        class="text-sm font-black text-gray-900 mt-2"
+                    >
+                        —
+                    </p>
+
+                    <div class="grid grid-cols-2 gap-2 mt-2 text-[9px]">
+                        <p>
+                            SKU:
+                            <strong
+                                id="existing-stock-product-sku"
+                                class="font-mono"
+                            >—</strong>
+                        </p>
+
+                        <p>
+                            EAN:
+                            <strong
+                                id="existing-stock-product-ean"
+                                class="font-mono break-all"
+                            >—</strong>
+                        </p>
+                    </div>
+
+                    <p class="text-[9px] text-amber-800 mt-2 font-bold leading-relaxed">
+                        Esta operação não representa uma nova chegada de mercadoria.
+                        Ela incorpora ao Kippe uma quantidade apurada por contagem física.
+                    </p>
+                </section>
+
+                <section class="bg-white border border-gray-200 rounded-xl p-3">
+                    <p class="text-[9px] font-black text-[#124191] tracking-widest mb-2">
+                        CONTAGEM FÍSICA
+                    </p>
+
+                    <label
+                        for="existing-stock-quantity"
+                        class="text-[9px] font-bold text-gray-500"
+                    >
+                        QUANTIDADE ENCONTRADA *
+                    </label>
+
+                    <input
+                        id="existing-stock-quantity"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        step="1"
+                        class="w-full border rounded p-2 text-sm font-black bg-white mt-1"
+                        placeholder="Ex.: 12"
+                    >
+                </section>
+
+                <section class="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+                    <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                        RASTREABILIDADE
+                    </p>
+
+                    <div>
+                        <label
+                            for="existing-stock-batch"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            LOTE *
+                        </label>
+
+                        <input
+                            id="existing-stock-batch"
+                            type="text"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label
+                                for="existing-stock-expiration"
+                                class="text-[9px] font-bold text-gray-500"
+                            >
+                                VALIDADE *
+                            </label>
+
+                            <input
+                                id="existing-stock-expiration"
+                                type="date"
+                                class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                            >
+                        </div>
+
+                        <div>
+                            <label
+                                for="existing-stock-manufacturing"
+                                class="text-[9px] font-bold text-gray-500"
+                            >
+                                FABRICAÇÃO
+                            </label>
+
+                            <input
+                                id="existing-stock-manufacturing"
+                                type="date"
+                                class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                            >
+                        </div>
+                    </div>
+
+                    <div>
+                        <label
+                            for="existing-stock-location"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            LOCALIZAÇÃO ATUAL
+                        </label>
+
+                        <input
+                            id="existing-stock-location"
+                            type="text"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                            placeholder="Opcional — pode ficar pendente"
+                            autocomplete="off"
+                        >
+                    </div>
+                </section>
+
+                <section class="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+                    <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                        ORIGEM HISTÓRICA
+                    </p>
+
+                    <p class="text-[9px] text-gray-600 font-bold leading-relaxed">
+                        Informar somente quando houver informação confiável.
+                        Caso contrário, deixar os campos históricos vazios.
+                    </p>
+
+                    <div>
+                        <label
+                            for="existing-stock-historical-date"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            DATA ORIGINAL DE RECEBIMENTO
+                        </label>
+
+                        <input
+                            id="existing-stock-historical-date"
+                            type="date"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                        >
+                    </div>
+
+                    <div>
+                        <label
+                            for="existing-stock-historical-basis"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            BASE DA INFORMAÇÃO
+                        </label>
+
+                        <select
+                            id="existing-stock-historical-basis"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                        >
+                            <option value="">NÃO INFORMADA</option>
+                            <option value="DOCUMENT">DOCUMENTO / NF</option>
+                            <option value="OPERATOR_DECLARATION">DECLARAÇÃO DO OPERADOR</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label
+                            for="existing-stock-supplier"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            FORNECEDOR HISTÓRICO
+                        </label>
+
+                        <input
+                            id="existing-stock-supplier"
+                            type="text"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <div>
+                        <label
+                            for="existing-stock-document"
+                            class="text-[9px] font-bold text-gray-500"
+                        >
+                            NF / DOCUMENTO
+                        </label>
+
+                        <input
+                            id="existing-stock-document"
+                            type="text"
+                            class="w-full border rounded p-2 text-sm font-bold bg-white mt-1"
+                            autocomplete="off"
+                        >
+                    </div>
+                </section>
+
+                <p
+                    id="existing-stock-error"
+                    class="hidden text-[10px] font-black text-red-600 bg-red-50 border border-red-200 rounded-lg p-3"
+                ></p>
+
+                <button
+                    id="submit-existing-stock"
+                    type="button"
+                    class="w-full bg-amber-600 text-white font-black p-3 rounded-lg active:scale-95 shadow-md"
+                >
+                    INCORPORAR ESTOQUE EXISTENTE
+                </button>
+
+                <button
+                    id="cancel-existing-stock"
+                    type="button"
+                    class="w-full bg-white border border-gray-300 text-gray-700 font-black p-3 rounded-lg active:scale-95"
+                >
+                    CANCELAR
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div
+        id="existing-stock-success-modal"
+        class="hidden fixed inset-0 z-[215] bg-black/80 flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Estoque existente incorporado"
+    >
+        <div class="w-full max-w-sm rounded-xl bg-amber-50 border border-amber-200 p-4 text-center shadow-2xl">
+            <div class="text-4xl text-amber-600">
+                ✓
+            </div>
+
+            <p class="text-sm font-black text-amber-900 mt-2">
+                ESTOQUE EXISTENTE INCORPORADO
+            </p>
+
+            <p class="text-[10px] text-gray-700 font-bold mt-3 leading-relaxed">
+                A quantidade foi incorporada por CONTAGEM FÍSICA.
+                Esta operação não registra uma nova chegada de mercadoria.
+            </p>
+
+            <p
+                id="existing-stock-success-details"
+                class="text-[10px] text-gray-700 font-bold mt-3"
+            >
+                —
+            </p>
+
+            <button
+                id="finish-existing-stock"
+                type="button"
+                class="w-full bg-amber-600 text-white font-black p-3 rounded-lg mt-4 active:scale-95 shadow-md"
+            >
+                FINALIZAR
+            </button>
         </div>
     </div>
 
