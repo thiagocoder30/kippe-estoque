@@ -1360,6 +1360,209 @@ class SQLiteProductRepository:
                 conn.rollback()
                 raise
 
+
+    def create_and_link_document_attachment(
+        self,
+        *,
+        event_id: int,
+        attachment_id: str,
+        business_document_number: str = "",
+        supplier: str = "",
+        original_filename: str,
+        stored_filename: str,
+        relative_path: str,
+        mime_type: str,
+        byte_size: int,
+        sha256: str,
+        operator_id: str,
+    ) -> str:
+        """
+        Persiste metadata documental e seu vínculo com um
+        evento RECEBIMENTO na mesma transação SQLite.
+
+        O arquivo físico já deve ter sido validado e publicado
+        pela camada de storage antes desta operação.
+        """
+
+        normalized_event_id = int(
+            event_id
+        )
+
+        if normalized_event_id <= 0:
+            raise ValueError(
+                "event_id deve ser positivo."
+            )
+
+        normalized_attachment_id = str(
+            attachment_id or ""
+        ).strip()
+
+        normalized_business_document_number = str(
+            business_document_number or ""
+        ).strip()
+
+        normalized_supplier = str(
+            supplier or ""
+        ).strip()
+
+        normalized_original_filename = str(
+            original_filename or ""
+        ).strip()
+
+        normalized_stored_filename = str(
+            stored_filename or ""
+        ).strip()
+
+        normalized_relative_path = str(
+            relative_path or ""
+        ).strip()
+
+        normalized_mime_type = str(
+            mime_type or ""
+        ).strip()
+
+        normalized_sha256 = str(
+            sha256 or ""
+        ).strip()
+
+        normalized_operator_id = str(
+            operator_id or ""
+        ).strip()
+
+        if not normalized_attachment_id:
+            raise ValueError(
+                "attachment_id é obrigatório."
+            )
+
+        if not normalized_original_filename:
+            raise ValueError(
+                "original_filename é obrigatório."
+            )
+
+        if not normalized_stored_filename:
+            raise ValueError(
+                "stored_filename é obrigatório."
+            )
+
+        if not normalized_relative_path:
+            raise ValueError(
+                "relative_path é obrigatório."
+            )
+
+        if not normalized_mime_type:
+            raise ValueError(
+                "mime_type é obrigatório."
+            )
+
+        if not normalized_sha256:
+            raise ValueError(
+                "sha256 é obrigatório."
+            )
+
+        if not normalized_operator_id:
+            raise ValueError(
+                "operator_id é obrigatório."
+            )
+
+        normalized_byte_size = int(
+            byte_size
+        )
+
+        if normalized_byte_size < 0:
+            raise ValueError(
+                "byte_size não pode ser negativo."
+            )
+
+        with self._get_connection() as conn:
+            try:
+                conn.execute(
+                    "BEGIN IMMEDIATE"
+                )
+
+                event = conn.execute(
+                    """
+                    SELECT
+                        id,
+                        event_type
+                    FROM operational_audit_events
+                    WHERE id = ?
+                    """,
+                    (
+                        normalized_event_id,
+                    ),
+                ).fetchone()
+
+                if event is None:
+                    raise ValueError(
+                        "Evento documental não encontrado."
+                    )
+
+                if (
+                    str(
+                        event["event_type"]
+                        or ""
+                    ).strip()
+                    != "RECEBIMENTO"
+                ):
+                    raise ValueError(
+                        "Documento fiscal só pode ser vinculado "
+                        "a evento RECEBIMENTO."
+                    )
+
+                conn.execute(
+                    """
+                    INSERT INTO document_attachments (
+                        id,
+                        business_document_number,
+                        supplier,
+                        original_filename,
+                        stored_filename,
+                        relative_path,
+                        mime_type,
+                        byte_size,
+                        sha256,
+                        operator_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_attachment_id,
+                        normalized_business_document_number,
+                        normalized_supplier,
+                        normalized_original_filename,
+                        normalized_stored_filename,
+                        normalized_relative_path,
+                        normalized_mime_type,
+                        normalized_byte_size,
+                        normalized_sha256,
+                        normalized_operator_id,
+                    ),
+                )
+
+                conn.execute(
+                    """
+                    INSERT INTO operational_audit_event_attachments (
+                        event_id,
+                        attachment_id,
+                        operator_id
+                    )
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        normalized_event_id,
+                        normalized_attachment_id,
+                        normalized_operator_id,
+                    ),
+                )
+
+                conn.commit()
+
+                return normalized_attachment_id
+
+            except Exception:
+                conn.rollback()
+                raise
+
     def create_document_attachment(
         self,
         *,
