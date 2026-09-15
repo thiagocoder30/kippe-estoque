@@ -16,3 +16,21 @@ data/*.log
 
 # Generated data artifacts
 data/**/*.log
+
+# Local development evidence
+kippe_*.txt
+audit_*.sh
+create_*.sh
+implement_*.sh
+repair_*.sh
+finalize_*.sh
+certify_*.sh
+checkpoint_*.sh
+collect_*.sh
+probe_*.sh
+verify_*.sh
+restore_*.sh
+prepare_*.sh
+reconcile_*.sh
+apply_*.sh
+.document_*_backup_*/
