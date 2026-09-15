@@ -9,6 +9,10 @@ class Config:
         self.ENV = os.environ.get("KIPPE_ENV", "development")
         self.DB_PATH = os.environ.get("KIPPE_DB_PATH", "data/estoque_producao.db")
         self.LOG_PATH = os.environ.get("KIPPE_LOG_PATH", "reports/logs/app.log")
+        self.DOCUMENT_ROOT = os.environ.get(
+            "KIPPE_DOCUMENT_ROOT",
+            "data/documents",
+        )
         self.HOST = os.environ.get("KIPPE_HOST", "0.0.0.0")
         self.PORT = int(os.environ.get("KIPPE_PORT", 5000))
         

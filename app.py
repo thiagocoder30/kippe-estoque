@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session, send_from_directory
+from flask import Flask, jsonify, request, session, send_from_directory, send_file
 from src.infrastructure.container import Container
 from src.domain.services.expiration_analyzer import ExpirationAnalyzer
 
@@ -1016,6 +1016,190 @@ def remove_stock():
 def get_historico():
     return jsonify(
         container.use_case.get_recent_history()
+    )
+
+
+# ========================================================
+# DOCUMENT-001D — DOCUMENT ATTACHMENT HTTP GATEWAY
+# ========================================================
+
+def _document_operator_id():
+    if (
+        container.config.ENV == 'testing'
+        and 'X-Test-Operator-Override' in request.headers
+    ):
+        return request.headers.get(
+            'X-Test-Operator-Override'
+        )
+
+    return session.get(
+        'operator_id'
+    )
+
+
+@app.route(
+    '/api/audit-events/<int:event_id>/attachments',
+    methods=['POST']
+)
+def attach_document_to_audit_event(event_id):
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    uploaded_file = request.files.get(
+        'file'
+    )
+
+    if (
+        uploaded_file is None
+        or not uploaded_file.filename
+    ):
+        return jsonify({
+            'error': 'Arquivo obrigatório.'
+        }), 400
+
+    operator_id = _document_operator_id()
+
+    if not operator_id:
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    try:
+        result = (
+            container
+            .document_attachment_use_case
+            .attach(
+                event_id=event_id,
+                content=uploaded_file.read(),
+                original_filename=(
+                    uploaded_file.filename
+                ),
+                declared_mime_type=(
+                    uploaded_file.mimetype
+                ),
+                business_document_number=(
+                    request.form.get(
+                        'business_document_number',
+                        ''
+                    )
+                ),
+                supplier=(
+                    request.form.get(
+                        'supplier',
+                        ''
+                    )
+                ),
+                operator_id=str(
+                    operator_id
+                ),
+            )
+        )
+
+    except ValueError as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    except Exception as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    return jsonify(
+        result
+    ), 201
+
+
+@app.route(
+    '/api/document-attachments/<attachment_id>',
+    methods=['GET']
+)
+def get_document_attachment_metadata(
+    attachment_id
+):
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    metadata = (
+        container
+        .product_repository
+        .get_document_attachment(
+            attachment_id
+        )
+    )
+
+    if metadata is None:
+        return jsonify({
+            'error': 'Documento não encontrado.'
+        }), 404
+
+    return jsonify(
+        metadata
+    ), 200
+
+
+@app.route(
+    '/api/document-attachments/<attachment_id>/content',
+    methods=['GET']
+)
+def get_document_attachment_content(
+    attachment_id
+):
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    metadata = (
+        container
+        .product_repository
+        .get_document_attachment(
+            attachment_id
+        )
+    )
+
+    if metadata is None:
+        return jsonify({
+            'error': 'Documento não encontrado.'
+        }), 404
+
+    try:
+        document_path = (
+            container
+            .document_storage
+            .resolve(
+                metadata[
+                    'relative_path'
+                ]
+            )
+        )
+
+    except Exception as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    if (
+        not document_path.exists()
+        or not document_path.is_file()
+    ):
+        return jsonify({
+            'error': 'Conteúdo documental não encontrado.'
+        }), 404
+
+    return send_file(
+        document_path,
+        mimetype=metadata[
+            'mime_type'
+        ],
+        as_attachment=False,
+        download_name=metadata[
+            'original_filename'
+        ],
     )
 
 

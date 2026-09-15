@@ -539,19 +539,21 @@ def test_integration_module_has_no_product_or_batch_authority():
         assert marker not in source
 
 
-def test_document_001c_contract_does_not_add_http_gateway():
-    app_source = Path(
-        "app.py"
+def test_document_001c_contract_does_not_own_http_gateway():
+    source = Path(
+        "src/use_cases/document_attachment.py"
     ).read_text(
         encoding="utf-8"
     )
 
-    assert (
-        "/api/documents"
-        not in app_source
+    forbidden = (
+        "@app.route",
+        "Flask(",
+        "request.files",
+        "request.form",
+        "send_file(",
+        "send_from_directory(",
     )
 
-    assert (
-        "/api/document"
-        not in app_source
-    )
+    for marker in forbidden:
+        assert marker not in source

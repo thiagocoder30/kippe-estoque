@@ -3,6 +3,7 @@ from src.infrastructure.logger_adapter import FileLogger
 from src.infrastructure.identity import CurrentOperatorResolver
 from src.interfaces.sqlite_repository import SQLiteProductRepository
 from src.interfaces.sqlite_operator_repository import SQLiteOperatorRepository
+from src.infrastructure.document_storage import InvoiceDocumentStorage
 from src.use_cases.manage_stock import ManageStockUseCase
 from src.use_cases.receive_stock import ReceivingUseCase
 from src.use_cases.existing_stock_onboarding import ExistingStockOnboardingUseCase
@@ -10,12 +11,15 @@ from src.use_cases.query_product import ProductQueryUseCase
 from src.use_cases.suggest_products import ProductSuggestionUseCase
 from src.use_cases.manage_operators import ManageOperatorsUseCase
 from src.use_cases.manage_categories import ManageCategoriesUseCase
+from src.use_cases.document_attachment import AttachDocumentToAuditEventUseCase
 class Container:
     def __init__(self, config_override: Config = None):
         self.config = config_override or Config()
         self._logger = None
         self._identity_provider = None
         self._product_repository = None
+        self._document_storage = None
+        self._document_attachment_use_case = None
         self._operator_repository = None
         self._manage_stock_use_case = None
         self._receiving_use_case = None
@@ -32,6 +36,30 @@ class Container:
     def identity_provider(self) -> CurrentOperatorResolver:
         if not self._identity_provider: self._identity_provider = CurrentOperatorResolver(self.config.ENV)
         return self._identity_provider
+
+    @property
+    def document_storage(self):
+        if self._document_storage is None:
+            self._document_storage = InvoiceDocumentStorage(
+                root_path=self.config.DOCUMENT_ROOT,
+            )
+        return self._document_storage
+
+    @property
+    def document_attachment_use_case(self):
+        if self._document_attachment_use_case is None:
+            self._document_attachment_use_case = (
+                AttachDocumentToAuditEventUseCase(
+                    repository=self.product_repository,
+                    storage=self.document_storage,
+                )
+            )
+        return self._document_attachment_use_case
+
+    @document_attachment_use_case.setter
+    def document_attachment_use_case(self, value):
+        self._document_attachment_use_case = value
+
     @property
     def product_repository(self) -> SQLiteProductRepository:
         if not self._product_repository: self._product_repository = SQLiteProductRepository(self.config.DB_PATH)
