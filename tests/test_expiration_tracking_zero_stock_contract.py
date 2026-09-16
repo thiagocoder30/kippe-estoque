@@ -9,28 +9,87 @@ from src.infrastructure.config import Config
 def client():
     from app import app, container
 
-    test_config = Config.for_testing()
-    container.config = test_config
+    environment_keys = (
+        "KIPPE_ENV",
+        "KIPPE_DB_PATH",
+        "KIPPE_LOG_PATH",
+        "KIPPE_SECRET_KEY",
+    )
 
-    container._logger = None
-    container._product_repository = None
-    container._operator_repository = None
-    container._manage_stock_use_case = None
-    container._receiving_use_case = None
-    container._product_query_use_case = None
+    original_environment = {
+        key: os.environ.get(key)
+        for key in environment_keys
+    }
 
-    container.product_repository._init_db()
+    original_app_testing = app.config.get("TESTING")
 
-    app.config["TESTING"] = True
+    original_config = container.config
 
-    with app.test_client() as test_client:
-        yield test_client
+    cache_attributes = (
+        "_logger",
+        "_identity_provider",
+        "_product_repository",
+        "_document_storage",
+        "_document_attachment_use_case",
+        "_operator_repository",
+        "_manage_stock_use_case",
+        "_receiving_use_case",
+        "_existing_stock_onboarding_use_case",
+        "_product_query_use_case",
+        "_product_suggestion_use_case",
+        "_manage_operators_use_case",
+        "_manage_categories_use_case",
+        "_invoice_preparation",
+        "_invoice_reconciliation",
+        "_unresolved_product",
+        "_product_onboarding",
+        "_post_onboarding",
+    )
 
-    if os.path.exists(test_config.DB_PATH):
-        os.remove(test_config.DB_PATH)
+    original_cache = {
+        attribute: getattr(container, attribute)
+        for attribute in cache_attributes
+    }
 
-    if os.path.exists(test_config.LOG_PATH):
-        os.remove(test_config.LOG_PATH)
+    test_config = None
+
+    try:
+        test_config = Config.for_testing()
+        container.config = test_config
+
+        for attribute in cache_attributes:
+            setattr(container, attribute, None)
+
+        container.product_repository._init_db()
+
+        app.config["TESTING"] = True
+
+        with app.test_client() as test_client:
+            yield test_client
+
+    finally:
+        container.config = original_config
+
+        for attribute, value in original_cache.items():
+            setattr(container, attribute, value)
+
+        if original_app_testing is None:
+            app.config.pop("TESTING", None)
+        else:
+            app.config["TESTING"] = original_app_testing
+
+        for key, value in original_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+        if test_config is not None:
+            if os.path.exists(test_config.DB_PATH):
+                os.remove(test_config.DB_PATH)
+
+            if os.path.exists(test_config.LOG_PATH):
+                os.remove(test_config.LOG_PATH)
 
 
 def auth_headers():

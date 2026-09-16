@@ -5,23 +5,51 @@ from src.infrastructure.config import Config
 @pytest.fixture
 def client():
     from app import app, container
+
+    original_config = container.config
+    original_logger = container._logger
+    original_product_repository = container._product_repository
+    original_operator_repository = container._operator_repository
+    original_manage_stock_use_case = container._manage_stock_use_case
+    original_manage_operators_use_case = container._manage_operators_use_case
+    original_testing = app.config.get("TESTING")
+
     test_config = Config.for_testing()
-    container.config = test_config
-    
-    container._logger = None
-    container._product_repository = None
-    container._operator_repository = None
-    container._manage_stock_use_case = None
-    container._manage_operators_use_case = None
-    
-    container.product_repository._init_db()
-    
-    app.config['TESTING'] = True
-    with app.test_client() as test_client:
-        yield test_client
-        
-    if os.path.exists(test_config.DB_PATH): os.remove(test_config.DB_PATH)
-    if os.path.exists(test_config.LOG_PATH): os.remove(test_config.LOG_PATH)
+
+    try:
+        container.config = test_config
+
+        container._logger = None
+        container._product_repository = None
+        container._operator_repository = None
+        container._manage_stock_use_case = None
+        container._manage_operators_use_case = None
+
+        container.product_repository._init_db()
+
+        app.config["TESTING"] = True
+
+        with app.test_client() as test_client:
+            yield test_client
+
+    finally:
+        container.config = original_config
+        container._logger = original_logger
+        container._product_repository = original_product_repository
+        container._operator_repository = original_operator_repository
+        container._manage_stock_use_case = original_manage_stock_use_case
+        container._manage_operators_use_case = original_manage_operators_use_case
+
+        if original_testing is None:
+            app.config.pop("TESTING", None)
+        else:
+            app.config["TESTING"] = original_testing
+
+        if os.path.exists(test_config.DB_PATH):
+            os.remove(test_config.DB_PATH)
+
+        if os.path.exists(test_config.LOG_PATH):
+            os.remove(test_config.LOG_PATH)
 
 def test_api_create_and_list(client):
     # Passa o header de segurança de teste para simular o operador logado de forma limpa

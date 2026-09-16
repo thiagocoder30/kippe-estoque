@@ -1,6 +1,10 @@
 from flask import Flask, jsonify, request, session, send_from_directory, send_file
 from src.infrastructure.container import Container
 from src.domain.services.expiration_analyzer import ExpirationAnalyzer
+from src.application.procurement.invoice_preparation import (
+    ExtractedInvoiceData,
+    ExtractedInvoiceLineData,
+)
 
 container = Container()
 app = Flask(__name__)
@@ -822,6 +826,198 @@ def onboard_existing_stock():
     return jsonify({
         'error': error
     }), 400
+
+
+
+@app.route('/api/invoices/reconcile', methods=['POST'])
+def reconcile_supplier_invoice():
+    """
+    Prepare ingestion-neutral fiscal evidence and reconcile it against the
+    existing product catalog.
+
+    This boundary is documentary/read-only with respect to stock.
+
+    It deliberately does not:
+    - create products;
+    - receive goods;
+    - mutate inventory quantities;
+    - create batches;
+    - perform putaway.
+    """
+
+    data = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(data, dict):
+        return jsonify({
+            'error': 'Documento fiscal JSON obrigatório.'
+        }), 400
+
+    raw_lines = data.get(
+        'lines'
+    )
+
+    if not isinstance(raw_lines, list):
+        return jsonify({
+            'error': 'Linhas fiscais inválidas.'
+        }), 400
+
+    try:
+        extracted_lines = [
+            ExtractedInvoiceLineData(
+                supplier_product_code=(
+                    line.get(
+                        'supplier_product_code',
+                        ''
+                    )
+                ),
+                description=line.get(
+                    'description',
+                    ''
+                ),
+                gtin=line.get(
+                    'gtin',
+                    ''
+                ),
+                commercial_unit=line.get(
+                    'commercial_unit',
+                    ''
+                ),
+                quantity=line.get(
+                    'quantity'
+                ),
+                unit_price=line.get(
+                    'unit_price'
+                ),
+            )
+            for line in raw_lines
+        ]
+
+        extracted = ExtractedInvoiceData(
+            invoice_number=data.get(
+                'invoice_number',
+                ''
+            ),
+            supplier_id=data.get(
+                'supplier_id',
+                ''
+            ),
+            access_key=data.get(
+                'access_key',
+                ''
+            ),
+            series=data.get(
+                'series',
+                ''
+            ),
+            origin_document=data.get(
+                'origin_document',
+                'MANUAL'
+            ),
+            lines=extracted_lines,
+        )
+
+        invoice = (
+            container
+            .invoice_preparation
+            .prepare(
+                extracted
+            )
+        )
+
+        reconciliation = (
+            container
+            .invoice_reconciliation
+            .reconcile(
+                invoice
+            )
+        )
+
+        unresolved = (
+            container
+            .unresolved_product
+            .build(
+                reconciliation
+            )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ) as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    pending_products = [
+        {
+            'invoice_number': pending.invoice_number,
+            'supplier_id': pending.supplier_id,
+            'supplier_product_code': (
+                pending.supplier_product_code
+            ),
+            'description': pending.description,
+            'gtin': pending.gtin,
+            'commercial_unit': (
+                pending.commercial_unit
+            ),
+            'quantity': pending.quantity,
+            'reason': pending.reason.value,
+        }
+        for pending in unresolved.pending
+    ]
+
+    reconciled_lines = [
+        {
+            'supplier_product_code': (
+                item.invoice_line
+                .supplier_product_code
+            ),
+            'description': (
+                item.invoice_line
+                .description
+            ),
+            'gtin': item.invoice_line.gtin,
+            'commercial_unit': (
+                item.invoice_line
+                .commercial_unit
+            ),
+            'quantity': (
+                item.invoice_line
+                .quantity
+            ),
+            'product_id': item.product_id,
+            'status': item.status.value,
+        }
+        for item in reconciliation.lines
+    ]
+
+    return jsonify({
+        'invoice_number': invoice.invoice_number,
+        'supplier_id': invoice.supplier_id,
+        'access_key': invoice.access_key,
+        'series': invoice.series,
+        'origin_document': (
+            invoice.origin_document
+        ),
+        'total_lines': (
+            reconciliation.total_lines
+        ),
+        'matched_lines': (
+            reconciliation.matched_lines
+        ),
+        'needs_registration_lines': (
+            reconciliation
+            .needs_registration_lines
+        ),
+        'is_fully_reconciled': (
+            reconciliation
+            .is_fully_reconciled
+        ),
+        'lines': reconciled_lines,
+        'pending_products': pending_products,
+    }), 200
 
 
 @app.route('/api/receive', methods=['POST'])

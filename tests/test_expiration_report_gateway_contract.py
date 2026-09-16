@@ -10,27 +10,52 @@ def client():
     from app import app, container
 
     test_config = Config.for_testing()
+
+    previous_config = container.config
+    previous_testing = app.config.get("TESTING")
+
+    cache_names = (
+        "_logger",
+        "_product_repository",
+        "_operator_repository",
+        "_manage_stock_use_case",
+        "_product_query_use_case",
+        "_product_suggestion_use_case",
+    )
+
+    previous_cache = {
+        name: getattr(container, name)
+        for name in cache_names
+    }
+
     container.config = test_config
 
-    container._logger = None
-    container._product_repository = None
-    container._operator_repository = None
-    container._manage_stock_use_case = None
-    container._product_query_use_case = None
-    container._product_suggestion_use_case = None
+    for name in cache_names:
+        setattr(container, name, None)
 
     container.product_repository._init_db()
 
     app.config["TESTING"] = True
 
-    with app.test_client() as test_client:
-        yield test_client
+    try:
+        with app.test_client() as test_client:
+            yield test_client
+    finally:
+        container.config = previous_config
 
-    if os.path.exists(test_config.DB_PATH):
-        os.remove(test_config.DB_PATH)
+        for name, value in previous_cache.items():
+            setattr(container, name, value)
 
-    if os.path.exists(test_config.LOG_PATH):
-        os.remove(test_config.LOG_PATH)
+        if previous_testing is None:
+            app.config.pop("TESTING", None)
+        else:
+            app.config["TESTING"] = previous_testing
+
+        if os.path.exists(test_config.DB_PATH):
+            os.remove(test_config.DB_PATH)
+
+        if os.path.exists(test_config.LOG_PATH):
+            os.remove(test_config.LOG_PATH)
 
 
 def test_expiration_report_returns_real_inventory_batches(client):

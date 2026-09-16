@@ -9,29 +9,55 @@ from src.infrastructure.config import Config
 def receiving_env():
     from app import app, container
 
+    original_config = container.config
+    original_testing = app.config.get("TESTING")
+
+    cached_attributes = (
+        "_logger",
+        "_product_repository",
+        "_operator_repository",
+        "_manage_stock_use_case",
+        "_receiving_use_case",
+        "_product_query_use_case",
+        "_product_suggestion_use_case",
+        "_existing_stock_onboarding_use_case",
+    )
+
+    original_cached_state = {
+        attribute: getattr(container, attribute, None)
+        for attribute in cached_attributes
+    }
+
     test_config = Config.for_testing()
-    container.config = test_config
 
-    container._logger = None
-    container._product_repository = None
-    container._operator_repository = None
-    container._manage_stock_use_case = None
-    container._receiving_use_case = None
-    container._product_query_use_case = None
-    container._product_suggestion_use_case = None
+    try:
+        container.config = test_config
 
-    container.product_repository._init_db()
+        for attribute in cached_attributes:
+            if hasattr(container, attribute):
+                setattr(container, attribute, None)
 
-    app.config["TESTING"] = True
+        container.product_repository._init_db()
 
-    with app.test_client() as client:
-        yield client, container
+        app.config["TESTING"] = True
 
-    if os.path.exists(test_config.DB_PATH):
-        os.remove(test_config.DB_PATH)
+        with app.test_client() as client:
+            yield client, container
 
-    if os.path.exists(test_config.LOG_PATH):
-        os.remove(test_config.LOG_PATH)
+    finally:
+        container.config = original_config
+
+        for attribute, value in original_cached_state.items():
+            if hasattr(container, attribute):
+                setattr(container, attribute, value)
+
+        app.config["TESTING"] = original_testing
+
+        if os.path.exists(test_config.DB_PATH):
+            os.remove(test_config.DB_PATH)
+
+        if os.path.exists(test_config.LOG_PATH):
+            os.remove(test_config.LOG_PATH)
 
 
 def test_detailed_receiving_preserves_batch_traceability(

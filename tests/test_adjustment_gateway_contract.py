@@ -1,4 +1,5 @@
 import os
+
 import pytest
 
 from src.infrastructure.config import Config
@@ -8,26 +9,47 @@ from src.infrastructure.config import Config
 def client():
     from app import app, container
 
+    original_config = container.config
+    original_logger = container._logger
+    original_product_repository = container._product_repository
+    original_operator_repository = container._operator_repository
+    original_manage_stock_use_case = container._manage_stock_use_case
+    original_testing = app.config.get("TESTING")
+
     test_config = Config.for_testing()
-    container.config = test_config
 
-    container._logger = None
-    container._product_repository = None
-    container._operator_repository = None
-    container._manage_stock_use_case = None
+    try:
+        container.config = test_config
 
-    container.product_repository._init_db()
+        container._logger = None
+        container._product_repository = None
+        container._operator_repository = None
+        container._manage_stock_use_case = None
 
-    app.config["TESTING"] = True
+        container.product_repository._init_db()
 
-    with app.test_client() as test_client:
-        yield test_client
+        app.config["TESTING"] = True
 
-    if os.path.exists(test_config.DB_PATH):
-        os.remove(test_config.DB_PATH)
+        with app.test_client() as test_client:
+            yield test_client
 
-    if os.path.exists(test_config.LOG_PATH):
-        os.remove(test_config.LOG_PATH)
+    finally:
+        container.config = original_config
+        container._logger = original_logger
+        container._product_repository = original_product_repository
+        container._operator_repository = original_operator_repository
+        container._manage_stock_use_case = original_manage_stock_use_case
+
+        if original_testing is None:
+            app.config.pop("TESTING", None)
+        else:
+            app.config["TESTING"] = original_testing
+
+        if os.path.exists(test_config.DB_PATH):
+            os.remove(test_config.DB_PATH)
+
+        if os.path.exists(test_config.LOG_PATH):
+            os.remove(test_config.LOG_PATH)
 
 
 def test_adjustment_gateway_contract(client):
