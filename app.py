@@ -5,6 +5,9 @@ from src.application.procurement.invoice_preparation import (
     ExtractedInvoiceData,
     ExtractedInvoiceLineData,
 )
+from src.application.procurement.operator_receiving_integration import (
+    OperatorReceivingIntegrationService,
+)
 
 container = Container()
 app = Flask(__name__)
@@ -829,6 +832,92 @@ def onboard_existing_stock():
 
 
 
+def _build_supplier_invoice_reconciliation(data):
+    """
+    Shared NF documentary preparation authority.
+
+    Used by both the read-only reconciliation endpoint and the certified
+    physical receiving integration. It does not mutate stock.
+    """
+    if not isinstance(data, dict):
+        raise ValueError(
+            "Documento fiscal JSON obrigatório."
+        )
+
+    raw_lines = data.get("lines")
+
+    if not isinstance(raw_lines, list):
+        raise ValueError(
+            "Linhas fiscais inválidas."
+        )
+
+    extracted_lines = [
+        ExtractedInvoiceLineData(
+            supplier_product_code=line.get(
+                "supplier_product_code",
+                "",
+            ),
+            description=line.get(
+                "description",
+                "",
+            ),
+            gtin=line.get(
+                "gtin",
+                "",
+            ),
+            commercial_unit=line.get(
+                "commercial_unit",
+                "",
+            ),
+            quantity=line.get(
+                "quantity"
+            ),
+            unit_price=line.get(
+                "unit_price"
+            ),
+        )
+        for line in raw_lines
+    ]
+
+    extracted = ExtractedInvoiceData(
+        invoice_number=data.get(
+            "invoice_number",
+            "",
+        ),
+        supplier_id=data.get(
+            "supplier_id",
+            "",
+        ),
+        access_key=data.get(
+            "access_key",
+            "",
+        ),
+        series=data.get(
+            "series",
+            "",
+        ),
+        origin_document=data.get(
+            "origin_document",
+            "MANUAL",
+        ),
+        lines=extracted_lines,
+    )
+
+    invoice = (
+        container
+        .invoice_preparation
+        .prepare(extracted)
+    )
+
+    reconciliation = (
+        container
+        .invoice_reconciliation
+        .reconcile(invoice)
+    )
+
+    return invoice, reconciliation
+
+
 @app.route('/api/invoices/reconcile', methods=['POST'])
 def reconcile_supplier_invoice():
     """
@@ -1017,6 +1106,162 @@ def reconcile_supplier_invoice():
         ),
         'lines': reconciled_lines,
         'pending_products': pending_products,
+    }), 200
+
+
+@app.route(
+    '/api/invoices/receive-certified',
+    methods=['POST'],
+)
+def receive_certified_supplier_invoice():
+    """
+    NF-001J.9 certified operator receiving boundary.
+
+    Fiscal reconciliation remains documentary.
+    Physical receiving occurs only after explicit conference evidence and
+    always through J.8 SafeReceivingExecutionService.
+    """
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    data = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(data, dict):
+        return jsonify({
+            'error': 'Documento fiscal JSON obrigatório.'
+        }), 400
+
+    invoice_payload = data.get(
+        'invoice'
+    )
+
+    conference_payload = data.get(
+        'conference'
+    )
+
+    if not isinstance(
+        invoice_payload,
+        dict,
+    ):
+        return jsonify({
+            'error': 'invoice é obrigatório.'
+        }), 400
+
+    if not isinstance(
+        conference_payload,
+        dict,
+    ):
+        return jsonify({
+            'error': 'conference é obrigatório.'
+        }), 400
+
+    operator_id = (
+        request.headers.get(
+            'X-Test-Operator-Override'
+        )
+        if (
+            container.config.ENV == 'testing'
+            and 'X-Test-Operator-Override'
+            in request.headers
+        )
+        else session.get(
+            'operator_id'
+        )
+    )
+
+    raw_counts = conference_payload.get(
+        'counts',
+        {}
+    )
+
+    raw_physical = conference_payload.get(
+        'physical_data',
+        {}
+    )
+
+    if not isinstance(raw_counts, dict):
+        return jsonify({
+            'error': 'conference.counts inválido.'
+        }), 400
+
+    if not isinstance(raw_physical, dict):
+        return jsonify({
+            'error': 'conference.physical_data inválido.'
+        }), 400
+
+    try:
+        counts = {
+            int(key): value
+            for key, value in raw_counts.items()
+        }
+
+        physical_data = {
+            int(key): value
+            for key, value in raw_physical.items()
+        }
+
+        _, reconciliation = (
+            _build_supplier_invoice_reconciliation(
+                invoice_payload
+            )
+        )
+
+        result = (
+            OperatorReceivingIntegrationService
+            .execute(
+                repository=(
+                    container.product_repository
+                ),
+                reconciliation=reconciliation,
+                operator_id=operator_id,
+                counts=counts,
+                physical_data=physical_data,
+            )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ) as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    return jsonify({
+        'message': (
+            'Conferência e recebimento certificados processados.'
+        ),
+        'invoice_number': result.invoice_number,
+        'supplier_id': result.supplier_id,
+        'conference_closed_by': (
+            result.conference_closed_by
+        ),
+        'total_lines': result.total_lines,
+        'divergent_lines': result.divergent_lines,
+        'executed_lines': result.executed_lines,
+        'replay_lines': result.replay_lines,
+        'skipped_zero_quantity_lines': (
+            result.skipped_zero_quantity_lines
+        ),
+        'lines': [
+            {
+                'line_number': line.line_number,
+                'product_id': line.product_id,
+                'status': line.status,
+                'executed': line.executed,
+                'operation_status': (
+                    line.operation_status
+                ),
+                'audit_event_id': (
+                    line.audit_event_id
+                ),
+            }
+            for line in result.lines
+        ],
     }), 200
 
 
