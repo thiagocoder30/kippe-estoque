@@ -1526,6 +1526,211 @@ class SQLiteProductRepository:
 
             return event_id
 
+    def save_claimed_receiving_with_operational_audit(
+        self,
+        product: Product,
+        *,
+        idempotency_key: str,
+        fingerprint: str,
+        origin_document: str,
+        supplier_id: str,
+        invoice_number: str,
+        line_number: int,
+        event_type: str,
+        product_id: str,
+        batch_code: str = "",
+        location_id: str = "",
+        quantity_planned: Optional[int] = None,
+        quantity_actual: Optional[int] = None,
+        quantity_before: Optional[int] = None,
+        quantity_after: Optional[int] = None,
+        quantity_divergence: Optional[int] = None,
+        supplier: str = "",
+        document_id: str = "",
+        operator_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        NF-001J.8 atomic receiving persistence boundary.
+
+        The idempotency claim, Product/Batch persistence,
+        operational audit evidence and COMPLETED transition
+        share one BEGIN IMMEDIATE transaction.
+
+        REPLAY and CONFLICT never receive quantitative authority.
+        """
+
+        normalized_key = str(
+            idempotency_key or ""
+        ).strip()
+
+        normalized_fingerprint = str(
+            fingerprint or ""
+        ).strip()
+
+        if not normalized_key:
+            raise ValueError(
+                "idempotency_key is required."
+            )
+
+        if not normalized_fingerprint:
+            raise ValueError(
+                "fingerprint is required."
+            )
+
+        with self._get_connection() as conn:
+            try:
+                conn.execute(
+                    "BEGIN IMMEDIATE"
+                )
+
+                row = conn.execute(
+                    """
+                    SELECT
+                        fingerprint,
+                        status
+                    FROM receiving_operations
+                    WHERE idempotency_key = ?
+                    """,
+                    (normalized_key,),
+                ).fetchone()
+
+                if row is not None:
+                    if (
+                        row["fingerprint"]
+                        == normalized_fingerprint
+                    ):
+                        conn.rollback()
+
+                        return {
+                            "status": "REPLAY",
+                            "idempotency_key": (
+                                normalized_key
+                            ),
+                            "current_fingerprint": (
+                                normalized_fingerprint
+                            ),
+                            "previous_fingerprint": (
+                                row["fingerprint"]
+                            ),
+                            "operation_status": (
+                                row["status"]
+                            ),
+                            "audit_event_id": None,
+                        }
+
+                    conn.rollback()
+
+                    return {
+                        "status": "CONFLICT",
+                        "idempotency_key": (
+                            normalized_key
+                        ),
+                        "current_fingerprint": (
+                            normalized_fingerprint
+                        ),
+                        "previous_fingerprint": (
+                            row["fingerprint"]
+                        ),
+                        "operation_status": (
+                            row["status"]
+                        ),
+                        "audit_event_id": None,
+                    }
+
+                conn.execute(
+                    """
+                    INSERT INTO receiving_operations (
+                        idempotency_key,
+                        fingerprint,
+                        origin_document,
+                        supplier_id,
+                        invoice_number,
+                        line_number,
+                        status
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 'CLAIMED')
+                    """,
+                    (
+                        normalized_key,
+                        normalized_fingerprint,
+                        str(
+                            origin_document or ""
+                        ).strip(),
+                        str(
+                            supplier_id or ""
+                        ).strip(),
+                        str(
+                            invoice_number or ""
+                        ).strip(),
+                        int(line_number),
+                    ),
+                )
+
+                self._save_product_on_connection(
+                    conn,
+                    product,
+                )
+
+                event_id = (
+                    self._append_operational_audit_event_on_connection(
+                        conn,
+                        event_type=event_type,
+                        product_id=product_id,
+                        batch_code=batch_code,
+                        location_id=location_id,
+                        quantity_planned=quantity_planned,
+                        quantity_actual=quantity_actual,
+                        quantity_before=quantity_before,
+                        quantity_after=quantity_after,
+                        quantity_divergence=quantity_divergence,
+                        supplier=supplier,
+                        document_id=document_id,
+                        origin_document=origin_document,
+                        operator_id=operator_id,
+                        metadata=metadata,
+                    )
+                )
+
+                cursor = conn.execute(
+                    """
+                    UPDATE receiving_operations
+                    SET
+                        status = 'COMPLETED',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE idempotency_key = ?
+                      AND fingerprint = ?
+                      AND status = 'CLAIMED'
+                    """,
+                    (
+                        normalized_key,
+                        normalized_fingerprint,
+                    ),
+                )
+
+                if cursor.rowcount != 1:
+                    raise RuntimeError(
+                        "Receiving operation completion "
+                        "transition failed."
+                    )
+
+                conn.commit()
+
+                return {
+                    "status": "NEW",
+                    "idempotency_key": normalized_key,
+                    "current_fingerprint": (
+                        normalized_fingerprint
+                    ),
+                    "previous_fingerprint": None,
+                    "operation_status": "COMPLETED",
+                    "audit_event_id": event_id,
+                }
+
+            except Exception:
+                conn.rollback()
+                raise
+
     def save_product_with_operational_audit(
         self,
         product: Product,
