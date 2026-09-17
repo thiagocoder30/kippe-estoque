@@ -241,6 +241,28 @@ class SQLiteProductRepository:
 
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS receiving_operations (
+                    idempotency_key TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL,
+                    origin_document TEXT NOT NULL,
+                    supplier_id TEXT NOT NULL,
+                    invoice_number TEXT NOT NULL,
+                    line_number INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'CLAIMED',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    CHECK(line_number > 0),
+                    CHECK(status IN (
+                        'CLAIMED',
+                        'COMPLETED',
+                        'FAILED'
+                    ))
+                )
+                """
+            )
+
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS batches (
                     product_id TEXT NOT NULL,
                     batch_code TEXT NOT NULL,
@@ -1123,6 +1145,216 @@ class SQLiteProductRepository:
                 )
 
             return products
+
+    def claim_receiving_operation(
+        self,
+        *,
+        idempotency_key: str,
+        fingerprint: str,
+        origin_document: str,
+        supplier_id: str,
+        invoice_number: str,
+        line_number: int,
+    ) -> Dict[str, Any]:
+        """
+        Atomically claims one deterministic fiscal receiving operation.
+
+        Result status:
+        - NEW: identity did not exist and was claimed;
+        - REPLAY: identity exists with identical fingerprint;
+        - CONFLICT: identity exists with a different fingerprint.
+
+        This method does not mutate Product, Batch or stock quantity.
+        """
+        normalized_key = str(
+            idempotency_key or ""
+        ).strip()
+        normalized_fingerprint = str(
+            fingerprint or ""
+        ).strip()
+        normalized_origin = str(
+            origin_document or ""
+        ).strip()
+        normalized_supplier = str(
+            supplier_id or ""
+        ).strip()
+        normalized_invoice = str(
+            invoice_number or ""
+        ).strip()
+
+        if not normalized_key:
+            raise ValueError(
+                "idempotency_key is required."
+            )
+
+        if not normalized_fingerprint:
+            raise ValueError(
+                "fingerprint is required."
+            )
+
+        if not normalized_origin:
+            raise ValueError(
+                "origin_document is required."
+            )
+
+        if not normalized_supplier:
+            raise ValueError(
+                "supplier_id is required."
+            )
+
+        if not normalized_invoice:
+            raise ValueError(
+                "invoice_number is required."
+            )
+
+        if isinstance(line_number, bool):
+            raise ValueError(
+                "line_number must be a positive integer."
+            )
+
+        try:
+            normalized_line = int(line_number)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "line_number must be a positive integer."
+            ) from None
+
+        if (
+            normalized_line != line_number
+            or normalized_line <= 0
+        ):
+            raise ValueError(
+                "line_number must be a positive integer."
+            )
+
+        with self._get_connection() as conn:
+            try:
+                conn.execute(
+                    "BEGIN IMMEDIATE"
+                )
+
+                row = conn.execute(
+                    """
+                    SELECT
+                        idempotency_key,
+                        fingerprint,
+                        origin_document,
+                        supplier_id,
+                        invoice_number,
+                        line_number,
+                        status
+                    FROM receiving_operations
+                    WHERE idempotency_key = ?
+                    """,
+                    (normalized_key,),
+                ).fetchone()
+
+                if row is None:
+                    conn.execute(
+                        """
+                        INSERT INTO receiving_operations (
+                            idempotency_key,
+                            fingerprint,
+                            origin_document,
+                            supplier_id,
+                            invoice_number,
+                            line_number,
+                            status
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, 'CLAIMED')
+                        """,
+                        (
+                            normalized_key,
+                            normalized_fingerprint,
+                            normalized_origin,
+                            normalized_supplier,
+                            normalized_invoice,
+                            normalized_line,
+                        ),
+                    )
+
+                    result = {
+                        "status": "NEW",
+                        "idempotency_key": normalized_key,
+                        "current_fingerprint": (
+                            normalized_fingerprint
+                        ),
+                        "previous_fingerprint": None,
+                        "operation_status": "CLAIMED",
+                    }
+
+                elif (
+                    row["fingerprint"]
+                    == normalized_fingerprint
+                ):
+                    result = {
+                        "status": "REPLAY",
+                        "idempotency_key": normalized_key,
+                        "current_fingerprint": (
+                            normalized_fingerprint
+                        ),
+                        "previous_fingerprint": (
+                            row["fingerprint"]
+                        ),
+                        "operation_status": row["status"],
+                    }
+
+                else:
+                    result = {
+                        "status": "CONFLICT",
+                        "idempotency_key": normalized_key,
+                        "current_fingerprint": (
+                            normalized_fingerprint
+                        ),
+                        "previous_fingerprint": (
+                            row["fingerprint"]
+                        ),
+                        "operation_status": row["status"],
+                    }
+
+                conn.commit()
+                return result
+
+            except Exception:
+                conn.rollback()
+                raise
+
+    def get_receiving_operation(
+        self,
+        idempotency_key: str,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_key = str(
+            idempotency_key or ""
+        ).strip()
+
+        if not normalized_key:
+            raise ValueError(
+                "idempotency_key is required."
+            )
+
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    idempotency_key,
+                    fingerprint,
+                    origin_document,
+                    supplier_id,
+                    invoice_number,
+                    line_number,
+                    status,
+                    created_at,
+                    updated_at
+                FROM receiving_operations
+                WHERE idempotency_key = ?
+                """,
+                (normalized_key,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return dict(row)
 
     def log_transaction(
         self,
