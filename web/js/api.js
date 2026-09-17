@@ -142,6 +142,38 @@ export class APIClient {
     }
 
     /**
+     * NF-001J.10
+     *
+     * Reconciliação documental da NF.
+     * Não altera estoque.
+     */
+    async reconcileSupplierInvoice(payload) {
+        return this._request(
+            '/api/stock/onboarding',
+            {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            }
+        );
+    }
+
+    /**
+     * NF-001J.10
+     *
+     * Execução certificada após conferência física explícita.
+     * A autoridade de mutação permanece no backend J.9 -> J.8.
+     */
+    async receiveCertifiedInvoice(payload) {
+        return this._request(
+            '/api/invoices/receive-certified',
+            {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            }
+        );
+    }
+
+    /**
      * Recebimento canônico.
      */
     async registerReceive(payload) {

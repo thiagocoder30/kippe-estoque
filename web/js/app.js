@@ -28,6 +28,18 @@ class KippeApplication {
         this.preferredBatchCode = null;
 
         /*
+         * NF-001J.10
+         *
+         * Estado efêmero da conferência fiscal.
+         * Nenhum destes objetos possui autoridade de estoque.
+         */
+        this.certifiedInvoicePayload = null;
+        this.certifiedInvoicePreview = null;
+        this.certifiedConferenceCounts = {};
+        this.certifiedPhysicalData = {};
+        this.certifiedReceivingSubmitting = false;
+
+        /*
          * REPLENISHMENT-UX-001
          *
          * Carrinho = intenção.
@@ -165,6 +177,7 @@ class KippeApplication {
         this.bindNavigation();
         this.bindExistingStockOnboarding();
         this.bindInboundModule();
+        this.bindCertifiedInvoiceReceiving();
         this.bindReceivingDetailedControls();
         this.bindPutawayModule();
         this.bindReplenishmentModule();
@@ -2052,6 +2065,1023 @@ class KippeApplication {
     }
 
 
+    resetCertifiedInvoiceReceiving() {
+        this.certifiedInvoicePayload = null;
+        this.certifiedInvoicePreview = null;
+        this.certifiedConferenceCounts = {};
+        this.certifiedPhysicalData = {};
+        this.certifiedReceivingSubmitting = false;
+
+        const jsonInput =
+            document.getElementById(
+                'certified-invoice-json'
+            );
+
+        if (jsonInput) {
+            jsonInput.value = '';
+        }
+
+        document.getElementById(
+            'certified-invoice-conference'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'certified-invoice-execution-result'
+        )?.classList.add(
+            'hidden'
+        );
+
+        document.getElementById(
+            'certified-invoice-divergence'
+        )?.classList.add(
+            'hidden'
+        );
+
+        const lines =
+            document.getElementById(
+                'certified-invoice-lines'
+            );
+
+        if (lines) {
+            lines.innerHTML = '';
+        }
+
+        this.showCertifiedInvoiceError('');
+    }
+
+    showCertifiedInvoiceError(message) {
+        const panel =
+            document.getElementById(
+                'certified-invoice-error'
+            );
+
+        if (!panel) {
+            return;
+        }
+
+        panel.textContent =
+            message || '';
+
+        panel.classList.toggle(
+            'hidden',
+            !message
+        );
+    }
+
+    getCertifiedLineNumber(line, index) {
+        const candidate =
+            Number(
+                line?.line_number
+                ?? line?.line
+                ?? line?.number
+                ?? index + 1
+            );
+
+        return Number.isInteger(candidate)
+            ? candidate
+            : index + 1;
+    }
+
+    getCertifiedFiscalQuantity(line) {
+        const candidate =
+            Number(
+                line?.fiscal_quantity
+                ?? line?.quantity
+                ?? line?.document_quantity
+                ?? line?.expected_quantity
+                ?? 0
+            );
+
+        return Number.isFinite(candidate)
+            ? candidate
+            : 0;
+    }
+
+    isCertifiedLineBlocked(line) {
+        const status =
+            String(
+                line?.status
+                ?? line?.reconciliation_status
+                ?? ''
+            ).toUpperCase();
+
+        return (
+            status === 'NEEDS_REGISTRATION'
+            || status === 'PENDING_REGISTRATION'
+            || status === 'UNRESOLVED'
+        );
+    }
+
+    renderCertifiedInvoicePreview(preview) {
+        const lines =
+            Array.isArray(preview?.lines)
+                ? preview.lines
+                : [];
+
+        const setText = (
+            id,
+            value
+        ) => {
+            const element =
+                document.getElementById(id);
+
+            if (element) {
+                element.textContent =
+                    value ?? '—';
+            }
+        };
+
+        setText(
+            'certified-invoice-number',
+            preview?.invoice_number
+            ?? this.certifiedInvoicePayload?.invoice_number
+            ?? this.certifiedInvoicePayload?.number
+            ?? '—'
+        );
+
+        setText(
+            'certified-invoice-supplier',
+            preview?.supplier_id
+            ?? preview?.supplier
+            ?? this.certifiedInvoicePayload?.supplier_id
+            ?? this.certifiedInvoicePayload?.supplier
+            ?? '—'
+        );
+
+        const container =
+            document.getElementById(
+                'certified-invoice-lines'
+            );
+
+        if (!container) {
+            return;
+        }
+
+        container.innerHTML = '';
+
+        this.certifiedConferenceCounts = {};
+        this.certifiedPhysicalData = {};
+
+        lines.forEach(
+            (line, index) => {
+                const lineNumber =
+                    this.getCertifiedLineNumber(
+                        line,
+                        index
+                    );
+
+                const fiscalQuantity =
+                    this.getCertifiedFiscalQuantity(
+                        line
+                    );
+
+                const blocked =
+                    this.isCertifiedLineBlocked(
+                        line
+                    );
+
+                const status =
+                    String(
+                        line?.status
+                        ?? line?.reconciliation_status
+                        ?? 'UNKNOWN'
+                    );
+
+                const product =
+                    line?.product_name
+                    ?? line?.name
+                    ?? line?.description
+                    ?? line?.fiscal_description
+                    ?? line?.product_id
+                    ?? line?.sku
+                    ?? 'PRODUTO';
+
+                const productId =
+                    line?.product_id
+                    ?? line?.sku
+                    ?? '—';
+
+                const card =
+                    document.createElement(
+                        'section'
+                    );
+
+                card.className =
+                    blocked
+                        ? 'bg-red-50 border-2 border-red-200 rounded-xl p-3'
+                        : 'bg-white border border-gray-200 rounded-xl p-3 shadow-sm';
+
+                const heading =
+                    document.createElement(
+                        'div'
+                    );
+
+                heading.className =
+                    'flex justify-between items-start gap-2';
+
+                const info =
+                    document.createElement(
+                        'div'
+                    );
+
+                const title =
+                    document.createElement(
+                        'p'
+                    );
+
+                title.className =
+                    'text-[11px] font-black text-gray-900';
+
+                title.textContent =
+                    `${lineNumber}. ${product}`;
+
+                const sku =
+                    document.createElement(
+                        'p'
+                    );
+
+                sku.className =
+                    'text-[8px] font-mono font-bold text-gray-500 mt-1';
+
+                sku.textContent =
+                    `SKU: ${productId}`;
+
+                info.appendChild(title);
+                info.appendChild(sku);
+
+                const badge =
+                    document.createElement(
+                        'span'
+                    );
+
+                badge.className =
+                    blocked
+                        ? 'shrink-0 text-[8px] font-black bg-red-100 text-red-700 rounded px-2 py-1'
+                        : 'shrink-0 text-[8px] font-black bg-green-100 text-green-700 rounded px-2 py-1';
+
+                badge.textContent =
+                    status;
+
+                heading.appendChild(info);
+                heading.appendChild(badge);
+                card.appendChild(heading);
+
+                const fiscal =
+                    document.createElement(
+                        'p'
+                    );
+
+                fiscal.className =
+                    'text-[9px] font-bold text-gray-600 mt-3';
+
+                fiscal.textContent =
+                    `QUANTIDADE FISCAL: ${fiscalQuantity}`;
+
+                card.appendChild(fiscal);
+
+                if (blocked) {
+                    const warning =
+                        document.createElement(
+                            'p'
+                        );
+
+                    warning.className =
+                        'text-[9px] font-black text-red-700 mt-3';
+
+                    warning.textContent =
+                        'PRODUTO EXIGE CADASTRO. RECEBIMENTO BLOQUEADO PARA ESTA LINHA.';
+
+                    card.appendChild(
+                        warning
+                    );
+
+                    container.appendChild(
+                        card
+                    );
+
+                    return;
+                }
+
+                const countLabel =
+                    document.createElement(
+                        'label'
+                    );
+
+                countLabel.className =
+                    'block text-[9px] font-black text-[#124191] mt-3';
+
+                countLabel.textContent =
+                    'QUANTIDADE FÍSICA CONTADA';
+
+                const count =
+                    document.createElement(
+                        'input'
+                    );
+
+                count.type = 'number';
+                count.min = '0';
+                count.step = '1';
+                count.inputMode = 'numeric';
+                count.value =
+                    String(
+                        Math.max(
+                            0,
+                            fiscalQuantity
+                        )
+                    );
+
+                count.dataset.certifiedLine =
+                    String(lineNumber);
+
+                count.className =
+                    'certified-line-count w-full mt-1 border-2 border-[#124191] rounded-xl px-3 py-3 text-2xl text-center font-black text-[#124191]';
+
+                this.certifiedConferenceCounts[
+                    lineNumber
+                ] = Number(count.value);
+
+                count.addEventListener(
+                    'input',
+                    () => {
+                        const value =
+                            Number(count.value);
+
+                        this.certifiedConferenceCounts[
+                            lineNumber
+                        ] =
+                            Number.isFinite(value)
+                                ? value
+                                : 0;
+
+                        this.updateCertifiedInvoiceDivergence();
+                    }
+                );
+
+                card.appendChild(
+                    countLabel
+                );
+
+                card.appendChild(
+                    count
+                );
+
+                const traceGrid =
+                    document.createElement(
+                        'div'
+                    );
+
+                traceGrid.className =
+                    'grid grid-cols-2 gap-2 mt-3';
+
+                const makeField = (
+                    labelText,
+                    type,
+                    fieldName,
+                    required
+                ) => {
+                    const wrapper =
+                        document.createElement(
+                            'div'
+                        );
+
+                    const label =
+                        document.createElement(
+                            'label'
+                        );
+
+                    label.className =
+                        'block text-[8px] font-black text-gray-500';
+
+                    label.textContent =
+                        labelText;
+
+                    const input =
+                        document.createElement(
+                            'input'
+                        );
+
+                    input.type = type;
+
+                    input.className =
+                        'w-full mt-1 border border-gray-300 rounded-lg p-2 text-[10px] font-bold';
+
+                    input.dataset.certifiedLine =
+                        String(lineNumber);
+
+                    input.dataset.certifiedField =
+                        fieldName;
+
+                    if (required) {
+                        input.required = true;
+                    }
+
+                    input.addEventListener(
+                        'input',
+                        () => {
+                            const physical =
+                                this.certifiedPhysicalData[
+                                    lineNumber
+                                ] || {};
+
+                            physical[
+                                fieldName
+                            ] =
+                                input.value;
+
+                            this.certifiedPhysicalData[
+                                lineNumber
+                            ] =
+                                physical;
+                        }
+                    );
+
+                    wrapper.appendChild(
+                        label
+                    );
+
+                    wrapper.appendChild(
+                        input
+                    );
+
+                    return wrapper;
+                };
+
+                traceGrid.appendChild(
+                    makeField(
+                        'LOTE',
+                        'text',
+                        'batch_code',
+                        true
+                    )
+                );
+
+                traceGrid.appendChild(
+                    makeField(
+                        'VALIDADE',
+                        'date',
+                        'expiration_date',
+                        true
+                    )
+                );
+
+                traceGrid.appendChild(
+                    makeField(
+                        'FABRICAÇÃO (OPCIONAL)',
+                        'date',
+                        'manufacturing_date',
+                        false
+                    )
+                );
+
+                card.appendChild(
+                    traceGrid
+                );
+
+                this.certifiedPhysicalData[
+                    lineNumber
+                ] = {
+                    batch_code: '',
+                    expiration_date: '',
+                    manufacturing_date: '',
+                };
+
+                container.appendChild(
+                    card
+                );
+            }
+        );
+
+        document.getElementById(
+            'certified-invoice-conference'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        document.getElementById(
+            'certified-invoice-execution-result'
+        )?.classList.add(
+            'hidden'
+        );
+
+        this.updateCertifiedInvoiceDivergence();
+    }
+
+    updateCertifiedInvoiceDivergence() {
+        const lines =
+            Array.isArray(
+                this.certifiedInvoicePreview?.lines
+            )
+                ? this.certifiedInvoicePreview.lines
+                : [];
+
+        let divergent = 0;
+
+        lines.forEach(
+            (line, index) => {
+                if (
+                    this.isCertifiedLineBlocked(
+                        line
+                    )
+                ) {
+                    return;
+                }
+
+                const lineNumber =
+                    this.getCertifiedLineNumber(
+                        line,
+                        index
+                    );
+
+                const fiscal =
+                    this.getCertifiedFiscalQuantity(
+                        line
+                    );
+
+                const physical =
+                    Number(
+                        this.certifiedConferenceCounts[
+                            lineNumber
+                        ]
+                    );
+
+                if (
+                    Number.isFinite(physical)
+                    && physical !== fiscal
+                ) {
+                    divergent += 1;
+                }
+            }
+        );
+
+        const panel =
+            document.getElementById(
+                'certified-invoice-divergence'
+            );
+
+        const text =
+            document.getElementById(
+                'certified-invoice-divergence-text'
+            );
+
+        if (text) {
+            text.textContent =
+                divergent === 0
+                    ? ''
+                    : (
+                        divergent === 1
+                            ? '1 linha possui quantidade física diferente da quantidade fiscal.'
+                            : `${divergent} linhas possuem quantidade física diferente da quantidade fiscal.`
+                    );
+        }
+
+        panel?.classList.toggle(
+            'hidden',
+            divergent === 0
+        );
+    }
+
+    validateCertifiedPhysicalData() {
+        const lines =
+            Array.isArray(
+                this.certifiedInvoicePreview?.lines
+            )
+                ? this.certifiedInvoicePreview.lines
+                : [];
+
+        for (
+            let index = 0;
+            index < lines.length;
+            index += 1
+        ) {
+            const line =
+                lines[index];
+
+            if (
+                this.isCertifiedLineBlocked(
+                    line
+                )
+            ) {
+                continue;
+            }
+
+            const lineNumber =
+                this.getCertifiedLineNumber(
+                    line,
+                    index
+                );
+
+            const quantity =
+                Number(
+                    this.certifiedConferenceCounts[
+                        lineNumber
+                    ]
+                );
+
+            if (
+                !Number.isInteger(quantity)
+                || quantity < 0
+            ) {
+                throw new Error(
+                    `Linha ${lineNumber}: informe a quantidade física contada.`
+                );
+            }
+
+            /*
+             * Quantidade zero não produz mutação.
+             * O J.9 reporta skipped_zero_quantity_lines.
+             */
+            if (quantity === 0) {
+                continue;
+            }
+
+            const physical =
+                this.certifiedPhysicalData[
+                    lineNumber
+                ] || {};
+
+            if (
+                !String(
+                    physical.batch_code || ''
+                ).trim()
+                || !String(
+                    physical.expiration_date || ''
+                ).trim()
+            ) {
+                throw new Error(
+                    `Linha ${lineNumber}: informe lote e validade.`
+                );
+            }
+        }
+    }
+
+    async reconcileCertifiedInvoice() {
+        const raw =
+            document.getElementById(
+                'certified-invoice-json'
+            )?.value?.trim();
+
+        if (!raw) {
+            this.showCertifiedInvoiceError(
+                'Informe o documento fiscal JSON.'
+            );
+
+            return;
+        }
+
+        let invoice;
+
+        try {
+            invoice =
+                JSON.parse(raw);
+        } catch (error) {
+            this.showCertifiedInvoiceError(
+                'JSON fiscal inválido.'
+            );
+
+            return;
+        }
+
+        if (
+            !invoice
+            || typeof invoice !== 'object'
+            || Array.isArray(invoice)
+        ) {
+            this.showCertifiedInvoiceError(
+                'O documento fiscal deve ser um objeto JSON.'
+            );
+
+            return;
+        }
+
+        this.showCertifiedInvoiceError('');
+
+        const button =
+            document.getElementById(
+                'btn-certified-invoice-reconcile'
+            );
+
+        if (button) {
+            button.disabled = true;
+            button.textContent =
+                'RECONCILIANDO...';
+        }
+
+        document.getElementById(
+            'loader'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        try {
+            const preview =
+                await this.api.reconcileSupplierInvoice(
+                    invoice
+                );
+
+            this.certifiedInvoicePayload =
+                invoice;
+
+            this.certifiedInvoicePreview =
+                preview;
+
+            this.renderCertifiedInvoicePreview(
+                preview
+            );
+
+        } catch (error) {
+            this.certifiedInvoicePayload =
+                null;
+
+            this.certifiedInvoicePreview =
+                null;
+
+            this.showCertifiedInvoiceError(
+                error.message
+                || 'Falha ao reconciliar a nota fiscal.'
+            );
+
+        } finally {
+            document.getElementById(
+                'loader'
+            )?.classList.add(
+                'hidden'
+            );
+
+            if (button) {
+                button.disabled = false;
+                button.textContent =
+                    'ANALISAR E RECONCILIAR NF';
+            }
+        }
+    }
+
+    renderCertifiedExecutionResult(result) {
+        const resultPanel =
+            document.getElementById(
+                'certified-invoice-execution-result'
+            );
+
+        const summary =
+            document.getElementById(
+                'certified-invoice-execution-summary'
+            );
+
+        const lineContainer =
+            document.getElementById(
+                'certified-invoice-execution-lines'
+            );
+
+        if (summary) {
+            summary.innerHTML = '';
+
+            const values = [
+                [
+                    'LINHAS',
+                    result?.total_lines ?? 0
+                ],
+                [
+                    'EXECUTADAS',
+                    result?.executed_lines ?? 0
+                ],
+                [
+                    'REPLAY',
+                    result?.replay_lines ?? 0
+                ],
+                [
+                    'DIVERGENTES',
+                    result?.divergent_lines ?? 0
+                ],
+                [
+                    'QUANTIDADE ZERO',
+                    result?.skipped_zero_quantity_lines ?? 0
+                ],
+            ];
+
+            values.forEach(
+                ([label, value]) => {
+                    const row =
+                        document.createElement(
+                            'p'
+                        );
+
+                    row.className =
+                        'font-bold';
+
+                    row.textContent =
+                        `${label}: ${value}`;
+
+                    summary.appendChild(
+                        row
+                    );
+                }
+            );
+        }
+
+        if (lineContainer) {
+            lineContainer.innerHTML = '';
+
+            const resultLines =
+                Array.isArray(result?.lines)
+                    ? result.lines
+                    : [];
+
+            resultLines.forEach(
+                (line) => {
+                    const row =
+                        document.createElement(
+                            'div'
+                        );
+
+                    row.className =
+                        'bg-white border border-green-200 rounded-lg p-2';
+
+                    const status =
+                        String(
+                            line?.operation_status
+                            ?? line?.status
+                            ?? 'UNKNOWN'
+                        );
+
+                    row.textContent =
+                        `LINHA ${line?.line_number ?? '—'} • ${status}`;
+
+                    lineContainer.appendChild(
+                        row
+                    );
+                }
+            );
+        }
+
+        resultPanel?.classList.remove(
+            'hidden'
+        );
+    }
+
+    async executeCertifiedInvoiceReceiving() {
+        if (
+            this.certifiedReceivingSubmitting
+        ) {
+            return;
+        }
+
+        if (
+            !this.certifiedInvoicePayload
+            || !this.certifiedInvoicePreview
+        ) {
+            this.showCertifiedInvoiceError(
+                'Reconcilie a nota fiscal antes de executar.'
+            );
+
+            return;
+        }
+
+        try {
+            this.validateCertifiedPhysicalData();
+        } catch (error) {
+            this.showCertifiedInvoiceError(
+                error.message
+            );
+
+            return;
+        }
+
+        this.showCertifiedInvoiceError('');
+        this.updateCertifiedInvoiceDivergence();
+
+        const button =
+            document.getElementById(
+                'btn-certified-invoice-execute'
+            );
+
+        this.certifiedReceivingSubmitting =
+            true;
+
+        if (button) {
+            button.disabled = true;
+            button.textContent =
+                'PROCESSANDO RECEBIMENTO...';
+        }
+
+        document.getElementById(
+            'loader'
+        )?.classList.remove(
+            'hidden'
+        );
+
+        try {
+            const result =
+                await this.api.receiveCertifiedInvoice({
+                    invoice:
+                        this.certifiedInvoicePayload,
+                    conference: {
+                        counts:
+                            this.certifiedConferenceCounts,
+                        physical_data:
+                            this.certifiedPhysicalData,
+                    },
+                });
+
+            this.renderCertifiedExecutionResult(
+                result
+            );
+
+            /*
+             * Mantém o botão bloqueado após sucesso.
+             * Replay é responsabilidade do backend, mas a UI também
+             * impede duplo clique e reenvio acidental.
+             */
+            if (button) {
+                button.disabled = true;
+                button.textContent =
+                    'RECEBIMENTO PROCESSADO';
+            }
+
+        } catch (error) {
+            this.certifiedReceivingSubmitting =
+                false;
+
+            this.showCertifiedInvoiceError(
+                error.message
+                || 'Falha no recebimento certificado.'
+            );
+
+            if (button) {
+                button.disabled = false;
+                button.textContent =
+                    'CONFIRMAR RECEBIMENTO CERTIFICADO';
+            }
+
+        } finally {
+            document.getElementById(
+                'loader'
+            )?.classList.add(
+                'hidden'
+            );
+        }
+    }
+
+    bindCertifiedInvoiceReceiving() {
+        const modal =
+            document.getElementById(
+                'certified-invoice-modal'
+            );
+
+        const methodModal =
+            document.getElementById(
+                'inbound-method-modal'
+            );
+
+        document.getElementById(
+            'btn-inbound-certified-invoice'
+        )?.addEventListener(
+            'click',
+            () => {
+                this.resetCertifiedInvoiceReceiving();
+
+                methodModal?.classList.add(
+                    'hidden'
+                );
+
+                modal?.classList.remove(
+                    'hidden'
+                );
+            }
+        );
+
+        document.getElementById(
+            'close-certified-invoice'
+        )?.addEventListener(
+            'click',
+            () => {
+                modal?.classList.add(
+                    'hidden'
+                );
+
+                this.resetCertifiedInvoiceReceiving();
+            }
+        );
+
+        document.getElementById(
+            'btn-certified-invoice-reconcile'
+        )?.addEventListener(
+            'click',
+            async () => {
+                await this.reconcileCertifiedInvoice();
+            }
+        );
+
+        document.getElementById(
+            'btn-certified-invoice-execute'
+        )?.addEventListener(
+            'click',
+            async () => {
+                await this.executeCertifiedInvoiceReceiving();
+            }
+        );
+    }
+
     bindInboundModule() {
         const methodModal = document.getElementById('inbound-method-modal');
         const modalReceive = document.getElementById('receive-modal');
@@ -2460,11 +3490,11 @@ class KippeApplication {
         );
 
         /*
-         * Entrada por NF/IA reservada para implementação futura.
+         * NF-001J.10:
          *
-         * Não existe extrator OCR canônico conectado ao backend.
-         * O botão permanece desabilitado no HTML para impedir
-         * movimentações fictícias de estoque.
+         * A entrada fiscal certificada possui fluxo próprio.
+         * O recebimento manual abaixo permanece disponível e
+         * continua usando /api/receive.
          */
 
         const submitReceive = document.getElementById('submit-receive');

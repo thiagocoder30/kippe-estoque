@@ -2140,6 +2140,184 @@ if ('serviceWorker' in navigator) {
     <script src="/web/js/app.js?v=nuke_1784753602" type="module"></script>
     <script src="/web/js/product_search.js?v=canonical_1" type="module"></script>
 
+    <!-- NF-001J.10 — CONFERÊNCIA E RECEBIMENTO CERTIFICADO -->
+    <div
+        id="certified-invoice-modal"
+        class="hidden fixed inset-0 z-[190] bg-black/80 p-2 sm:p-4 overflow-y-auto"
+    >
+        <div class="min-h-full flex items-start sm:items-center justify-center py-2">
+            <section
+                class="w-full max-w-lg bg-gray-50 rounded-2xl shadow-2xl overflow-hidden"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="certified-invoice-title"
+            >
+                <header class="bg-[#124191] text-white p-4 flex justify-between items-start gap-3">
+                    <div>
+                        <p class="text-[8px] font-black tracking-[0.18em] text-blue-200">
+                            NF-001J • RECEBIMENTO CERTIFICADO
+                        </p>
+
+                        <h2
+                            id="certified-invoice-title"
+                            class="text-base font-black mt-1"
+                        >
+                            CONFERÊNCIA DA NOTA FISCAL
+                        </h2>
+
+                        <p class="text-[9px] text-blue-100 mt-1">
+                            A nota é documental. O estoque só muda após a conferência física.
+                        </p>
+                    </div>
+
+                    <button
+                        id="close-certified-invoice"
+                        type="button"
+                        class="shrink-0 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-[10px] font-black"
+                    >
+                        FECHAR
+                    </button>
+                </header>
+
+                <div class="p-4 space-y-3">
+
+                    <section
+                        id="certified-invoice-input-section"
+                        class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm"
+                    >
+                        <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                            01 • DOCUMENTO FISCAL
+                        </p>
+
+                        <p class="text-[9px] text-gray-500 mt-1">
+                            Cole abaixo o JSON fiscal recebido pelo fluxo documental do Kippe.
+                            Esta etapa não executa estoque.
+                        </p>
+
+                        <textarea
+                            id="certified-invoice-json"
+                            rows="8"
+                            spellcheck="false"
+                            class="w-full mt-3 border border-gray-300 rounded-xl p-3 text-[10px] font-mono outline-none focus:border-[#124191]"
+                            placeholder='{"invoice_number":"...","supplier_id":"...","lines":[...]}'
+                        ></textarea>
+
+                        <button
+                            id="btn-certified-invoice-reconcile"
+                            type="button"
+                            class="w-full mt-3 bg-[#124191] text-white rounded-xl py-3 font-black text-xs active:scale-95 shadow-sm"
+                        >
+                            ANALISAR E RECONCILIAR NF
+                        </button>
+                    </section>
+
+                    <div
+                        id="certified-invoice-error"
+                        class="hidden bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-[10px] font-bold"
+                    ></div>
+
+                    <section
+                        id="certified-invoice-conference"
+                        class="hidden space-y-3"
+                    >
+                        <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
+                            <p class="text-[9px] font-black text-[#124191] tracking-widest">
+                                02 • DOCUMENTO RECONCILIADO
+                            </p>
+
+                            <div class="grid grid-cols-2 gap-3 mt-3 text-[9px]">
+                                <div>
+                                    <p class="font-bold text-gray-400">
+                                        NF
+                                    </p>
+                                    <p
+                                        id="certified-invoice-number"
+                                        class="font-mono font-black text-gray-900 mt-1"
+                                    >
+                                        —
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p class="font-bold text-gray-400">
+                                        FORNECEDOR
+                                    </p>
+                                    <p
+                                        id="certified-invoice-supplier"
+                                        class="font-black text-gray-900 mt-1 break-words"
+                                    >
+                                        —
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <p class="text-[9px] font-black text-amber-800 tracking-widest">
+                                03 • CONFERÊNCIA FÍSICA
+                            </p>
+
+                            <p class="text-[9px] text-amber-800 mt-1">
+                                Informe a quantidade realmente encontrada.
+                                Linhas que exigem cadastro ficam bloqueadas.
+                            </p>
+                        </div>
+
+                        <div
+                            id="certified-invoice-lines"
+                            class="space-y-3"
+                        ></div>
+
+                        <div
+                            id="certified-invoice-divergence"
+                            class="hidden bg-amber-50 border-2 border-amber-300 rounded-xl p-4"
+                        >
+                            <p class="text-[10px] font-black text-amber-900">
+                                DIVERGÊNCIA IDENTIFICADA
+                            </p>
+
+                            <p
+                                id="certified-invoice-divergence-text"
+                                class="text-[9px] text-amber-800 mt-1"
+                            ></p>
+                        </div>
+
+                        <div
+                            id="certified-invoice-execution-result"
+                            class="hidden bg-green-50 border border-green-200 rounded-xl p-4"
+                        >
+                            <p class="text-[10px] font-black text-green-800">
+                                RESULTADO DO RECEBIMENTO
+                            </p>
+
+                            <div
+                                id="certified-invoice-execution-summary"
+                                class="text-[9px] text-green-800 mt-2 space-y-1"
+                            ></div>
+
+                            <div
+                                id="certified-invoice-execution-lines"
+                                class="mt-3 space-y-2"
+                            ></div>
+                        </div>
+
+                        <button
+                            id="btn-certified-invoice-execute"
+                            type="button"
+                            class="w-full bg-green-600 text-white rounded-xl py-4 font-black text-sm active:scale-95 shadow-md"
+                        >
+                            CONFIRMAR RECEBIMENTO CERTIFICADO
+                        </button>
+
+                        <p class="text-[8px] text-gray-500 text-center font-bold">
+                            O botão é bloqueado durante a execução para impedir envio duplo acidental.
+                        </p>
+                    </section>
+                </div>
+            </section>
+        </div>
+    </div>
+
     <!-- MÓDULO DE ESCOLHA DE ENTRADA (TRADICIONAL VS IA) -->
     <div id="inbound-method-modal" class="hidden fixed inset-0 z-[150] bg-black/80 flex items-center justify-center p-4 uppercase">
         <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
@@ -2149,6 +2327,17 @@ if ('serviceWorker' in navigator) {
             </div>
             <div class="p-6 space-y-4">
                 <button id="btn-inbound-traditional" class="w-full bg-white border-2 border-[#124191] text-[#124191] font-black py-4 rounded-xl shadow-sm active:scale-95 flex justify-center gap-2">SCANNER / MANUAL</button>
+
+                <button
+                    id="btn-inbound-certified-invoice"
+                    type="button"
+                    class="w-full bg-green-600 text-white font-black py-4 rounded-xl shadow-sm active:scale-95 flex flex-col items-center justify-center gap-1"
+                >
+                    <span>CONFERIR NF</span>
+                    <span class="text-[9px] tracking-widest">
+                        RECEBIMENTO CERTIFICADO
+                    </span>
+                </button>
 
                 <button
                     id="btn-inbound-ai"
