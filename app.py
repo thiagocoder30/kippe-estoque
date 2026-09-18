@@ -9,6 +9,11 @@ from src.application.procurement.operator_receiving_integration import (
     OperatorReceivingIntegrationService,
 )
 
+from src.application.procurement.danfe_http_acquisition import (
+    DanfeHttpAcquisitionError,
+    DanfeHttpAcquisitionService,
+)
+
 container = Container()
 app = Flask(__name__)
 app.secret_key = container.config.SECRET_KEY
@@ -1460,10 +1465,6 @@ def get_historico():
     )
 
 
-# ========================================================
-# DOCUMENT-001D — DOCUMENT ATTACHMENT HTTP GATEWAY
-# ========================================================
-
 def _document_operator_id():
     if (
         container.config.ENV == 'testing'
@@ -1476,6 +1477,93 @@ def _document_operator_id():
     return session.get(
         'operator_id'
     )
+
+
+# ========================================================
+# NF-001K.3 — DANFE HTTP ACQUISITION GATEWAY
+# ========================================================
+
+@app.route(
+    '/api/invoices/danfe/acquire',
+    methods=['POST']
+)
+def acquire_danfe_document():
+    """
+    Acquire authenticated DANFE image evidence.
+
+    This boundary performs acquisition only. It does not perform OCR,
+    reconciliation, receiving, product registration or stock mutation.
+    """
+    if not _has_valid_session():
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    uploaded_file = request.files.get(
+        'file'
+    )
+
+    if (
+        uploaded_file is None
+        or not uploaded_file.filename
+    ):
+        return jsonify({
+            'error': 'Arquivo obrigatório.'
+        }), 400
+
+    operator_id = _document_operator_id()
+
+    if not operator_id:
+        return jsonify({
+            'error': 'Operador não autenticado.'
+        }), 401
+
+    from datetime import datetime, timezone
+
+    acquired_at = (
+        datetime.now(timezone.utc)
+        .astimezone()
+        .isoformat()
+    )
+
+    try:
+        result = (
+            DanfeHttpAcquisitionService()
+            .acquire(
+                uploaded_file=uploaded_file,
+                operator_id=str(operator_id),
+                acquired_at=acquired_at,
+            )
+        )
+
+    except DanfeHttpAcquisitionError as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    except ValueError as exc:
+        return jsonify({
+            'error': str(exc)
+        }), 400
+
+    return jsonify({
+        'document_sha256': result.document_sha256,
+        'filename': result.filename,
+        'mime_type': result.mime_type,
+        'size_bytes': result.size_bytes,
+        'source': result.source,
+        'acquired_at': (
+            result.document
+            .metadata
+            .acquired_at
+        ),
+    }), 201
+
+
+# ========================================================
+# DOCUMENT-001D — DOCUMENT ATTACHMENT HTTP GATEWAY
+# ========================================================
+
 
 
 @app.route(
