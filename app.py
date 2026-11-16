@@ -489,67 +489,61 @@ def product_operational_history(product_id):
     methods=['GET']
 )
 def expiration_report():
-    report = []
+    """Relatorio de vencimentos com separacao estoque/loja e faixas de urgencia."""
 
-    products = (
-        container
-        .product_repository
-        .get_all()
-    )
+    report = []
+    products = container.product_repository.get_all()
+
+    def classify(days_remaining: int) -> str:
+        if days_remaining < 0:
+            return "expired"
+        if days_remaining <= 7:
+            return "critical"
+        if days_remaining <= 30:
+            return "warning"
+        if days_remaining <= 90:
+            return "attention"
+        return "safe"
 
     for product in products:
-        for batch in (
-            product.batches.values()
-        ):
-            analysis = (
-                ExpirationAnalyzer
-                .analyze(
-                    batch.expiration_date
-                )
-            )
-
+        for batch in product.batches.values():
+            analysis = ExpirationAnalyzer.analyze(batch.expiration_date)
             if not analysis.is_success:
                 continue
-
             expiration = analysis.value
+            days = expiration["days_remaining"]
+
+            warehouse_id = getattr(batch, "warehouse_id", "WH-PADRAO")
+            is_store = bool(warehouse_id) and (
+                "LOJA" in warehouse_id.upper() or "STORE" in warehouse_id.upper()
+            )
 
             report.append({
-                'sku': product.id,
-                'ean': product.ean,
-                'name': product.name,
-                'batch': batch.code,
-                'expiration': (
-                    batch.expiration_date
-                ),
-                'days_remaining': (
-                    expiration[
-                        'days_remaining'
-                    ]
-                ),
-                'status': (
-                    expiration[
-                        'status'
-                    ]
-                ),
-                'quantity': (
-                    batch.quantity
-                ),
-                'location_id': (
-                    batch.location_id
-                ),
+                "sku": product.id,
+                "ean": product.ean,
+                "name": product.name,
+                "batch": batch.code,
+                "expiration": batch.expiration_date,
+                "days_remaining": days,
+                "status": expiration["status"],
+                "urgency": classify(days),
+                "quantity": batch.quantity,
+                "warehouse_id": warehouse_id,
+                "location": "store" if is_store else "depot",
+                "location_id": batch.location_id,
             })
 
-    report.sort(
-        key=lambda item: (
-            item['expiration'],
-            item['sku'],
-            item['batch'],
-        )
-    )
+    report.sort(key=lambda item: (item["days_remaining"], item["name"], item["batch"]))
 
-    return jsonify(
-        report
-    ), 200
+    summary = {"expired": 0, "critical": 0, "warning": 0, "attention": 0, "safe": 0}
+    for item in report:
+        summary[item["urgency"]] += 1
+
+    return jsonify({
+        "items": report,
+        "summary": summary,
+        "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+    }), 200
 
 
 @app.route(
@@ -1730,6 +1724,21 @@ def get_document_attachment_content(
             'original_filename'
         ],
     )
+
+
+@app.route('/css/<path:filename>')
+def serve_css(filename):
+    return send_from_directory('web/css', filename)
+
+
+@app.route('/vendor/<path:filename>')
+def serve_vendor(filename):
+    return send_from_directory('web/vendor', filename)
+
+
+@app.route('/icons/<path:filename>')
+def serve_icons(filename):
+    return send_from_directory('web/icons', filename)
 
 
 if __name__ == '__main__':

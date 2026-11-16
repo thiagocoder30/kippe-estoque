@@ -181,6 +181,10 @@ if ('serviceWorker' in navigator) {
                     <div class="bg-[#124191] text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div>
                     <h3 class="font-black text-[#124191] text-[11px] text-center">5. RELATÓRIOS</h3>
                 </button>
+                <button class="bg-white rounded-xl p-4 shadow-sm border-2 border-kippe-red flex flex-col items-center justify-center active:scale-95" id="btn-module-validity">
+                    <div class="bg-kippe-red text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                    <h3 class="font-black text-kippe-red text-[11px] text-center">6. VALIDADE</h3>
+                </button>
             </div>
 
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -966,6 +970,17 @@ if ('serviceWorker' in navigator) {
             </div>
         </section>
     
+
+        <!-- TELA DE VALIDADE -->
+        <section id="validity-view" class="hidden space-y-3 pb-24">
+            <button id="btn-back-validity" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase mb-2">VOLTAR AO PAINEL</button>
+            <div class="bg-white p-4 rounded-xl shadow-sm border-t-4 border-t-kippe-red">
+                <h2 class="text-lg font-black text-gray-800 uppercase">Controle de Validade</h2>
+                <p class="text-[9px] text-gray-500 mt-1 uppercase">Estoque e Loja - FEFO automatico</p>
+                <div id="validity-root" class="mt-4"></div>
+            </div>
+        </section>
+
     </main>
 
     <!-- MODAL CADASTRO DE NOVO PRODUTO -->
@@ -2137,6 +2152,7 @@ if ('serviceWorker' in navigator) {
         </button>
     </nav>
 
+    <script src="/web/js/features/validity.js" type="module"></script>
     <script src="/web/js/app.js?v=nuke_1784753602" type="module"></script>
     <script src="/web/js/product_search.js?v=canonical_1" type="module"></script>
 

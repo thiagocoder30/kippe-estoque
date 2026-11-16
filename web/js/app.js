@@ -6711,3 +6711,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const app = new KippeApplication();
     app.bootstrap();
 });
+
+// ═══════════════════════════════════════════════════════════
+// Validade — Tela operacional (feature isolada)
+// ═══════════════════════════════════════════════════════════
+document.getElementById('btn-module-validity')?.addEventListener('click', () => {
+  document.getElementById('home-module-view')?.classList.add('hidden');
+  document.getElementById('validity-view')?.classList.remove('hidden');
+  window.ValidityFeature?.mount();
+});
+
+document.getElementById('btn-back-validity')?.addEventListener('click', () => {
+  document.getElementById('validity-view')?.classList.add('hidden');
+  document.getElementById('home-module-view')?.classList.remove('hidden');
+});
