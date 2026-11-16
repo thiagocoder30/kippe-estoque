@@ -51,3 +51,6 @@ hotfix_*.py
 implement_*.py
 run_*.sh
 reports/logs/
+
+# Runtime data (DB, logs, audit, uploads) — backed up via scripts/backup-db.sh
+data/
