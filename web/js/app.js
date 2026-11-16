@@ -6727,6 +6727,4 @@ document.getElementById('btn-back-validity')?.addEventListener('click', () => {
 });
 
 // Wire da feature Conference (navegação + listeners)
-window.addEventListener('DOMContentLoaded', () => {
-  window.ConferenceFeature?.wire();
-});
+

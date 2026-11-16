@@ -975,8 +975,9 @@ if ('serviceWorker' in navigator) {
         <!-- TELA DE CONFERÊNCIA -->
         <section id="conference-view" class="hidden space-y-3 pb-24">
             <div class="flex gap-2">
-                <button id="btn-back-conference" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase">VOLTAR</button>
-                <button id="btn-conference-add" class="bg-kippe-blue text-white px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase ml-auto">+ ITEM</button>
+                <button type="button" id="btn-back-conference" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase">VOLTAR</button>
+                <button type="button" id="btn-conference-clear" class="bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm uppercase ml-auto">LIMPAR</button>
+                <button type="button" id="btn-conference-add" class="bg-kippe-blue text-white px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase">+ ITEM</button>
             </div>
 
             <div class="bg-white p-4 rounded-xl shadow-sm border-t-4 border-t-kippe-blue">
@@ -1010,7 +1011,7 @@ if ('serviceWorker' in navigator) {
                     <label class="block text-[9px] font-black text-gray-500 mb-1 tracking-widest">BIPAR OU DIGITAR EAN/SKU</label>
                     <div class="flex gap-2">
                         <input type="text" id="conf-scan-input" placeholder="EAN ou SKU..." autocomplete="off" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono font-bold outline-none">
-                        <button id="conf-scan-btn" class="bg-kippe-blue text-white px-4 rounded-lg font-bold text-xs">BIPAR</button>
+                        <button type="button" id="conf-scan-btn" class="bg-kippe-blue text-white px-4 rounded-lg font-bold text-xs">BIPAR</button>
                     </div>
                 </div>
             </div>
@@ -1022,7 +1023,7 @@ if ('serviceWorker' in navigator) {
                 </div>
             </div>
 
-            <button id="btn-conference-finalize" class="w-full bg-green-600 text-white font-black py-3 rounded-xl shadow-sm text-sm uppercase tracking-wider disabled:opacity-50" disabled>
+            <button type="button" id="btn-conference-finalize" class="w-full bg-green-600 text-white font-black py-3 rounded-xl shadow-sm text-sm uppercase tracking-wider disabled:opacity-50" disabled>
                 FINALIZAR CONFERÊNCIA
             </button>
         </section>
@@ -2208,7 +2209,7 @@ if ('serviceWorker' in navigator) {
         </button>
     </nav>
 
-    <script src="/web/js/features/conference.js?v=5" type="module"></script>
+    <script src="/web/js/features/conference.js?v=9" type="module"></script>
     <script src="/web/js/features/validity.js?v=2" type="module"></script>
     <script src="/web/js/app.js?v=nuke_1784753602" type="module"></script>
     <script src="/web/js/product_search.js?v=canonical_1" type="module"></script>
