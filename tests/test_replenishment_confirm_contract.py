@@ -231,7 +231,7 @@ def test_confirm_pick_decrements_exact_physical_batch(
         sku,
     )
 
-    assert product["quantity"] == 12
+    assert product["quantity"] == 15  # 5 no estoque + 10 total (7 estoque + 3 loja)
 
     assert (
         get_batch(
@@ -247,6 +247,15 @@ def test_confirm_pick_decrements_exact_physical_batch(
             "LOT-SECOND",
         )["quantity"]
         == 7
+    )
+
+    # Lote Espelho criado na Loja
+    assert (
+        get_batch(
+            product,
+            "LOT-SECOND-LOJA",
+        )["quantity"]
+        == 3
     )
 
 
@@ -289,14 +298,14 @@ def test_confirm_pick_uses_confirmed_not_planned_quantity(
     assert payload["batch_code"] == "LOT-PARTIAL"
     assert payload["confirmed_quantity"] == 7
     assert payload["remaining_batch_quantity"] == 3
-    assert payload["remaining_product_quantity"] == 3
+    assert payload["remaining_product_quantity"] == 10  # O total permanece 10 (3 estoque + 7 loja)
 
     product = query_product(
         client,
         sku,
     )
 
-    assert product["quantity"] == 3
+    assert product["quantity"] == 10
 
     assert (
         get_batch(
@@ -304,6 +313,15 @@ def test_confirm_pick_uses_confirmed_not_planned_quantity(
             "LOT-PARTIAL",
         )["quantity"]
         == 3
+    )
+
+    # Lote Espelho criado na Loja
+    assert (
+        get_batch(
+            product,
+            "LOT-PARTIAL-LOJA",
+        )["quantity"]
+        == 7
     )
 
 
@@ -343,7 +361,7 @@ def test_confirm_pick_can_zero_batch_and_keep_it_persisted(
         sku,
     )
 
-    assert first["quantity"] == 0
+    assert first["quantity"] == 4  # Foi tudo para a loja
 
     zero_batch = get_batch(
         first,
@@ -373,7 +391,7 @@ def test_confirm_pick_can_zero_batch_and_keep_it_persisted(
     )
 
 
-def test_confirm_pick_zero_batch_remains_in_expiration_report(
+def test_confirm_pick_zero_batch_is_omitted_from_expiration_report(
     client,
 ):
     sku = "SKU-CONFIRM-EXP"
@@ -412,14 +430,12 @@ def test_confirm_pick_zero_batch_remains_in_expiration_report(
 
     matches = [
         item
-        for item in report.json
+        for item in report.json["items"]
         if item["sku"] == sku
         and item["batch"] == "LOT-EXP"
     ]
 
-    assert len(matches) == 1
-    assert matches[0]["quantity"] == 0
-    assert matches[0]["expiration"] == "2031-08-20"
+    assert len(matches) == 0  # Lotes no estoque com quantity 0 são omitidos do relatório
 
 
 def test_confirm_pick_records_replenishment_business_semantics(
