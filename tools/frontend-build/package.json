@@ -1,0 +1,10 @@
+{
+  "name": "kippe-frontend-build",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned local frontend build dependencies for Kippe WMS",
+  "devDependencies": {
+    "tailwindcss": "3.4.17",
+    "html5-qrcode": "2.3.8"
+  }
+}
