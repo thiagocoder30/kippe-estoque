@@ -1,0 +1,12 @@
+# ===== Desenvolvimento — Kippe Estoque =====
+-r requirements.txt
+
+pytest==9.1.1
+pluggy==1.6.0
+iniconfig==2.3.0
+packaging==26.3
+Pygments==2.21.0
+
+# Cobertura (a instalar na próxima sessão)
+pytest-cov>=5.0
+pytest-timeout>=2.3
