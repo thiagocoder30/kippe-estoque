@@ -1757,7 +1757,9 @@ def conference_finalize():
 
     data = request.json or {}
     items = data.get('items', [])
-    
+    ctx_supplier = str(data.get('supplier') or '').strip()
+    ctx_invoice = str(data.get('invoice_number') or '').strip()
+
     if not items or not isinstance(items, list):
         return jsonify({'error': 'Nenhum item para finalizar.'}), 400
 
@@ -1775,7 +1777,7 @@ def conference_finalize():
         batch_code = str(item.get('batch_code') or '').strip() or f"LOTE-{__import__('datetime').date.today().isoformat().replace('-', '')}"
         expiration_date = str(item.get('expiration_date') or '').strip()
         manufacturing_date = str(item.get('manufacturing_date') or '').strip()
-        supplier = str(item.get('supplier') or 'PADRAO').strip()
+        supplier = str(item.get('supplier') or ctx_supplier or 'PADRAO').strip()
         
         if not sku:
             errors.append({'sku': None, 'error': 'SKU vazio'})

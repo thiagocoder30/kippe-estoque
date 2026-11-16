@@ -202,7 +202,7 @@ const ConferenceFeature = (() => {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, supplier: state.supplier, invoice_number: state.invoice_number }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -229,7 +229,8 @@ const ConferenceFeature = (() => {
   }
 
   function wire() {
-    document.getElementById('btn-module-conference')?.addEventListener('click', () => {
+    document.getElementById('btn-inbound-conference')?.addEventListener('click', () => {
+      document.getElementById('inbound-method-modal')?.classList.add('hidden');
       document.getElementById('home-module-view')?.classList.add('hidden');
       document.getElementById('conference-view')?.classList.remove('hidden');
       mount();
