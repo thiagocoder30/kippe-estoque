@@ -22,3 +22,32 @@ Use `./start.sh` que invoca `python3 app.py`. **Não** invoque este arquivo.
 - Preserva evidência histórica da migração CLI → Flask
 - O `main` branch ainda pode referenciar (precisa de reconciliação de branch — ver Sessão 2)
 - Removível após merge de `recovery/architecture-reconciliation` em `main`
+
+## templates_dead/
+
+**Origem**: `templates/` (raiz do projeto)
+**Arquivado em**: 2026-11-16
+**Motivo**: código morto pós-migração Flask → SPA estático
+
+### Contexto
+
+- `templates/index.html` era o template Jinja do Flask em fase pré-SPA
+- Flask atual **não usa Jinja**: `grep render_template app.py` retorna vazio
+- Flask serve apenas `web/` via `send_from_directory('web', ...)` (app.py:34,39)
+- `templates/index.html` ainda contém CDN: `<script src="https://unpkg.com/html5-qrcode">`
+  (sem version pin — pior que CDN versionado)
+- Violava contrato air-gap `nf-001k.5a.f`, mas **invisível** porque o teste
+  verifica apenas `web/index.html`
+
+### O paradoxo dos commits
+
+`git log templates/index.html` mostra edições recentes (SEC005, INV-*,
+audit trail) **após** o Flask já servir `web/`. Padrão clássico de código
+morto mantido por inércia — edições em lote não sabiam que o arquivo
+já não era servido em produção.
+
+### Recomendação
+
+Não editar `templates_dead/` daqui em diante. Se algum dia houver
+migração de SPA → templates Jinja, criar `templates/` novo do zero,
+com o teste do contrato `nf-001k.5a.f` expandido para cobri-lo.
