@@ -105,15 +105,62 @@ const ValidityFeature = (() => {
   }
 
   function openDetail(item) {
-    alert(
-      `Produto: ${item.name}\n` +
-      `SKU: ${item.sku}\n` +
-      `Lote: ${item.batch}\n` +
-      `Validade: ${item.expiration}\n` +
-      `Dias: ${item.days_remaining}\n` +
-      `Local: ${item.location === 'store' ? 'LOJA' : 'ESTOQUE'}\n` +
-      `Qtd: ${item.quantity}`
-    );
+    // Remove modal antigo se existir
+    document.getElementById('validity-detail-modal')?.remove();
+
+    const locIcon = item.location === 'store' ? '🏪' : '📦';
+    const locLabel = item.location === 'store' ? 'LOJA' : 'ESTOQUE';
+    const u = URGENCY[item.urgency] || URGENCY.safe;
+
+    const modal = el('div', {
+      id: 'validity-detail-modal',
+      className: 'fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4'
+    }, [
+      el('div', { className: 'bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden' }, [
+        // Cabeçalho
+        el('div', { className: `p-4 ${u.bg} border-b border-gray-200 flex justify-between items-start` }, [
+          el('div', {}, [
+            el('h3', { className: 'font-black text-gray-800 text-lg leading-tight' }, item.name),
+            el('p', { className: 'text-xs text-gray-600 mt-1' }, `SKU: ${item.sku} ${item.ean ? `· EAN: ${item.ean}` : ''}`)
+          ])
+        ]),
+        // Corpo
+        el('div', { className: 'p-4 space-y-3 text-sm text-gray-700' }, [
+          el('div', { className: 'grid grid-cols-2 gap-2' }, [
+            el('div', { className: 'bg-gray-50 p-2 rounded' }, [
+              el('span', { className: 'block text-[10px] text-gray-500 uppercase font-bold' }, 'Lote'),
+              el('span', { className: 'font-mono font-bold' }, item.batch)
+            ]),
+            el('div', { className: 'bg-gray-50 p-2 rounded' }, [
+              el('span', { className: 'block text-[10px] text-gray-500 uppercase font-bold' }, 'Validade'),
+              el('span', { className: 'font-bold' }, item.expiration)
+            ])
+          ]),
+          el('div', { className: 'grid grid-cols-2 gap-2' }, [
+            el('div', { className: 'bg-gray-50 p-2 rounded' }, [
+              el('span', { className: 'block text-[10px] text-gray-500 uppercase font-bold' }, 'Localização'),
+              el('span', { className: 'font-bold' }, `${locIcon} ${locLabel}`)
+            ]),
+            el('div', { className: 'bg-gray-50 p-2 rounded' }, [
+              el('span', { className: 'block text-[10px] text-gray-500 uppercase font-bold' }, 'Quantidade'),
+              el('span', { className: 'font-bold text-lg text-kippe-blue' }, `${item.quantity} un`)
+            ])
+          ]),
+          el('div', { className: 'text-center mt-2 text-xs font-bold text-red-600' },
+            item.days_remaining < 0 ? `VENCIDO há ${Math.abs(item.days_remaining)} dias` : `Vence em ${item.days_remaining} dias`
+          )
+        ]),
+        // Footer
+        el('div', { className: 'p-4 bg-gray-50 border-t border-gray-200' }, [
+          el('button', {
+            className: 'w-full bg-[#124191] text-white font-bold py-2 rounded-lg active:scale-95',
+            onclick: () => document.getElementById('validity-detail-modal').remove()
+          }, 'FECHAR')
+        ])
+      ])
+    ]);
+
+    document.body.appendChild(modal);
   }
 
   function renderReport(data) {

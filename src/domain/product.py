@@ -78,7 +78,7 @@ class Product:
         if amount <= 0: 
             return Result.fail("Quantidade inválida.")
         from src.domain.services.fefo_selector import FEFOSelector
-        eligible_batches = [b for b in FEFOSelector.get_eligible_batches(self.batches) if b.quantity > 0]
+        eligible_batches = [b for b in FEFOSelector.get_eligible_batches(self.batches, warehouse_id="WH-PADRAO") if b.quantity > 0]
         
         available_valid_qty = sum(b.quantity for b in eligible_batches)
         
@@ -120,7 +120,7 @@ class Product:
         return Result.ok(None)
         
     def get_picking_instructions(self) -> list:
-        eligible_batches = [b for b in FEFOSelector.get_eligible_batches(self.batches) if b.quantity > 0]
+        eligible_batches = [b for b in FEFOSelector.get_eligible_batches(self.batches, warehouse_id="WH-PADRAO") if b.quantity > 0]
         return [{"lote": b.code, "validade": b.expiration_date, "qtd_disponivel": b.quantity} for b in eligible_batches]
 
     def get_stock_by_warehouse(self, warehouse_id: str) -> int:

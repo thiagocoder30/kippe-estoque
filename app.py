@@ -510,6 +510,11 @@ def expiration_report():
             analysis = ExpirationAnalyzer.analyze(batch.expiration_date)
             if not analysis.is_success:
                 continue
+                
+            # Ignora lotes vazios (já abastecidos ou esgotados)
+            if batch.quantity <= 0:
+                continue
+                
             expiration = analysis.value
             days = expiration["days_remaining"]
 

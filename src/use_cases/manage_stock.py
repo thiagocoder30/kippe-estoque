@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from src.domain.access_control import AccessControl
 from src.domain.product import Product
 from src.domain.result import Result
+from src.domain.batch import Batch
 from src.domain.services.inventory_adjustment_engine import (
     InventoryAdjustmentEngine,
 )
@@ -1117,7 +1118,28 @@ class ManageStockUseCase:
         )
 
         batch.quantity -= quantity
-        product.quantity -= quantity
+        # product.quantity NÃO é reduzido: é uma transferência, o total físico permanece
+
+        # ─── LOTE ESPELHO PARA A LOJA (Rastreio de Vencimento) ───
+        store_batch_code = f"{normalized_batch_code}-LOJA"
+        store_batch = product.batches.get(store_batch_code)
+        
+        if store_batch:
+            store_batch.quantity += quantity
+        else:
+            store_batch = Batch(
+                code=store_batch_code,
+                product_id=normalized_product_id,
+                quantity=quantity,
+                expiration_date=batch.expiration_date,
+                manufacturing_date=getattr(batch, "manufacturing_date", ""),
+                supplier=getattr(batch, "supplier", "PADRAO"),
+                warehouse_id="LOJA",
+                location_id="LOJA-GONDOLA",
+                cost_per_unit=getattr(batch, "cost_per_unit", 0.0),
+            )
+            product.batches[store_batch_code] = store_batch
+        # ─────────────────────────────────────────────────────────
 
         audit_event = {
             "event_type": (
