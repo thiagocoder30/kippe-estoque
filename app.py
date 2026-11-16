@@ -1746,6 +1746,80 @@ def serve_icons(filename):
     return send_from_directory('web/icons', filename)
 
 
+@app.route('/api/conference/finalize', methods=['POST'])
+def conference_finalize():
+    """
+    Finaliza conferência e dá entrada direta no estoque.
+    Fluxo simplificado para conferente: apenas SKU + quantidade + lote + validade.
+    """
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+    items = data.get('items', [])
+    
+    if not items or not isinstance(items, list):
+        return jsonify({'error': 'Nenhum item para finalizar.'}), 400
+
+    try:
+        op_id = str(session.get('operator_id') or session.get('usuario') or 'SYSTEM')
+    except Exception:
+        op_id = 'SYSTEM'
+    
+    results = []
+    errors = []
+    
+    for item in items:
+        sku = str(item.get('sku') or '').strip()
+        quantity = item.get('quantity', 0)
+        batch_code = str(item.get('batch_code') or '').strip() or f"LOTE-{__import__('datetime').date.today().isoformat().replace('-', '')}"
+        expiration_date = str(item.get('expiration_date') or '').strip()
+        manufacturing_date = str(item.get('manufacturing_date') or '').strip()
+        supplier = str(item.get('supplier') or 'PADRAO').strip()
+        
+        if not sku:
+            errors.append({'sku': None, 'error': 'SKU vazio'})
+            continue
+        if not isinstance(quantity, int) or quantity <= 0:
+            errors.append({'sku': sku, 'error': f'Quantidade inválida: {quantity}'})
+            continue
+        if not expiration_date:
+            errors.append({'sku': sku, 'error': 'Data de validade obrigatória'})
+            continue
+        
+        # Busca produto
+        product = container.product_repository.get_by_id(sku)
+        if not product:
+            errors.append({'sku': sku, 'error': 'Produto não cadastrado'})
+            continue
+        
+        # Chama o use case padrão de entrada
+        try:
+            result = container.receive_use_case.execute(
+                identifier=sku,
+                quantity=quantity,
+                batch_code=batch_code,
+                expiration_date=expiration_date,
+                supplier=supplier,
+                manufacturing_date=manufacturing_date,
+                origin_document='CONFERENCE',
+                operator_id=op_id,
+            )
+            if result.is_success:
+                results.append({'sku': sku, 'quantity': quantity, 'batch_code': batch_code})
+            else:
+                errors.append({'sku': sku, 'error': str(result.error)})
+        except Exception as exc:
+            errors.append({'sku': sku, 'error': str(exc)})
+    
+    return jsonify({
+        'success': len(results),
+        'failed': len(errors),
+        'results': results,
+        'errors': errors,
+    }), 200 if not errors else 207
+
+
 if __name__ == '__main__':
     is_dev = (
         container.config.ENV

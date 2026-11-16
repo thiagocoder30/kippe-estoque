@@ -185,6 +185,10 @@ if ('serviceWorker' in navigator) {
                     <div class="bg-kippe-red text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
                     <h3 class="font-black text-kippe-red text-[11px] text-center">6. VALIDADE</h3>
                 </button>
+                <button class="bg-white rounded-xl p-4 shadow-sm border-2 border-kippe-blue flex flex-col items-center justify-center active:scale-95" id="btn-module-conference">
+                    <div class="bg-kippe-blue text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg></div>
+                    <h3 class="font-black text-kippe-blue text-[11px] text-center">7. CONFERIR</h3>
+                </button>
             </div>
 
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -970,6 +974,50 @@ if ('serviceWorker' in navigator) {
             </div>
         </section>
     
+
+        <!-- TELA DE CONFERÊNCIA -->
+        <section id="conference-view" class="hidden space-y-3 pb-24">
+            <div class="flex gap-2">
+                <button id="btn-back-conference" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase">VOLTAR</button>
+                <button id="btn-conference-add" class="bg-kippe-blue text-white px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase ml-auto">+ ITEM</button>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border-t-4 border-t-kippe-blue">
+                <h2 class="text-lg font-black text-gray-800 uppercase">Conferência de NF</h2>
+                <p class="text-[9px] text-gray-500 mt-1 uppercase" id="conference-supplier">FORNECEDOR DESCONHECIDO</p>
+
+                <div class="grid grid-cols-3 gap-2 mt-3 text-center text-[10px] font-bold">
+                    <div class="bg-blue-50 p-2 rounded text-blue-800">
+                        <div class="text-lg" id="conf-progress-ok">0</div>OK
+                    </div>
+                    <div class="bg-yellow-50 p-2 rounded text-yellow-800">
+                        <div class="text-lg" id="conf-progress-pending">0</div>PENDENTE
+                    </div>
+                    <div class="bg-red-50 p-2 rounded text-red-800">
+                        <div class="text-lg" id="conf-progress-div">0</div>DIVERG.
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="block text-[9px] font-black text-gray-500 mb-1 tracking-widest">BIPAR OU DIGITAR EAN/SKU</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="conf-scan-input" placeholder="EAN ou SKU..." autocomplete="off" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-mono font-bold outline-none">
+                        <button id="conf-scan-btn" class="bg-kippe-blue text-white px-4 rounded-lg font-bold text-xs">BIPAR</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-l-kippe-red">
+                <h3 class="text-sm font-black text-gray-800 uppercase mb-2">Itens da Conferência</h3>
+                <div id="conf-items-list" class="space-y-2">
+                    <p class="text-xs text-gray-400 text-center py-4">Nenhum item. Toque em "+ ITEM" ou bipe um código.</p>
+                </div>
+            </div>
+
+            <button id="btn-conference-finalize" class="w-full bg-green-600 text-white font-black py-3 rounded-xl shadow-sm text-sm uppercase tracking-wider disabled:opacity-50" disabled>
+                FINALIZAR CONFERÊNCIA
+            </button>
+        </section>
 
         <!-- TELA DE VALIDADE -->
         <section id="validity-view" class="hidden space-y-3 pb-24">
@@ -2152,6 +2200,7 @@ if ('serviceWorker' in navigator) {
         </button>
     </nav>
 
+    <script src="/web/js/features/conference.js?v=2" type="module"></script>
     <script src="/web/js/features/validity.js?v=2" type="module"></script>
     <script src="/web/js/app.js?v=nuke_1784753602" type="module"></script>
     <script src="/web/js/product_search.js?v=canonical_1" type="module"></script>

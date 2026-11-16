@@ -6725,3 +6725,8 @@ document.getElementById('btn-back-validity')?.addEventListener('click', () => {
   document.getElementById('validity-view')?.classList.add('hidden');
   document.getElementById('home-module-view')?.classList.remove('hidden');
 });
+
+// Wire da feature Conference (navegação + listeners)
+window.addEventListener('DOMContentLoaded', () => {
+  window.ConferenceFeature?.wire();
+});
