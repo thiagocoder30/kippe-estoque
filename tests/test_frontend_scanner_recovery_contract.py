@@ -251,12 +251,26 @@ def test_scanner_modal_contract_is_preserved():
 
 
 def test_html5_qrcode_is_version_pinned():
+    """Ensures html5-qrcode is loaded with an explicit version pin.
+
+    Accepts both distribution forms:
+      - CDN form:    html5-qrcode@2.3.8  (unpkg, historical)
+      - Vendor form: html5-qrcode-2.3.8  (local air-gapped copy)
+
+    The air-gap contract (test_nf_001k_5a_f) forbids CDN URLs at
+    runtime, so vendor is the canonical form. CDN form is accepted
+    only to keep this test independent of distribution choice —
+    the invariant here is *pinning*, not *source*.
+    """
     html = index_html()
 
     assert (
-        "html5-qrcode@2.3.8"
-        in html
-    )
+        "html5-qrcode@2.3.8" in html
+        or "html5-qrcode-2.3.8" in html
+    ), "html5-qrcode must be version-pinned to 2.3.8"
+
+
+
 
 
 def test_zxing_bundle_is_absent():

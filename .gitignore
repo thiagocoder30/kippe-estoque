@@ -34,3 +34,20 @@ prepare_*.sh
 reconcile_*.sh
 apply_*.sh
 .document_*_backup_*/
+.coverage
+htmlcov/
+
+# Scripts de sprint (mesmo tratamento de audit_*, certify_*, etc.)
+hotfix_*.sh
+hotfix_*.py
+implement_*.py
+run_*.sh
+.coverage
+htmlcov/
+
+# Scripts de sprint (mesmo tratamento de audit_*, certify_*, checkpoint_*)
+hotfix_*.sh
+hotfix_*.py
+implement_*.py
+run_*.sh
+reports/logs/
