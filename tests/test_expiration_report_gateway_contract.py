@@ -99,10 +99,13 @@ def test_expiration_report_returns_real_inventory_batches(client):
 
     data = response.get_json()
 
-    assert isinstance(data, list)
-    assert len(data) == 1
+    # Nova API retorna {items, summary, generated_at}
+    assert isinstance(data, dict)
+    assert "items" in data
+    assert "summary" in data
+    assert len(data["items"]) == 1
 
-    item = data[0]
+    item = data["items"][0]
 
     assert item["sku"] == "SKU-REPORT-001"
     assert item["name"] == "Produto Relatório"

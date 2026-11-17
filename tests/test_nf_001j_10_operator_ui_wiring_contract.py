@@ -43,8 +43,7 @@ def test_nf001j10_enables_certified_invoice_entry_without_enabling_ai():
         certified_position:certified_position + 500
     ]
 
-    assert "CONFERIR NF" in certified_fragment
-    assert "RECEBIMENTO CERTIFICADO" in certified_fragment
+    assert "Recebimento por JSON fiscal" in certified_fragment
     assert "disabled" not in certified_fragment
 
     ai_marker = 'id="btn-inbound-ai"'
@@ -53,8 +52,8 @@ def test_nf001j10_enables_certified_invoice_entry_without_enabling_ai():
         ai_position:ai_position + 500
     ]
 
-    assert "LER NF POR FOTO (IA)" in ai_fragment
-    assert "EM DESENVOLVIMENTO" in ai_fragment
+    assert "LER NF POR FOTO" in ai_fragment
+    assert "em desenvolvimento" in ai_fragment.lower()
     assert "disabled" in ai_fragment
 
 

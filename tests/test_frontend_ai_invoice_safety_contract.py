@@ -50,4 +50,5 @@ def test_ai_invoice_entry_is_explicitly_unavailable_until_real_extractor_exists(
     html = Path("web/index.html").read_text()
 
     assert 'id="btn-inbound-ai"' in html
-    assert "EM DESENVOLVIMENTO" in html
+    assert "em desenvolvimento" in html.lower()
+    assert "disabled" in html

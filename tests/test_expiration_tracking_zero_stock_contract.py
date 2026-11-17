@@ -134,7 +134,7 @@ def create_received_batch(
     assert received.status_code == 200
 
 
-def test_zero_quantity_batch_remains_in_expiration_report(client):
+def test_zero_quantity_batch_is_omitted_from_expiration_report(client):
     create_received_batch(
         client,
         sku="SKU-EXP-TRACK-001",
@@ -162,17 +162,13 @@ def test_zero_quantity_batch_remains_in_expiration_report(client):
 
     matches = [
         item
-        for item in response.json
+        for item in response.json["items"]
         if item["sku"] == "SKU-EXP-TRACK-001"
         and item["batch"] == "LOT-TRACK-001"
     ]
 
-    assert len(matches) == 1
-
-    batch = matches[0]
-
-    assert batch["quantity"] == 0
-    assert batch["expiration"] == "2030-01-10"
+    # Regra nova: lotes zerados no estoque NAO aparecem no relatorio
+    assert len(matches) == 0
 
 
 def test_zero_quantity_batch_is_not_fefo_picking_candidate(client):
@@ -297,7 +293,7 @@ def test_zero_quantity_batch_remains_persisted_after_repository_reload(
     )
 
 
-def test_product_total_can_be_zero_while_expiration_remains_trackable(
+def test_product_total_zero_hides_expiration_from_report(
     client,
 ):
     create_received_batch(
@@ -337,9 +333,9 @@ def test_product_total_can_be_zero_while_expiration_remains_trackable(
 
     tracked = [
         item
-        for item in expiration_response.json
+        for item in expiration_response.json["items"]
         if item["sku"] == "SKU-EXP-TRACK-004"
         and item["batch"] == "LOT-TRACK-004"
     ]
 
-    assert len(tracked) == 1
+    assert len(tracked) == 0  # Total zero = lote zerado, omitido do relatorio

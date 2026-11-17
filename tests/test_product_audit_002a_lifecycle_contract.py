@@ -292,8 +292,11 @@ def test_replenishment_uses_atomic_operational_audit_writer():
 
     assert (
         event["quantity_after"]
-        == 14
-    )
+        == 20
+    )  # Produto nao diminui: transferencia para loja (batch cai, produto fica)
+
+    # O batch REALMENTE cai (fica no metadata do audit)
+    assert event["metadata"]["batch_quantity_after"] == 14
 
     assert (
         event["operator_id"]
