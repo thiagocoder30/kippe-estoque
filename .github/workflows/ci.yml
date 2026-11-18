@@ -2,9 +2,9 @@ name: KIPPE WMS Enterprise CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, recovery/architecture-reconciliation ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, recovery/architecture-reconciliation ]
 
 jobs:
   verify-and-test:
