@@ -1,3 +1,25 @@
+from src.domain.access_control import AccessControl
+import re
+import unicodedata
+import sqlite3
+from PIL import ImageOps
+import threading
+from flask import Response, stream_with_context
+import time
+from pathlib import Path
+from flask import redirect
+import shutil
+import uuid
+import tempfile
+import subprocess
+import base64
+import urllib.error
+import urllib.request
+import io
+import json
+import os
+from PIL import Image, ImageDraw
+from dotenv import load_dotenv
 from flask import Flask, jsonify, request, session, send_from_directory, send_file
 from src.infrastructure.container import Container
 from src.domain.services.expiration_analyzer import ExpirationAnalyzer
@@ -15,7 +37,9 @@ from src.application.procurement.danfe_http_acquisition import (
 )
 
 container = Container()
+load_dotenv()
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 app.secret_key = container.config.SECRET_KEY
 
 
@@ -61,6 +85,13 @@ def login():
         session['operator_id'] = res.value.id
         session['operator_name'] = res.value.name
         session['operator_role'] = res.value.role
+        _record_audit_event(
+            "AUTH_LOGIN",
+            "ACESSO",
+            f"Login realizado por {res.value.name} ({res.value.role})",
+            target_ref=res.value.id,
+            actor_override=(res.value.id, res.value.name, res.value.role),
+        )
 
         return jsonify({
             'message': 'OK',
@@ -78,11 +109,563 @@ def login():
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
+    ctx_out = _get_active_operator_context()
+    if ctx_out[0]:
+        _record_audit_event(
+            "AUTH_LOGOUT",
+            "ACESSO",
+            f"Sessão encerrada por {ctx_out[1]}",
+            target_ref=ctx_out[0],
+            actor_override=ctx_out,
+        )
     session.clear()
 
     return jsonify({
         'message': 'Sessão encerrada'
     }), 200
+
+
+
+@app.route('/api/operators', methods=['GET'])
+def list_operators_api():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Administrador do Sistema gerencia perfis.'}), 403
+
+    operators = container.auth_use_case.list_operators()
+    return jsonify({
+        'operators': [
+            {'id': op.id, 'name': op.name, 'role': op.role}
+            for op in operators
+        ]
+    }), 200
+
+
+@app.route('/api/operators', methods=['POST'])
+def create_operator_api():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    actor_id, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Administrador do Sistema pode criar perfis.'}), 403
+
+    data = request.json or {}
+    new_id = str(data.get('id') or '').strip().upper()
+    new_name = str(data.get('name') or '').strip().upper()
+    new_pin = str(data.get('pin') or '').strip()
+    new_role = str(data.get('role') or 'CONFERENTE').strip().upper()
+
+    if not new_id or not new_name:
+        return jsonify({'error': 'Informe a matrícula/ID e o nome do colaborador.'}), 400
+
+    res = container.auth_use_case.register(
+        id=new_id,
+        name=new_name,
+        pin=new_pin,
+        role=new_role,
+    )
+    if not res.is_success:
+        return jsonify({'error': res.error}), 400
+
+    _record_audit_event(
+        "OPERATOR_CREATED",
+        "GOVERNANCA",
+        f"Perfil {new_role} criado para {new_name} (ID: {new_id})",
+        target_ref=new_id,
+    )
+    return jsonify({
+        'ok': True,
+        'operator': {'id': new_id, 'name': new_name, 'role': new_role},
+        'message': f'Perfil {new_role} criado para {new_name}.',
+    }), 201
+
+
+@app.route('/api/operators/<op_id>', methods=['DELETE'])
+def delete_operator_api(op_id: str):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    actor_id, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Administrador do Sistema pode excluir perfis.'}), 403
+
+    res = container.auth_use_case.delete_operator(target_id=op_id, actor_id=actor_id)
+    if not res.is_success:
+        return jsonify({'error': res.error}), 400
+
+    _record_audit_event(
+        "OPERATOR_DELETED",
+        "GOVERNANCA",
+        f"Perfil [{op_id}] excluído da equipe",
+        target_ref=str(op_id),
+    )
+    return jsonify({'ok': True, 'message': 'Perfil excluído com sucesso.'}), 200
+
+
+
+def _record_audit_event(
+    event_type: str,
+    category: str,
+    summary: str,
+    target_ref: str = "",
+    details: dict = None,
+    actor_override: tuple = None,
+):
+    try:
+        if actor_override:
+            actor_id, actor_name, actor_role = actor_override
+        else:
+            actor_id, actor_name, actor_role = _get_active_operator_context()
+        actor_id = str(actor_id or "SYSTEM").strip()
+        actor_name = str(actor_name or actor_id or "SYSTEM").strip()
+        actor_role = str(actor_role or "SYSTEM").strip().upper()
+        now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+        conn = _get_kippe_db()
+        try:
+            conn.execute(
+                '''
+                INSERT INTO institutional_audit_log (
+                    event_type, category, actor_id, actor_name, actor_role,
+                    target_ref, summary, details_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    str(event_type).strip().upper(),
+                    str(category).strip().upper(),
+                    actor_id,
+                    actor_name,
+                    actor_role,
+                    str(target_ref or "").strip(),
+                    str(summary).strip(),
+                    json.dumps(details or {}, ensure_ascii=False),
+                    now_iso,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+@app.route('/api/operators/<op_id>/pin', methods=['PATCH'])
+def reset_operator_pin_api(op_id: str):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    actor_id, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Administrador do Sistema pode redefinir PIN.'}), 403
+
+    data = request.json or {}
+    new_pin = str(data.get('pin') or '').strip()
+    target = container.operator_repository.get_by_id(str(op_id or '').strip())
+    res = container.auth_use_case.reset_pin(target_id=op_id, new_pin=new_pin, actor_id=actor_id)
+    if not res.is_success:
+        return jsonify({'error': res.error}), 400
+
+    target_label = f"{target.name} ({target.id})" if target else op_id
+    _record_audit_event(
+        "OPERATOR_PIN_RESET",
+        "GOVERNANCA",
+        f"PIN redefinido para {target_label}",
+        target_ref=str(op_id),
+    )
+    return jsonify({'ok': True, 'message': 'PIN redefinido com sucesso.'}), 200
+
+
+@app.route('/api/auth/change-pin', methods=['POST'])
+def change_own_pin_api():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    actor_id, actor_name, actor_role = _get_active_operator_context()
+    data = request.json or {}
+    current_pin = str(data.get('current_pin') or '').strip()
+    new_pin = str(data.get('new_pin') or '').strip()
+
+    res = container.auth_use_case.change_own_pin(
+        operator_id=actor_id,
+        current_pin=current_pin,
+        new_pin=new_pin,
+    )
+    if not res.is_success:
+        return jsonify({'error': res.error}), 400
+
+    _record_audit_event(
+        "OPERATOR_PIN_CHANGED",
+        "ACESSO",
+        f"{actor_name} alterou o próprio PIN de acesso",
+        target_ref=actor_id,
+        actor_override=(actor_id, actor_name, actor_role),
+    )
+    return jsonify({'ok': True, 'message': 'Seu PIN foi atualizado com sucesso.'}), 200
+
+
+@app.route('/api/audit/logs', methods=['GET'])
+def list_audit_logs_api():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Administrador do Sistema acessa a auditoria.'}), 403
+
+    category = str(request.args.get('category') or 'ALL').strip().upper()
+    q = str(request.args.get('q') or '').strip().upper()
+    try:
+        limit = min(200, max(10, int(request.args.get('limit') or 100)))
+    except Exception:
+        limit = 100
+
+    conn = _get_kippe_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM institutional_audit_log ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    logs = []
+    for r in rows:
+        item = {
+            'id': int(r['id']),
+            'event_type': r['event_type'],
+            'category': r['category'],
+            'actor_id': r['actor_id'],
+            'actor_name': r['actor_name'],
+            'actor_role': r['actor_role'],
+            'target_ref': r['target_ref'] or '',
+            'summary': r['summary'],
+            'created_at': r['created_at'],
+        }
+        if category != 'ALL' and item['category'] != category:
+            continue
+        if q:
+            haystack = f"{item['actor_id']} {item['actor_name']} {item['actor_role']} {item['target_ref']} {item['summary']}".upper()
+            if q not in haystack:
+                continue
+        logs.append(item)
+
+    return jsonify({'total': len(logs), 'logs': logs}), 200
+
+
+
+@app.route('/api/admin/backup', methods=['POST'])
+def create_sqlite_backup_api():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Administrador do Sistema pode gerar backups.'}), 403
+
+    import hashlib
+    import shutil
+    from datetime import datetime
+
+    src_db_path = Path(container.config.DB_PATH).resolve()
+    if not src_db_path.exists():
+        return jsonify({'error': f'Banco de dados não encontrado em {src_db_path}.'}), 404
+
+    backups_dir = Path("backups").resolve()
+    backups_dir.mkdir(parents=True, exist_ok=True)
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"kippe_wms_backup_{stamp}.db"
+    dst_db_path = backups_dir / filename
+
+    try:
+        src_conn = sqlite3.connect(str(src_db_path))
+        dst_conn = sqlite3.connect(str(dst_db_path))
+        try:
+            src_conn.backup(dst_conn)
+            dst_conn.commit()
+            integrity_row = dst_conn.execute("PRAGMA integrity_check;").fetchone()
+            integrity_status = str(integrity_row[0]).strip().lower() if integrity_row else "error"
+        finally:
+            dst_conn.close()
+            src_conn.close()
+
+        if integrity_status != "ok":
+            dst_db_path.unlink(missing_ok=True)
+            return jsonify({'error': f'Falha na verificação de integridade do backup: {integrity_status}'}), 500
+
+        raw_bytes = dst_db_path.read_bytes()
+        sha256_hex = hashlib.sha256(raw_bytes).hexdigest()
+        size_bytes = len(raw_bytes)
+
+        # Mantém apenas os 15 backups locais mais recentes
+        existing_backups = sorted(backups_dir.glob("kippe_wms_backup_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old_bk in existing_backups[15:]:
+            old_bk.unlink(missing_ok=True)
+
+        # Em produção no Termux, salva também em /sdcard/Download se disponível
+        download_folder_saved = False
+        external_path = ""
+        if container.config.ENV != "testing":
+            android_dl = Path("/sdcard/Download")
+            if android_dl.exists() and android_dl.is_dir():
+                try:
+                    ext_target = android_dl / filename
+                    shutil.copy2(dst_db_path, ext_target)
+                    download_folder_saved = True
+                    external_path = str(ext_target)
+                except Exception:
+                    download_folder_saved = False
+
+        _record_audit_event(
+            "SYSTEM_BACKUP_CREATED",
+            "GOVERNANCA",
+            f"Backup íntegro SQLite gerado: {filename} ({size_bytes} bytes · SHA256 {sha256_hex[:12]})",
+            target_ref=filename,
+        )
+
+        return jsonify({
+            'ok': True,
+            'filename': filename,
+            'size_bytes': size_bytes,
+            'sha256': sha256_hex,
+            'integrity': 'ok',
+            'download_folder_saved': download_folder_saved,
+            'external_path': external_path,
+            'download_url': f'/api/admin/backup/download/{filename}',
+        }), 201
+    except Exception as exc:
+        dst_db_path.unlink(missing_ok=True)
+        return jsonify({'error': f'Erro ao gerar backup: {exc}'}), 500
+
+
+@app.route('/api/admin/backup/download/<filename>', methods=['GET'])
+def download_sqlite_backup_api(filename: str):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    if not AccessControl.is_system_admin(op_role):
+        return jsonify({'error': 'Autorização negada.'}), 403
+
+    safe_name = Path(filename).name
+    if not safe_name.startswith("kippe_wms_backup_") or not safe_name.endswith(".db"):
+        return jsonify({'error': 'Nome de arquivo de backup inválido.'}), 400
+
+    target = (Path("backups").resolve() / safe_name)
+    if not target.exists() or not target.is_file():
+        return jsonify({'error': 'Arquivo de backup não encontrado.'}), 404
+
+    return send_file(
+        str(target),
+        mimetype='application/x-sqlite3',
+        as_attachment=True,
+        download_name=safe_name,
+    )
+
+
+@app.route('/api/reports/export/<report_type>.csv', methods=['GET'])
+def export_management_csv_api(report_type: str):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    role_norm = str(op_role or '').strip().upper()
+    if not (AccessControl.is_system_admin(role_norm) or role_norm == 'GERENTE'):
+        return jsonify({'error': 'Autorização negada: apenas Administrador ou Gerente pode exportar relatórios.'}), 403
+
+    import csv
+    import io
+    from datetime import date, datetime
+
+    rtype = str(report_type or '').strip().lower()
+    if rtype not in {'inventario', 'fefo', 'recebimentos', 'divergencias'}:
+        return jsonify({'error': 'Tipo de relatório inválido. Use: inventario, fefo ou recebimentos.'}), 400
+
+    conn = sqlite3.connect(str(container.config.DB_PATH))
+    conn.row_factory = sqlite3.Row
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=';', lineterminator='\n')
+
+    try:
+        if rtype == 'inventario':
+            writer.writerow([
+                'SKU', 'EAN', 'Produto', 'Categoria', 'Unidade',
+                'Saldo_Total', 'Reservado', 'Disponivel',
+                'Qtd_Lotes', 'Proximo_Vencimento', 'Status'
+            ])
+            rows = conn.execute(
+                '''
+                SELECT
+                    p.id AS sku,
+                    p.ean AS ean,
+                    p.name AS product_name,
+                    COALESCE(c.name, 'SEM CATEGORIA') AS category_name,
+                    p.unit_of_measure AS uom,
+                    p.quantity AS qty_total,
+                    p.reserved_quantity AS qty_reserved,
+                    (p.quantity - p.reserved_quantity) AS qty_available,
+                    p.status AS status,
+                    COUNT(CASE WHEN b.quantity > 0 THEN 1 END) AS active_batches,
+                    MIN(CASE WHEN b.quantity > 0 THEN NULLIF(b.expiration_date, '') END) AS next_exp
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                LEFT JOIN batches b ON b.product_id = p.id
+                GROUP BY p.id
+                ORDER BY p.name ASC
+                '''
+            ).fetchall()
+            for r in rows:
+                writer.writerow([
+                    r['sku'], r['ean'], r['product_name'], r['category_name'], r['uom'],
+                    r['qty_total'], r['qty_reserved'], r['qty_available'],
+                    r['active_batches'], r['next_exp'] or '', r['status'],
+                ])
+
+        elif rtype == 'fefo':
+            writer.writerow([
+                'SKU', 'Produto', 'EAN', 'Lote', 'Validade',
+                'Dias_Para_Vencer', 'Faixa_Risco', 'Quantidade',
+                'Endereco', 'Fornecedor', 'Custo_Unitario', 'Valor_Total'
+            ])
+            rows = conn.execute(
+                '''
+                SELECT
+                    b.product_id AS sku,
+                    COALESCE(p.name, b.product_id) AS product_name,
+                    COALESCE(p.ean, '') AS ean,
+                    b.batch_code,
+                    b.expiration_date,
+                    b.quantity,
+                    b.location_id,
+                    b.supplier,
+                    b.cost_per_unit
+                FROM batches b
+                LEFT JOIN products p ON p.id = b.product_id
+                WHERE b.quantity > 0
+                ORDER BY
+                    CASE WHEN COALESCE(b.expiration_date, '') = '' THEN 1 ELSE 0 END ASC,
+                    b.expiration_date ASC,
+                    product_name ASC
+                '''
+            ).fetchall()
+            today = date.today()
+            for r in rows:
+                exp_str = str(r['expiration_date'] or '').strip()
+                days_str = ''
+                risk_label = 'SEM_VALIDADE'
+                if exp_str:
+                    try:
+                        exp_dt = date.fromisoformat(exp_str[:10])
+                        diff = (exp_dt - today).days
+                        days_str = str(diff)
+                        if diff < 0:
+                            risk_label = 'VENCIDO'
+                        elif diff <= 15:
+                            risk_label = 'CRITICO_15D'
+                        elif diff <= 30:
+                            risk_label = 'ATENCAO_30D'
+                        else:
+                            risk_label = 'NORMAL'
+                    except Exception:
+                        risk_label = 'DATA_INVALIDA'
+
+                qty = int(r['quantity'] or 0)
+                unit_cost = float(r['cost_per_unit'] or 0.0)
+                total_val = round(qty * unit_cost, 2)
+                writer.writerow([
+                    r['sku'], r['product_name'], r['ean'], r['batch_code'], exp_str,
+                    days_str, risk_label, qty,
+                    r['location_id'] or '', r['supplier'] or 'PADRAO',
+                    f"{unit_cost:.2f}", f"{total_val:.2f}",
+                ])
+
+        elif rtype == 'recebimentos':
+            writer.writerow([
+                'ID_Evento', 'Data_Hora', 'Tipo_Evento', 'SKU', 'Produto',
+                'Lote', 'Qtd_Prevista', 'Qtd_Conferida', 'Divergencia',
+                'Fornecedor', 'Documento_NF', 'Operador'
+            ])
+            rows = conn.execute(
+                '''
+                SELECT
+                    e.id,
+                    e.occurred_at,
+                    e.event_type,
+                    e.product_id,
+                    COALESCE(p.name, e.product_id) AS product_name,
+                    e.batch_code,
+                    e.quantity_planned,
+                    e.quantity_actual,
+                    e.quantity_divergence,
+                    e.supplier,
+                    e.document_id,
+                    e.operator_id
+                FROM operational_audit_events e
+                LEFT JOIN products p ON p.id = e.product_id
+                ORDER BY e.id DESC
+                '''
+            ).fetchall()
+            for r in rows:
+                writer.writerow([
+                    r['id'],
+                    r['occurred_at'] or '',
+                    r['event_type'] or '',
+                    r['product_id'] or '',
+                    r['product_name'] or '',
+                    r['batch_code'] or '',
+                    r['quantity_planned'] if r['quantity_planned'] is not None else '',
+                    r['quantity_actual'] if r['quantity_actual'] is not None else '',
+                    r['quantity_divergence'] if r['quantity_divergence'] is not None else '',
+                    r['supplier'] or '',
+                    r['document_id'] or '',
+                    r['operator_id'] or '',
+                ])
+        elif rtype == 'divergencias':
+            writer.writerow([
+                'ID', 'Data_Hora', 'Fornecedor', 'Numero_NF', 'SKU', 'Produto',
+                'Qtd_Faturada_NF', 'Qtd_Conferida', 'Divergencia',
+                'Motivo_Formal', 'Observacoes', 'Operador_ID', 'Operador_Nome'
+            ])
+            conn_div = _get_kippe_db()
+            try:
+                rows_div = conn_div.execute(
+                    "SELECT * FROM receiving_divergences ORDER BY id DESC"
+                ).fetchall()
+            finally:
+                conn_div.close()
+            for r in rows_div:
+                writer.writerow([
+                    r['id'], r['created_at'], r['supplier'], r['invoice_number'],
+                    r['sku'], r['product_name'], r['expected_qty'], r['counted_qty'],
+                    r['divergence_qty'], r['reason'], r['notes'] or '',
+                    r['operator_id'], r['operator_name'],
+                ])
+
+    finally:
+        conn.close()
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    out_name = f"kippe_{rtype}_{stamp}.csv"
+
+    _record_audit_event(
+        "REPORT_EXPORTED",
+        "GOVERNANCA",
+        f"Relatório gerencial CSV exportado: {out_name}",
+        target_ref=out_name,
+    )
+
+    csv_payload = ("\ufeff" + buf.getvalue()).encode("utf-8")
+    return Response(
+        csv_payload,
+        mimetype="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{out_name}"',
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @app.route('/api/auth/me', methods=['GET'])
@@ -280,6 +863,13 @@ def create_produto():
         )
 
         if res.is_success:
+            p_val = res.value or {}
+            _record_audit_event(
+                "PRODUCT_CREATED",
+                "CATALOGO",
+                f"Produto cadastrado: {p_val.get('name', data.get('name', ''))} (SKU: {p_val.get('id', '')})",
+                target_ref=str(p_val.get('id', '')),
+            )
             return jsonify({
                 'message': 'Produto cadastrado.',
                 'product': res.value
@@ -1746,6 +2336,161 @@ def serve_icons(filename):
     return send_from_directory('web/icons', filename)
 
 
+
+def _check_invoice_duplicate_records(supplier: str, invoice_number: str) -> dict:
+    inv = str(invoice_number or '').strip()
+    if not inv:
+        return {'duplicate': False}
+
+    sup_norm = _norm_catalog_text(supplier)
+    conn = _get_kippe_db()
+    try:
+        row_log = conn.execute(
+            '''
+            SELECT invoice_number, COUNT(*) AS lines, SUM(quantity) AS total_qty, MAX(created_at) AS last_at
+            FROM conference_audit_log
+            WHERE invoice_number = ? AND (? = '' OR supplier_norm = ?)
+            GROUP BY invoice_number
+            LIMIT 1
+            ''',
+            (inv, sup_norm, sup_norm),
+        ).fetchone()
+        if row_log:
+            return {
+                'duplicate': True,
+                'source': 'ESTOQUE_EFETIVADO',
+                'invoice_number': inv,
+                'lines': int(row_log['lines'] or 0),
+                'total_qty': int(row_log['total_qty'] or 0),
+                'last_at': str(row_log['last_at'] or '')[:16].replace('T', ' '),
+                'message': f"A NF {inv} já foi efetivada no estoque em {str(row_log['last_at'] or '')[:10]} ({int(row_log['total_qty'] or 0)} un).",
+            }
+
+        pending_rows = conn.execute(
+            "SELECT id, supplier, invoice_number, submitted_by_name, created_at FROM receiving_pending_queue WHERE status = 'PENDENTE'"
+        ).fetchall()
+        for pr in pending_rows:
+            pr_sup_norm = _norm_catalog_text(pr['supplier'] or '')
+            if sup_norm and pr_sup_norm and pr_sup_norm != sup_norm:
+                continue
+            pr_invs = [x.strip() for x in str(pr['invoice_number'] or '').split(',') if x.strip()]
+            if inv in pr_invs:
+                return {
+                    'duplicate': True,
+                    'source': 'FILA_PENDENTE',
+                    'invoice_number': inv,
+                    'queue_id': int(pr['id']),
+                    'message': f"A NF {inv} já está aguardando armazenagem na fila (#{pr['id']}) enviada por {pr['submitted_by_name']}.",
+                }
+    finally:
+        conn.close()
+
+    return {'duplicate': False}
+
+
+def _persist_receiving_divergences(
+    supplier: str,
+    default_invoice: str,
+    divergences: list,
+    op_id: str,
+    op_name: str,
+) -> int:
+    if not divergences or not isinstance(divergences, list):
+        return 0
+
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    sup_clean = str(supplier or 'PADRAO').strip().upper()
+    sup_norm = _norm_catalog_text(sup_clean)
+    saved_count = 0
+
+    conn = _get_kippe_db()
+    try:
+        for d in divergences:
+            if not isinstance(d, dict):
+                continue
+            exp_q = int(d.get('expected_qty') or 0)
+            cnt_q = int(d.get('counted_qty') or 0)
+            diff_q = cnt_q - exp_q
+            if diff_q == 0:
+                continue
+            inv_num = str(d.get('invoice_number') or default_invoice or 'S/N').strip()
+            sku = str(d.get('sku') or '').strip()
+            pname = str(d.get('name') or sku).strip()
+            reason = str(d.get('reason') or 'DIVERGENCIA_NAO_ESPECIFICADA').strip().upper()
+            notes = str(d.get('notes') or '').strip()
+
+            conn.execute(
+                '''
+                INSERT INTO receiving_divergences (
+                    supplier, supplier_norm, invoice_number, sku, product_name,
+                    expected_qty, counted_qty, divergence_qty, reason, notes,
+                    operator_id, operator_name, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    sup_clean, sup_norm, inv_num, sku, pname,
+                    exp_q, cnt_q, diff_q, reason, notes,
+                    op_id or 'SYSTEM', op_name or op_id or 'SYSTEM', now_iso,
+                ),
+            )
+            saved_count += 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    if saved_count > 0:
+        _record_audit_event(
+            "DIVERGENCE_RECORDED",
+            "RECEBIMENTO",
+            f"Registradas {saved_count} divergência(s) na conferência · {sup_clean} · NF {default_invoice or 'MULTI'}",
+            target_ref=f"NF-{default_invoice or 'MULTI'}",
+        )
+    return saved_count
+
+
+def _expand_multinf_allocations(items: list, default_invoice: str) -> list:
+    expanded = []
+    for item in items:
+        allocs = item.get('nf_allocations')
+        total_qty = int(item.get('quantity') or item.get('scanned') or 0)
+        if not allocs or not isinstance(allocs, list) or len(allocs) <= 1 or total_qty <= 0:
+            copy_it = dict(item)
+            if not copy_it.get('invoice_number') and allocs and len(allocs) == 1:
+                copy_it['invoice_number'] = str(allocs[0].get('invoice_number') or default_invoice).strip()
+            expanded.append(copy_it)
+            continue
+
+        remaining = total_qty
+        for idx, alloc in enumerate(allocs):
+            inv_num = str(alloc.get('invoice_number') or default_invoice).strip()
+            exp_units = max(0, int(alloc.get('expected_units') or 0))
+            is_last = (idx == len(allocs) - 1)
+            if is_last:
+                alloc_qty = remaining
+            else:
+                alloc_qty = min(remaining, exp_units) if exp_units > 0 else 0
+            remaining = max(0, remaining - alloc_qty)
+            if alloc_qty > 0:
+                sub_it = dict(item)
+                sub_it['quantity'] = alloc_qty
+                sub_it['invoice_number'] = inv_num
+                expanded.append(sub_it)
+
+    return expanded
+
+
+@app.route('/api/invoices/check-duplicate', methods=['POST'])
+def check_invoice_duplicate_api():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+    supplier = str(data.get('supplier') or '').strip()
+    invoice_number = str(data.get('invoice_number') or '').strip()
+    info = _check_invoice_duplicate_records(supplier, invoice_number)
+    return jsonify(info), 200
+
+
 @app.route('/api/conference/finalize', methods=['POST'])
 def conference_finalize():
     """
@@ -1763,21 +2508,145 @@ def conference_finalize():
     if not items or not isinstance(items, list):
         return jsonify({'error': 'Nenhum item para finalizar.'}), 400
 
-    try:
-        op_id = str(session.get('operator_id') or session.get('usuario') or 'SYSTEM')
-    except Exception:
-        op_id = 'SYSTEM'
+    op_id, op_name, op_role = _get_active_operator_context()
+    op_id = op_id or 'SYSTEM'
+    force_duplicate = bool(data.get('force', False))
+    divergences_payload = data.get('divergences') or []
+    invoice_list = [str(x).strip() for x in (data.get('invoices') or []) if str(x).strip()]
+    if not invoice_list and ctx_invoice:
+        invoice_list = [x.strip() for x in ctx_invoice.split(',') if x.strip()]
+
+    if invoice_list and not force_duplicate:
+        for inv_chk in invoice_list:
+            dup_info = _check_invoice_duplicate_records(ctx_supplier, inv_chk)
+            if dup_info.get('duplicate'):
+                return jsonify({
+                    'duplicate': True,
+                    'duplicate_invoice': inv_chk,
+                    'error': dup_info.get('message') or f"A NF {inv_chk} já foi registrada anteriormente.",
+                }), 409
+
+    expanded_items = _expand_multinf_allocations(items, ctx_invoice)
+    combined_invoice_label = ", ".join(invoice_list) if invoice_list else ctx_invoice
+
+    if AccessControl.is_conference_only(op_role):
+        div_saved = _persist_receiving_divergences(
+            supplier=ctx_supplier,
+            default_invoice=combined_invoice_label,
+            divergences=divergences_payload,
+            op_id=op_id,
+            op_name=op_name,
+        )
+        now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+        conn_q = _get_kippe_db()
+        try:
+            cur_q = conn_q.execute(
+                '''
+                INSERT INTO receiving_pending_queue (
+                    supplier, invoice_number, submitted_by_id, submitted_by_name,
+                    status, items_json, created_at
+                ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
+                ''',
+                (
+                    ctx_supplier or 'PADRAO',
+                    combined_invoice_label,
+                    op_id,
+                    op_name,
+                    json.dumps(expanded_items, ensure_ascii=False),
+                    now_iso,
+                ),
+            )
+            conn_q.commit()
+            q_id = int(cur_q.lastrowid)
+        finally:
+            conn_q.close()
+
+        _record_audit_event(
+            "CONFERENCE_QUEUED",
+            "RECEBIMENTO",
+            f"Conferência enviada para armazenagem: {ctx_supplier or 'PADRAO'} · NF {combined_invoice_label or 'S/N'} ({len(expanded_items)} lançamentos)",
+            target_ref=f"NF-{combined_invoice_label or q_id}",
+        )
+        return jsonify({
+            'queued': True,
+            'queue_id': q_id,
+            'submitted_items': len(expanded_items),
+            'divergences_recorded': div_saved,
+            'message': 'Conferência enviada para cadastro/armazenagem do Estoquista.',
+        }), 202
+
+    if AccessControl.is_conference_only(op_role):
+        now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+        conn_q = _get_kippe_db()
+        try:
+            cur_q = conn_q.execute(
+                '''
+                INSERT INTO receiving_pending_queue (
+                    supplier, invoice_number, submitted_by_id, submitted_by_name,
+                    status, items_json, created_at
+                ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
+                ''',
+                (
+                    ctx_supplier or 'PADRAO',
+                    ctx_invoice,
+                    op_id,
+                    op_name,
+                    json.dumps(items, ensure_ascii=False),
+                    now_iso,
+                ),
+            )
+            conn_q.commit()
+            q_id = int(cur_q.lastrowid)
+        finally:
+            conn_q.close()
+
+        _record_audit_event(
+            "CONFERENCE_QUEUED",
+            "RECEBIMENTO",
+            f"Conferência enviada para armazenagem: {ctx_supplier or 'PADRAO'} · NF {ctx_invoice or 'S/N'} ({len(items)} itens)",
+            target_ref=f"NF-{ctx_invoice or q_id}",
+        )
+        return jsonify({
+            'queued': True,
+            'queue_id': q_id,
+            'submitted_items': len(items),
+            'message': 'Conferência enviada para cadastro/armazenagem do Estoquista.',
+        }), 202
     
+    force_duplicate = bool(data.get('force', False))
+    if ctx_invoice and not force_duplicate:
+        try:
+            conn_chk = _get_kippe_db()
+            sup_norm_chk = _norm_catalog_text(ctx_supplier)
+            skus_chk = [str(it.get('sku') or '').strip() for it in items if it.get('sku')]
+            dups = []
+            for s_chk in skus_chk:
+                row_dup = conn_chk.execute(
+                    "SELECT sku, quantity, created_at FROM conference_audit_log WHERE invoice_number = ? AND sku = ? AND (? = '' OR supplier_norm = ?) LIMIT 1",
+                    (ctx_invoice, s_chk, sup_norm_chk, sup_norm_chk)
+                ).fetchone()
+                if row_dup:
+                    dups.append(f"{row_dup['sku']} ({row_dup['quantity']} UN em {row_dup['created_at'][:10]})")
+            conn_chk.close()
+            if dups:
+                return jsonify({
+                    'duplicate': True,
+                    'error': f"A NF {ctx_invoice} já possui lançamento registrado para: {', '.join(dups)}. Deseja lançar novamente?"
+                }), 409
+        except Exception:
+            pass
+
     results = []
     errors = []
     
-    for item in items:
+    for item in expanded_items:
         sku = str(item.get('sku') or '').strip()
         quantity = item.get('quantity', 0)
         batch_code = str(item.get('batch_code') or '').strip() or f"LOTE-{__import__('datetime').date.today().isoformat().replace('-', '')}"
         expiration_date = str(item.get('expiration_date') or '').strip()
         manufacturing_date = str(item.get('manufacturing_date') or '').strip()
         supplier = str(item.get('supplier') or ctx_supplier or 'PADRAO').strip()
+        item_invoice = str(item.get('invoice_number') or combined_invoice_label or '').strip()
         
         if not sku:
             errors.append({'sku': None, 'error': 'SKU vazio'})
@@ -1804,23 +2673,1378 @@ def conference_finalize():
                 expiration_date=expiration_date,
                 supplier=supplier,
                 manufacturing_date=manufacturing_date,
-                origin_document='CONFERENCE',
+                origin_document=item_invoice if item_invoice else 'CONFERENCE',
                 operator_id=op_id,
             )
             if result.is_success:
                 results.append({'sku': sku, 'quantity': quantity, 'batch_code': batch_code})
+                try:
+                    conn_log = _get_kippe_db()
+                    conn_log.execute(
+                        "INSERT INTO conference_audit_log (supplier_norm, invoice_number, sku, quantity, batch_code, expiration_date, operator_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (_norm_catalog_text(supplier), item_invoice, sku, quantity, batch_code, expiration_date, op_id, __import__('datetime').datetime.now().isoformat(timespec='seconds'))
+                    )
+                    conn_log.commit()
+                    conn_log.close()
+                except Exception:
+                    pass
             else:
                 errors.append({'sku': sku, 'error': str(result.error)})
         except Exception as exc:
             errors.append({'sku': sku, 'error': str(exc)})
     
+    div_saved = _persist_receiving_divergences(
+        supplier=ctx_supplier,
+        default_invoice=combined_invoice_label,
+        divergences=divergences_payload,
+        op_id=op_id,
+        op_name=op_name,
+    )
     return jsonify({
         'success': len(results),
         'failed': len(errors),
+        'divergences_recorded': div_saved,
         'results': results,
         'errors': errors,
     }), 200 if not errors else 207
 
+
+
+SHARE_TMP_DIR = Path(tempfile.gettempdir()) / "kippe_shares"
+SHARE_TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _call_gemini_fast(
+    api_key: str,
+    media_b64: str,
+    page_num: int = 1,
+    total_pages: int = 1,
+    mime_type: str = "image/jpeg",
+) -> dict:
+    if mime_type == "application/pdf":
+        page_hint = (
+            "Este é o arquivo PDF completo da Nota Fiscal (pode conter 1 ou mais páginas). "
+            "Extraia o fornecedor, o número da NF e todos os itens da tabela de produtos de todas as páginas."
+        )
+    else:
+        page_hint = (
+            f"Esta é a PÁGINA {page_num} de {total_pages} do documento. "
+            + (
+                "Se for página de continuação (página 2 ou posterior), extraia todos os itens da tabela desta página "
+                "(se o cabeçalho do fornecedor ou número da NF não aparecer aqui, retorne strings vazias nesses campos)."
+                if page_num > 1 else
+                "Extraia o fornecedor, o número da NF e todos os itens da tabela desta primeira página."
+            )
+        )
+
+    prompt = (
+        "Você está extraindo dados de uma tabela de Nota Fiscal (DANFE retrato/paisagem, NFC-e ou romaneio). "
+        f"{page_hint}\n"
+        "PRIVACIDADE LGPD: Ignore completamente o quadro 'DESTINATÁRIO / REMETENTE' (supermercado cliente), CNPJs, CPFs, "
+        "chave de acesso, impostos e totais gerais da nota.\n\n"
+        "REGRAS RÍGIDAS DE LEITURA DA TABELA DE PRODUTOS (LEIA LINHA POR LINHA HORIZONTALMENTE):\n"
+        "- Cada linha da tabela tem colunas como: CÓD | DESCRIÇÃO | NCM | CST | CFOP | UN | QUANT. | V.UNIT | V.TOTAL.\n"
+        "- NUNCA misture a quantidade ou embalagem de uma linha com a linha de cima ou de baixo.\n"
+        "- Confira mentalmente se QUANT. × V.UNIT ≈ V.TOTAL da mesma linha.\n"
+        "- 'description': Copie a descrição completa da coluna DESCRIÇÃO, MANTENDO OBRIGATORIAMENTE gramatura, volume e multiplicador de caixa "
+        "(ex: 'MILHO CONSERVA 24X170G LATA STELLA DORO', 'GOIABADA FLOW PACK 16X1.01KG STELLA DORO'). Nunca apague '24X170G' ou '16X1.01KG'.\n"
+        "- 'quantity': Número exato da coluna QUANT. / QTD daquela linha.\n"
+        "- 'pack_factor': Número inteiro de unidades dentro da caixa/fardo indicado na própria descrição da linha "
+        "(ex: '24X170G' -> 24, '16X1.01KG' -> 16, '8X1.7KG' -> 8, 'CX C/ 12' -> 12). Se não houver multiplicador de caixa, use 1.\n\n"
+        "Extraia também:\n"
+        "- 'supplier': Nome do FORNECEDOR / EMITENTE no topo da nota.\n"
+        "- 'invoice_number': Número da NF-e / DANFE próximo a 'Nº' e 'SÉRIE' (apenas dígitos, sem CEP/telefone/página).\n\n"
+        "Retorne SOMENTE JSON válido: "
+        '{"supplier": "NOME DO FORNECEDOR", "invoice_number": "123456", "items": [{"description": "DESCRICAO COMPLETA COM GRAMATURA", "quantity": 1, "pack_factor": 1}]}'
+    )
+
+    models_to_try = [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-flash-lite-latest",
+    ]
+    thinking_configs = [
+        {"thinkingLevel": "low"},
+        {"thinkingLevel": "minimal"},
+        None,
+    ]
+
+    last_err = None
+
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+
+        for t_cfg in thinking_configs:
+            gen_cfg = {
+                "responseMimeType": "application/json",
+                "temperature": 0.0,
+                "maxOutputTokens": 6144 if mime_type == "application/pdf" else 4096,
+            }
+            if t_cfg is not None:
+                gen_cfg["thinkingConfig"] = t_cfg
+
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": mime_type, "data": media_b64}}
+                    ]
+                }],
+                "generationConfig": gen_cfg,
+            }
+
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return json.loads(texto)
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="ignore")
+                last_err = RuntimeError(f"Erro API Google ({e.code}): {err_body}")
+                if e.code == 400 and t_cfg is not None:
+                    continue
+                if e.code in (404, 429, 503):
+                    break
+                raise last_err
+            except (TimeoutError, urllib.error.URLError) as e:
+                last_err = RuntimeError(f"Timeout/Rede em {model_name}: {e}")
+                break
+
+    if last_err:
+        raise last_err
+    raise RuntimeError("Não foi possível obter resposta da API Gemini.")
+
+
+def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
+    image = img.convert('L')
+    width, height = image.size
+    cut_ratio = 0.88 if is_last_page else 0.96
+    bottom_cut = int(height * cut_ratio)
+    if bottom_cut > 200:
+        image = image.crop((0, 0, width, bottom_cut))
+
+    image = ImageOps.autocontrast(image, cutoff=1)
+    resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
+    image.thumbnail((2000, 2000), resample_filter)
+
+    buf = io.BytesIO()
+    image.save(buf, format='JPEG', quality=88, optimize=True)
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
+
+
+def _strip_pdf_header_noise(pdf_bytes: bytes) -> bytes:
+    idx = pdf_bytes.find(b'%PDF-')
+    if 0 < idx <= 2048:
+        return pdf_bytes[idx:]
+    return pdf_bytes
+
+
+def _repair_pdf_xref_python(pdf_bytes: bytes) -> bytes:
+    pdf_bytes = _strip_pdf_header_noise(pdf_bytes)
+    obj_matches = list(re.finditer(rb'(?:^|[\r\n])\s*(\d+)\s+(\d+)\s+obj\b', pdf_bytes))
+    if not obj_matches:
+        return b""
+
+    offsets = {}
+    for m in obj_matches:
+        obj_num = int(m.group(1))
+        gen_num = int(m.group(2))
+        offsets[obj_num] = (m.start(1), gen_num)
+
+    max_obj = max(offsets.keys())
+    new_size = max_obj + 1
+
+    trailer_dict = b""
+    trailer_matches = list(re.finditer(rb'trailer\s*(<<.*?>>)', pdf_bytes, re.DOTALL))
+    if trailer_matches:
+        trailer_dict = trailer_matches[-1].group(1)
+    else:
+        xref_stm = list(re.finditer(rb'<<[^>]*?/Type\s*/XRef[^>]*?>>', pdf_bytes, re.DOTALL))
+        if xref_stm:
+            raw_d = xref_stm[-1].group(0)
+            for tag in [rb'/Type\s*/XRef', rb'/W\s*\[[^\]]*\]', rb'/Index\s*\[[^\]]*\]', rb'/Filter\s*/\w+', rb'/DecodeParms\s*<<.*?>>', rb'/Length\s*\d+']:
+                raw_d = re.sub(tag, b'', raw_d, flags=re.DOTALL)
+            trailer_dict = raw_d
+
+    if not trailer_dict:
+        return b""
+
+    if re.search(rb'/Size\s+\d+', trailer_dict):
+        trailer_dict = re.sub(rb'/Size\s+\d+', f'/Size {new_size}'.encode('ascii'), trailer_dict, count=1)
+    else:
+        trailer_dict = trailer_dict[:-2] + f' /Size {new_size} >>'.encode('ascii')
+
+    trailer_dict = re.sub(rb'/Prev\s+\d+', b'', trailer_dict)
+
+    xref_lines = [f"xref\r\n0 {new_size}\r\n".encode('ascii'), b"0000000000 65535 f \r\n"]
+    for i in range(1, new_size):
+        if i in offsets:
+            off, gen = offsets[i]
+            xref_lines.append(f"{off:010d} {gen:05d} n \r\n".encode('ascii'))
+        else:
+            xref_lines.append(b"0000000000 65535 f \r\n")
+
+    base = pdf_bytes.rstrip() + b"\r\n"
+    xref_offset = len(base)
+    return (
+        base
+        + b"".join(xref_lines)
+        + b"trailer\r\n"
+        + trailer_dict
+        + f"\r\nstartxref\r\n{xref_offset}\r\n%%EOF\r\n".encode('ascii')
+    )
+
+
+def _extract_embedded_jpegs_from_pdf(pdf_bytes: bytes) -> list:
+    images = []
+    pos = 0
+    total_len = len(pdf_bytes)
+    while len(images) < 8 and pos < total_len:
+        start = pdf_bytes.find(b'\xff\xd8\xff', pos)
+        if start == -1:
+            break
+        endstream_pos = pdf_bytes.find(b'endstream', start + 3)
+        if endstream_pos != -1:
+            eoi = pdf_bytes.rfind(b'\xff\xd9', start + 3, endstream_pos)
+            next_pos = endstream_pos + 9
+        else:
+            eoi = pdf_bytes.rfind(b'\xff\xd9', start + 3)
+            next_pos = (eoi + 2) if eoi != -1 else total_len
+
+        if eoi == -1:
+            pos = start + 3
+            continue
+
+        chunk = pdf_bytes[start:eoi + 2]
+        pos = max(next_pos, eoi + 2)
+        if len(chunk) < 4000:
+            continue
+        try:
+            im = Image.open(io.BytesIO(chunk))
+            im.load()
+            if im.width >= 400 and im.height >= 400:
+                images.append(im)
+        except Exception:
+            continue
+    return images
+
+
+def _extract_embedded_flate_images_from_pdf(pdf_bytes: bytes) -> list:
+    import zlib
+    images = []
+    for m in re.finditer(rb'<<([^>]*?/Subtype\s*/Image[^>]*?)>>\s*stream\r?\n(.*?)\r?\nendstream', pdf_bytes, re.DOTALL):
+        if len(images) >= 8:
+            break
+        header = m.group(1)
+        if b'/FlateDecode' not in header or b'/DCTDecode' in header:
+            continue
+        w_m = re.search(rb'/Width\s+(\d+)', header)
+        h_m = re.search(rb'/Height\s+(\d+)', header)
+        bpc_m = re.search(rb'/BitsPerComponent\s+(\d+)', header)
+        if not (w_m and h_m):
+            continue
+        w, h = int(w_m.group(1)), int(h_m.group(1))
+        bpc = int(bpc_m.group(1)) if bpc_m else 8
+        if w < 400 or h < 400 or bpc != 8:
+            continue
+        mode = 'RGB' if b'/DeviceRGB' in header else ('L' if b'/DeviceGray' in header else None)
+        if not mode:
+            continue
+        try:
+            raw = zlib.decompress(m.group(2))
+            channels = 3 if mode == 'RGB' else 1
+            expected = w * h * channels
+            if len(raw) >= expected:
+                im = Image.frombytes(mode, (w, h), raw[:expected])
+                images.append(im)
+        except Exception:
+            continue
+    return images
+
+
+
+def _render_pdf_pages_resilient(tmpdir: str, pdf_path: str):
+    import shutil
+    out_prefix = f"{tmpdir}/page"
+
+    # 1. Tentativa direta via pdftoppm (páginas 1 a 8)
+    proc = subprocess.run(
+        ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", pdf_path, out_prefix],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    pages = sorted(Path(tmpdir).glob("page*.png"))
+    if proc.returncode == 0 and pages:
+        return pages, ""
+
+    first_err = (proc.stderr or "").strip()
+
+    # 2. Reparo em Python para "Invalid XRef entry 0" / tabela XRef fora do padrão
+    try:
+        raw_bytes = Path(pdf_path).read_bytes()
+        rebuilt_bytes = _repair_pdf_xref_python(raw_bytes)
+        if rebuilt_bytes:
+            py_repaired = f"{tmpdir}/repaired_py.pdf"
+            Path(py_repaired).write_bytes(rebuilt_bytes)
+            for old_p in Path(tmpdir).glob("page*.png"):
+                old_p.unlink(missing_ok=True)
+            proc_py = subprocess.run(
+                ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", py_repaired, out_prefix],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            pages = sorted(Path(tmpdir).glob("page*.png"))
+            if proc_py.returncode == 0 and pages:
+                return pages, ""
+    except Exception:
+        pass
+
+    # 3. Reparo estrutural via qpdf ou Ghostscript
+    repaired_pdf = f"{tmpdir}/repaired.pdf"
+    repaired_ok = False
+    if shutil.which("qpdf"):
+        subprocess.run(
+            ["qpdf", "--warning-exit-0", pdf_path, repaired_pdf],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        if Path(repaired_pdf).exists() and Path(repaired_pdf).stat().st_size > 0:
+            repaired_ok = True
+    elif shutil.which("gs"):
+        subprocess.run(
+            ["gs", "-o", repaired_pdf, "-sDEVICE=pdfwrite", pdf_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        if Path(repaired_pdf).exists() and Path(repaired_pdf).stat().st_size > 0:
+            repaired_ok = True
+
+    if repaired_ok:
+        for old_p in Path(tmpdir).glob("page*.png"):
+            old_p.unlink(missing_ok=True)
+        proc2 = subprocess.run(
+            ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", repaired_pdf, out_prefix],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        pages = sorted(Path(tmpdir).glob("page*.png"))
+        if proc2.returncode == 0 and pages:
+            return pages, ""
+
+    return [], first_err
+
+
+def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = ""):
+    try:
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key or api_key == 'SuaChaveAquiDoGoogle':
+            yield {"error": "API Key do Gemini não configurada no .env"}
+            return
+
+        if not file_bytes or len(file_bytes) < 16:
+            yield {"error": "O arquivo enviado está vazio (0 bytes). Aguarde o download concluir e tente novamente."}
+            return
+
+        head = file_bytes.lstrip()[:16]
+        is_image_magic = (
+            file_bytes[:3] == b'\xff\xd8\xff'
+            or file_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+            or (file_bytes[:4] == b'RIFF' and file_bytes[8:12] == b'WEBP')
+        )
+        is_pdf_magic = b'%PDF-' in file_bytes[:2048]
+
+        fname = (filename or '').lower()
+        is_pdf = (not is_image_magic) and (is_pdf_magic or fname.endswith('.pdf') or mimetype == 'application/pdf')
+
+        if is_pdf and not is_pdf_magic:
+            yield {"error": "O arquivo selecionado não é um PDF válido (pode estar corrompido ou incompleto)."}
+            return
+
+        # Lista de tuplas: (page_num, total_pages, base64_data, mime_type)
+        page_payloads = []
+        if is_pdf:
+            clean_pdf_bytes = _strip_pdf_header_noise(file_bytes)
+            yield {"progress": 20, "stage": "Renderizando páginas do PDF..."}
+            with tempfile.TemporaryDirectory() as tmpdir:
+                pdf_path = f"{tmpdir}/nota.pdf"
+                with open(pdf_path, "wb") as f_pdf:
+                    f_pdf.write(clean_pdf_bytes)
+
+                pages, pdf_err = _render_pdf_pages_resilient(tmpdir, pdf_path)
+                if pages:
+                    total_p = len(pages)
+                    for idx, p_file in enumerate(pages, start=1):
+                        with Image.open(p_file) as im:
+                            page_payloads.append((idx, total_p, _prepare_page_b64(im, is_last_page=(idx == total_p)), "image/jpeg"))
+                else:
+                    # Fallback 1: extrai imagens JPEG embutidas no PDF (caso seja PDF escaneado)
+                    embedded_imgs = _extract_embedded_jpegs_from_pdf(clean_pdf_bytes) or _extract_embedded_flate_images_from_pdf(clean_pdf_bytes)
+                    if embedded_imgs:
+                        total_p = len(embedded_imgs)
+                        for idx, im in enumerate(embedded_imgs, start=1):
+                            page_payloads.append((idx, total_p, _prepare_page_b64(im, is_last_page=(idx == total_p)), "image/jpeg"))
+                    elif "password" in pdf_err.lower():
+                        yield {"error": "Este PDF está protegido por senha. Remova a senha ou envie uma foto/print da nota."}
+                        return
+                    else:
+                        # Fallback 2: leitura nativa de PDF diretamente pela IA (tolera XRef fora do padrão Poppler)
+                        yield {"progress": 30, "stage": "PDF com XRef fora do padrão; ativando leitor nativo IA..."}
+                        pdf_b64 = base64.b64encode(clean_pdf_bytes).decode('utf-8')
+                        page_payloads.append((1, 1, pdf_b64, "application/pdf"))
+        else:
+            yield {"progress": 20, "stage": "Carregando imagem da nota..."}
+            with Image.open(io.BytesIO(file_bytes)) as im:
+                page_payloads.append((1, 1, _prepare_page_b64(im, is_last_page=True), "image/jpeg"))
+
+        total_pages = len(page_payloads)
+        merged_supplier = ""
+        merged_invoice = ""
+        all_raw_items = []
+
+        for idx, tot, media_b64, m_type in page_payloads:
+            base_pct = 35 + int(((idx - 1) / max(1, tot)) * 50)
+            stage_txt = (
+                "IA lendo PDF nativo da NF..."
+                if m_type == "application/pdf" else
+                (f"IA lendo página {idx} de {tot} da NF..." if tot > 1 else "IA lendo cada linha e embalagem da NF...")
+            )
+            yield {"progress": base_pct, "stage": stage_txt}
+
+            box = {"data": None, "error": None}
+
+            def worker(b64=media_b64, p_n=idx, t_n=tot, mt=m_type):
+                try:
+                    box["data"] = _call_gemini_fast(api_key, b64, page_num=p_n, total_pages=t_n, mime_type=mt)
+                except Exception as exc:
+                    box["error"] = str(exc)
+
+            t = threading.Thread(target=worker, daemon=True)
+            t.start()
+
+            pct = base_pct
+            max_step_pct = 35 + int((idx / max(1, tot)) * 52)
+            while t.is_alive():
+                t.join(timeout=2.0)
+                if t.is_alive() and pct < max_step_pct:
+                    pct += 2
+                    yield {"progress": pct, "stage": stage_txt}
+
+            if box["error"]:
+                yield {"error": f"Erro na IA (pág. {idx}): {box['error']}"}
+                return
+
+            p_data = box["data"] or {}
+            if not merged_supplier and p_data.get("supplier"):
+                merged_supplier = str(p_data.get("supplier")).strip().upper()
+            if not merged_invoice and p_data.get("invoice_number"):
+                cand_nf = re.sub(r'\D', '', str(p_data.get("invoice_number") or ""))
+                cand_nf = cand_nf.lstrip('0') or cand_nf
+                if cand_nf:
+                    merged_invoice = cand_nf
+            if isinstance(p_data.get("items"), list):
+                all_raw_items.extend(p_data["items"])
+
+        yield {"progress": 94, "stage": f"Consolidando {len(all_raw_items)} itens..."}
+
+        clean_items = []
+        for it in all_raw_items:
+            desc = str(it.get("description") or "").strip().upper()
+            if not desc:
+                continue
+            qty = max(1, int(float(it.get("quantity") or 1)))
+            pf = max(1, int(float(it.get("pack_factor") or 1)))
+            if pf == 1:
+                m_pack = re.search(r'\b(\d{1,3})\s*[Xx]\s*\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|UN|M)\b', desc)
+                if m_pack:
+                    pf = max(1, int(m_pack.group(1)))
+            clean_items.append({
+                "description": desc,
+                "quantity": qty,
+                "pack_factor": pf,
+            })
+
+        yield {
+            "progress": 100,
+            "done": True,
+            "supplier": merged_supplier,
+            "invoice_number": merged_invoice,
+            "pages_processed": total_pages,
+            "items": clean_items
+        }
+
+    except Exception as e:
+        yield {"error": f"Erro na IA: {str(e)}"}
+
+
+
+def _iter_invoice_ocr_multi(file_items: list):
+    if len(file_items) == 1:
+        f_bytes, f_name, f_mime = file_items[0]
+        yield from _iter_invoice_ocr(f_bytes, f_name, f_mime)
+        return
+
+    total_pages = len(file_items)
+    merged_supplier = ""
+    merged_invoice = ""
+    all_items = []
+
+    for idx, (f_bytes, f_name, f_mime) in enumerate(file_items, start=1):
+        base_pct = int(((idx - 1) / total_pages) * 88) + 4
+        span_pct = max(5, int(88 / total_pages))
+        yield {
+            "progress": base_pct,
+            "stage": f"Lendo foto {idx} de {total_pages} da NF..."
+        }
+        page_done = None
+        for evt in _iter_invoice_ocr(f_bytes, f_name, f_mime):
+            if "error" in evt:
+                yield {"error": f"Erro na foto {idx}/{total_pages}: {evt['error']}"}
+                return
+            if evt.get("done"):
+                page_done = evt
+            elif isinstance(evt.get("progress"), (int, float)):
+                scaled = min(96, base_pct + int((float(evt["progress"]) / 100.0) * span_pct))
+                yield {
+                    "progress": scaled,
+                    "stage": f"Foto {idx}/{total_pages}: {evt.get('stage') or 'Extraindo itens...'}"
+                }
+
+        if page_done:
+            if not merged_supplier and page_done.get("supplier"):
+                merged_supplier = str(page_done["supplier"]).strip()
+            if not merged_invoice and page_done.get("invoice_number"):
+                merged_invoice = str(page_done["invoice_number"]).strip()
+            if isinstance(page_done.get("items"), list):
+                all_items.extend(page_done["items"])
+
+    yield {
+        "progress": 100,
+        "done": True,
+        "supplier": merged_supplier,
+        "invoice_number": merged_invoice,
+        "pages_processed": total_pages,
+        "items": all_items,
+    }
+
+
+def _ocr_response_multi(file_items: list):
+    wants_stream = 'application/x-ndjson' in request.headers.get('Accept', '')
+
+    if wants_stream:
+        def generate():
+            for event in _iter_invoice_ocr_multi(file_items):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='application/x-ndjson',
+            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
+        )
+
+    final_data = {"items": []}
+    for event in _iter_invoice_ocr_multi(file_items):
+        if "error" in event:
+            return jsonify({"error": event["error"]}), 500
+        if event.get("done"):
+            final_data = {
+                "supplier": event.get("supplier", ""),
+                "invoice_number": event.get("invoice_number", ""),
+                "pages_processed": event.get("pages_processed", len(file_items)),
+                "items": event.get("items", []),
+            }
+    return jsonify(final_data), 200
+
+
+def _ocr_response(file_bytes: bytes, filename: str = "", mimetype: str = "", cleanup_path: Path = None):
+    wants_stream = 'application/x-ndjson' in request.headers.get('Accept', '')
+
+    if wants_stream:
+        def generate():
+            try:
+                for event in _iter_invoice_ocr(file_bytes, filename, mimetype):
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+            finally:
+                if cleanup_path:
+                    cleanup_path.unlink(missing_ok=True)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='application/x-ndjson',
+            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
+        )
+
+    final_data = {"items": []}
+    try:
+        for event in _iter_invoice_ocr(file_bytes, filename, mimetype):
+            if "error" in event:
+                return jsonify({"error": event["error"]}), 500
+            if event.get("done"):
+                final_data = {"items": event.get("items", [])}
+        return jsonify(final_data), 200
+    finally:
+        if cleanup_path:
+            cleanup_path.unlink(missing_ok=True)
+
+
+def _get_kippe_db():
+    base_dir = Path(__file__).resolve().parent
+    db_path = base_dir / 'kippe.db'
+    if not db_path.exists():
+        db_path = Path('kippe.db')
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS sku_aliases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alias_norm TEXT NOT NULL,
+            supplier_norm TEXT NOT NULL DEFAULT '',
+            raw_alias TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            ean TEXT DEFAULT '',
+            catalog_name TEXT DEFAULT '',
+            pack_factor INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL,
+            UNIQUE(alias_norm, supplier_norm)
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS sku_pack_defaults (
+            sku TEXT PRIMARY KEY,
+            pack_factor INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS receiving_pending_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier TEXT NOT NULL,
+            invoice_number TEXT NOT NULL,
+            submitted_by_id TEXT NOT NULL,
+            submitted_by_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDENTE',
+            items_json TEXT NOT NULL,
+            notes TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            resolved_at TEXT DEFAULT '',
+            resolved_by TEXT DEFAULT ''
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS product_registration_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            raw_description TEXT NOT NULL,
+            suggested_ean TEXT DEFAULT '',
+            supplier TEXT DEFAULT '',
+            invoice_number TEXT DEFAULT '',
+            nf_qty INTEGER NOT NULL DEFAULT 1,
+            pack_factor INTEGER NOT NULL DEFAULT 1,
+            batch_code TEXT DEFAULT '',
+            expiration_date TEXT DEFAULT '',
+            requested_by_id TEXT NOT NULL,
+            requested_by_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDENTE',
+            created_sku TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS institutional_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            actor_id TEXT NOT NULL,
+            actor_name TEXT NOT NULL,
+            actor_role TEXT NOT NULL,
+            target_ref TEXT DEFAULT '',
+            summary TEXT NOT NULL,
+            details_json TEXT DEFAULT '{}',
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS receiving_divergences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier TEXT NOT NULL,
+            supplier_norm TEXT NOT NULL,
+            invoice_number TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            product_name TEXT DEFAULT '',
+            expected_qty INTEGER NOT NULL,
+            counted_qty INTEGER NOT NULL,
+            divergence_qty INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            notes TEXT DEFAULT '',
+            operator_id TEXT NOT NULL,
+            operator_name TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS conference_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_norm TEXT NOT NULL,
+            invoice_number TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            batch_code TEXT,
+            expiration_date TEXT,
+            operator_id TEXT,
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    return conn
+
+
+def _norm_catalog_text(s: str) -> str:
+    s = unicodedata.normalize('NFD', str(s or ''))
+    s = ''.join(ch for ch in s if unicodedata.category(ch) != 'Mn')
+    s = re.sub(r'[^A-Z0-9\s]', ' ', s.upper()).strip()
+    tokens = []
+    for tok in s.split():
+        # Normaliza plural simples em português (ex: SORTIDOS -> SORTID, BOMBONS -> BOMBON)
+        if len(tok) >= 5 and tok.endswith('NS'):
+            tok = tok[:-2] + 'M'
+        elif len(tok) >= 5 and tok.endswith('S') and not tok.endswith('SS'):
+            tok = tok[:-1]
+        tokens.append(tok)
+    return ' '.join(tokens)
+
+
+def _extract_domain_product(obj) -> dict:
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        sku = str(obj.get('id') or obj.get('sku') or '').strip()
+        ean = str(obj.get('ean') or obj.get('barcode') or obj.get('gtin') or '').strip()
+        name = str(obj.get('name') or obj.get('description') or sku).strip()
+        brand = str(obj.get('brand') or '').strip()
+        category = str(obj.get('category') or '').strip()
+        supplier = str(obj.get('supplier') or obj.get('last_supplier') or '').strip()
+    else:
+        sku = str(getattr(obj, 'id', None) or getattr(obj, 'sku', None) or '').strip()
+        ean = str(getattr(obj, 'ean', None) or getattr(obj, 'barcode', None) or getattr(obj, 'gtin', None) or '').strip()
+        name = str(getattr(obj, 'name', None) or getattr(obj, 'description', None) or sku).strip()
+        brand = str(getattr(obj, 'brand', None) or '').strip()
+        category = str(getattr(obj, 'category', None) or '').strip()
+        supplier = str(getattr(obj, 'supplier', None) or getattr(obj, 'last_supplier', None) or '').strip()
+    if not sku:
+        return {}
+    return {
+        'id': sku,
+        'sku': sku,
+        'ean': ean,
+        'name': name,
+        'brand': brand,
+        'category': category,
+        'last_supplier': supplier,
+    }
+
+
+def _query_native_products(raw_query: str) -> list:
+    candidates = {}
+
+    # 1. Busca exata por SKU ou EAN via product_query_use_case
+    try:
+        q_res = container.product_query_use_case.execute(identifier=raw_query.strip())
+        if getattr(q_res, 'is_success', False) and getattr(q_res, 'value', None):
+            d = _extract_domain_product(q_res.value)
+            if d:
+                candidates[d['sku']] = d
+    except Exception:
+        pass
+
+    # 2. Busca por sugestão nativa (frase completa + tokens individuais para tolerar variações de NF)
+    clean_words = [w for w in re.sub(r'[^A-Z0-9\s]', ' ', raw_query.upper()).split() if len(w) >= 3]
+    queries_to_run = [raw_query.strip()]
+    for w in sorted(clean_words, key=len, reverse=True)[:3]:
+        if w not in queries_to_run:
+            queries_to_run.append(w)
+
+    for q_term in queries_to_run:
+        if not q_term:
+            continue
+        try:
+            res = container.product_suggestion_use_case.execute(query=q_term)
+            items = res.value if hasattr(res, 'value') else res
+            if isinstance(items, list):
+                for item in items:
+                    d = _extract_domain_product(item)
+                    if d and d['sku'] not in candidates:
+                        candidates[d['sku']] = d
+        except Exception:
+            pass
+
+    return list(candidates.values())
+
+
+
+
+def _get_active_operator_context():
+    if (
+        container.config.ENV == "testing"
+        and "X-Test-Operator-Override" in request.headers
+    ):
+        ov_id = str(request.headers.get("X-Test-Operator-Override") or "").strip()
+        ov_role = str(request.headers.get("X-Test-Operator-Role") or "").strip().upper()
+        op_obj = container.operator_repository.get_by_id(ov_id) if ov_id else None
+        if op_obj:
+            return op_obj.id, op_obj.name, op_obj.role
+        return ov_id or "TEST-OP", "Test Agent", ov_role or "ADMIN_SISTEMA"
+
+    op_id = str(session.get("operator_id") or "").strip()
+    op_name = str(session.get("operator_name") or op_id or "OPERADOR").strip()
+    op_role = str(session.get("operator_role") or "").strip().upper()
+    if op_id and not op_role:
+        op_obj = container.operator_repository.get_by_id(op_id)
+        if op_obj:
+            op_role = op_obj.role
+            op_name = op_obj.name
+    return op_id, op_name, op_role or "OPERADOR"
+
+
+@app.route('/api/receiving/requests/product', methods=['POST'])
+def create_product_registration_request():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    op_id, op_name, _ = _get_active_operator_context()
+    data = request.json or {}
+    raw_desc = str(data.get('raw_description') or data.get('description') or '').strip().upper()
+    if not raw_desc:
+        return jsonify({'error': 'Descrição do produto da NF é obrigatória.'}), 400
+
+    suggested_ean = str(data.get('suggested_ean') or data.get('ean') or '').strip()
+    supplier = str(data.get('supplier') or '').strip().upper()
+    invoice_number = str(data.get('invoice_number') or '').strip()
+    nf_qty = max(1, int(float(data.get('nf_qty') or 1)))
+    pack_factor = max(1, int(float(data.get('pack_factor') or 1)))
+    batch_code = str(data.get('batch_code') or '').strip().upper()
+    expiration_date = str(data.get('expiration_date') or '').strip()
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+
+    conn = _get_kippe_db()
+    try:
+        existing = conn.execute(
+            '''
+            SELECT id FROM product_registration_requests
+            WHERE status = 'PENDENTE'
+              AND raw_description = ?
+              AND supplier = ?
+              AND invoice_number = ?
+            LIMIT 1
+            ''',
+            (raw_desc, supplier, invoice_number),
+        ).fetchone()
+        if existing:
+            return jsonify({
+                'ok': True,
+                'deduplicated': True,
+                'request_id': int(existing['id']),
+                'message': 'Solicitação já enviada anteriormente ao Estoquista.',
+            }), 200
+
+        cur = conn.execute(
+            '''
+            INSERT INTO product_registration_requests (
+                raw_description, suggested_ean, supplier, invoice_number,
+                nf_qty, pack_factor, batch_code, expiration_date,
+                requested_by_id, requested_by_name, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', ?)
+            ''',
+            (
+                raw_desc, suggested_ean, supplier, invoice_number,
+                nf_qty, pack_factor, batch_code, expiration_date,
+                op_id, op_name, now_iso,
+            ),
+        )
+        conn.commit()
+        req_id = int(cur.lastrowid)
+    finally:
+        conn.close()
+
+    _record_audit_event(
+        "PRODUCT_REQUESTED",
+        "RECEBIMENTO",
+        f"Solicitação de cadastro na doca: {raw_desc} (NF {invoice_number or 'S/N'})",
+        target_ref=f"REQ-{req_id}",
+    )
+    return jsonify({
+        'ok': True,
+        'request_id': req_id,
+        'message': 'Solicitação de cadastro enviada ao Estoquista.',
+    }), 201
+
+
+@app.route('/api/receiving/pending', methods=['GET'])
+def list_receiving_pending():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    if not AccessControl.can_approve_receiving(op_role):
+        return jsonify({'error': 'Autorização negada: perfil sem acesso à fila de armazenagem.'}), 403
+
+    conn = _get_kippe_db()
+    try:
+        conf_rows = conn.execute(
+            "SELECT * FROM receiving_pending_queue WHERE status = 'PENDENTE' ORDER BY id DESC"
+        ).fetchall()
+        prod_rows = conn.execute(
+            "SELECT * FROM product_registration_requests WHERE status = 'PENDENTE' ORDER BY id DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    conferences = []
+    for r in conf_rows:
+        try:
+            parsed_items = json.loads(r['items_json'] or '[]')
+        except Exception:
+            parsed_items = []
+        conferences.append({
+            'id': int(r['id']),
+            'supplier': r['supplier'],
+            'invoice_number': r['invoice_number'],
+            'submitted_by_id': r['submitted_by_id'],
+            'submitted_by_name': r['submitted_by_name'],
+            'status': r['status'],
+            'items': parsed_items,
+            'notes': r['notes'] or '',
+            'created_at': r['created_at'],
+        })
+
+    product_requests = [
+        {
+            'id': int(r['id']),
+            'raw_description': r['raw_description'],
+            'suggested_ean': r['suggested_ean'] or '',
+            'supplier': r['supplier'] or '',
+            'invoice_number': r['invoice_number'] or '',
+            'nf_qty': int(r['nf_qty'] or 1),
+            'pack_factor': int(r['pack_factor'] or 1),
+            'batch_code': r['batch_code'] or '',
+            'expiration_date': r['expiration_date'] or '',
+            'requested_by_id': r['requested_by_id'],
+            'requested_by_name': r['requested_by_name'],
+            'status': r['status'],
+            'created_at': r['created_at'],
+        }
+        for r in prod_rows
+    ]
+
+    return jsonify({
+        'pending_conferences_count': len(conferences),
+        'pending_products_count': len(product_requests),
+        'conferences': conferences,
+        'product_requests': product_requests,
+    }), 200
+
+
+@app.route('/api/receiving/pending/<int:req_id>/resolve-product', methods=['POST'])
+def resolve_pending_product_request(req_id: int):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    _, _, op_role = _get_active_operator_context()
+    if not AccessControl.can_manage_operational_catalog(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Estoquista ou Administrador pode resolver cadastros.'}), 403
+
+    data = request.json or {}
+    action = str(data.get('action') or 'CADASTRADO').strip().upper()
+    created_sku = str(data.get('sku') or '').strip()
+    ean = str(data.get('ean') or '').strip()
+    catalog_name = str(data.get('name') or '').strip()
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+
+    conn = _get_kippe_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM product_registration_requests WHERE id = ?",
+            (req_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Solicitação não encontrada.'}), 404
+        if row['status'] != 'PENDENTE':
+            return jsonify({'error': f"Solicitação já encerrada ({row['status']})."}), 409
+
+        new_status = 'DESCARTADO' if action == 'DESCARTADO' else 'CADASTRADO'
+        conn.execute(
+            "UPDATE product_registration_requests SET status = ?, created_sku = ? WHERE id = ?",
+            (new_status, created_sku, req_id),
+        )
+
+        if new_status == 'CADASTRADO' and created_sku:
+            alias_norm = _norm_catalog_text(row['raw_description'])
+            sup_norm = _norm_catalog_text(row['supplier'] or '')
+            pf = max(1, int(row['pack_factor'] or 1))
+            conn.execute(
+                '''
+                INSERT INTO sku_aliases (alias_norm, supplier_norm, raw_alias, sku, ean, catalog_name, pack_factor, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(alias_norm, supplier_norm) DO UPDATE SET
+                    sku = excluded.sku,
+                    ean = excluded.ean,
+                    catalog_name = excluded.catalog_name,
+                    pack_factor = CASE WHEN excluded.pack_factor > 1 THEN excluded.pack_factor ELSE sku_aliases.pack_factor END,
+                    updated_at = excluded.updated_at
+                ''',
+                (alias_norm, sup_norm, row['raw_description'], created_sku, ean, catalog_name or row['raw_description'], pf, now_iso),
+            )
+            if pf > 1:
+                conn.execute(
+                    '''
+                    INSERT INTO sku_pack_defaults (sku, pack_factor, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(sku) DO UPDATE SET pack_factor = excluded.pack_factor, updated_at = excluded.updated_at
+                    ''',
+                    (created_sku, pf, now_iso),
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({'ok': True, 'status': new_status, 'sku': created_sku}), 200
+
+
+@app.route('/api/receiving/pending/<int:queue_id>/approve', methods=['POST'])
+def approve_pending_conference(queue_id: int):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    op_id, _, op_role = _get_active_operator_context()
+    if not AccessControl.can_approve_receiving(op_role):
+        return jsonify({'error': 'Autorização negada: apenas Estoquista ou Administrador pode efetivar armazenagem.'}), 403
+
+    data = request.json or {}
+    sku_overrides = data.get('sku_overrides') or {}
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+
+    conn = _get_kippe_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM receiving_pending_queue WHERE id = ?",
+            (queue_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Conferência pendente não encontrada.'}), 404
+        if row['status'] != 'PENDENTE':
+            return jsonify({'error': f"Esta conferência já foi processada ({row['status']})."}), 409
+
+        items = json.loads(row['items_json'] or '[]')
+        ctx_supplier = str(row['supplier'] or 'PADRAO').strip()
+        ctx_invoice = str(row['invoice_number'] or '').strip()
+
+        resolved_items = []
+        for idx, it in enumerate(items):
+            sku = str(sku_overrides.get(str(idx)) or it.get('sku') or '').strip()
+            qty = int(it.get('quantity') or it.get('scanned') or 0)
+            if qty <= 0:
+                continue
+            if not sku or sku.startswith('TEMP-'):
+                return jsonify({
+                    'error': f"O item '{it.get('name') or 'SEM SKU'}' ainda precisa ser cadastrado/vinculado antes de aprovar."
+                }), 400
+            prod = container.product_repository.get_by_id(sku)
+            if not prod:
+                return jsonify({'error': f"SKU '{sku}' não encontrado no catálogo."}), 400
+            resolved_items.append((sku, qty, it))
+
+        if not resolved_items:
+            return jsonify({'error': 'Nenhum item válido com quantidade > 0 para aprovar.'}), 400
+
+        committed = []
+        for sku, qty, it in resolved_items:
+            batch_code = str(it.get('batch_code') or '').strip()
+            expiration_date = str(it.get('expiration_date') or '').strip()
+            manufacturing_date = str(it.get('manufacturing_date') or '').strip()
+            item_inv = str(it.get('invoice_number') or ctx_invoice or '').strip()
+            res = container.receive_use_case.execute(
+                identifier=sku,
+                quantity=qty,
+                batch_code=batch_code,
+                expiration_date=expiration_date,
+                supplier=ctx_supplier,
+                manufacturing_date=manufacturing_date,
+                origin_document=item_inv if item_inv else 'CONFERENCE',
+                operator_id=op_id or 'SYSTEM',
+            )
+            if not res.is_success:
+                return jsonify({'error': f"Falha ao dar entrada no SKU {sku}: {res.error}"}), 400
+
+            committed.append({'sku': sku, 'quantity': qty, 'batch_code': batch_code, 'invoice_number': item_inv})
+            conn.execute(
+                "INSERT INTO conference_audit_log (supplier_norm, invoice_number, sku, quantity, batch_code, expiration_date, operator_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (_norm_catalog_text(ctx_supplier), item_inv, sku, qty, batch_code, expiration_date, op_id or 'SYSTEM', now_iso),
+            )
+
+        conn.execute(
+            "UPDATE receiving_pending_queue SET status = 'APROVADO', resolved_at = ?, resolved_by = ? WHERE id = ?",
+            (now_iso, op_id or 'SYSTEM', queue_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _record_audit_event(
+        "CONFERENCE_APPROVED",
+        "ESTOQUE",
+        f"Armazenagem aprovada: {ctx_supplier} · NF {ctx_invoice or 'S/N'} ({len(committed)} itens no estoque)",
+        target_ref=f"NF-{ctx_invoice or queue_id}",
+    )
+    return jsonify({
+        'ok': True,
+        'approved': len(committed),
+        'results': committed,
+    }), 200
+
+
+@app.route('/api/receiving/pending/<int:queue_id>/reject', methods=['POST'])
+def reject_pending_conference(queue_id: int):
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    op_id, _, op_role = _get_active_operator_context()
+    if not AccessControl.can_approve_receiving(op_role):
+        return jsonify({'error': 'Autorização negada.'}), 403
+
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    conn = _get_kippe_db()
+    try:
+        row = conn.execute("SELECT status FROM receiving_pending_queue WHERE id = ?", (queue_id,)).fetchone()
+        if not row:
+            return jsonify({'error': 'Conferência não encontrada.'}), 404
+        if row['status'] != 'PENDENTE':
+            return jsonify({'error': f"Conferência já encerrada ({row['status']})."}), 409
+        conn.execute(
+            "UPDATE receiving_pending_queue SET status = 'REJEITADO', resolved_at = ?, resolved_by = ? WHERE id = ?",
+            (now_iso, op_id or 'SYSTEM', queue_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _record_audit_event(
+        "CONFERENCE_REJECTED",
+        "RECEBIMENTO",
+        f"Conferência pendente #{queue_id} rejeitada",
+        target_ref=f"FILA-{queue_id}",
+    )
+    return jsonify({'ok': True, 'status': 'REJEITADO'}), 200
+
+
+@app.route('/api/catalog/aliases', methods=['POST'])
+def save_catalog_alias():
+    data = request.json or {}
+    raw_alias = str(data.get('alias') or '').strip()
+    sku = str(data.get('sku') or '').strip()
+    if not raw_alias or not sku:
+        return jsonify({'error': 'alias e sku obrigatórios'}), 400
+
+    alias_norm = _norm_catalog_text(raw_alias)
+    supplier_norm = _norm_catalog_text(str(data.get('supplier') or ''))
+    ean = str(data.get('ean') or '').strip()
+    catalog_name = str(data.get('name') or '').strip()
+    pack_factor = max(1, int(data.get('pack_factor') or 1))
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+
+    explicit_factor = bool(data.get('explicit_factor', False))
+    conn = _get_kippe_db()
+    try:
+        conn.execute('''
+            INSERT INTO sku_aliases (alias_norm, supplier_norm, raw_alias, sku, ean, catalog_name, pack_factor, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(alias_norm, supplier_norm) DO UPDATE SET
+                raw_alias = excluded.raw_alias,
+                sku = excluded.sku,
+                ean = excluded.ean,
+                catalog_name = excluded.catalog_name,
+                pack_factor = CASE
+                    WHEN ? OR excluded.pack_factor > 1 THEN excluded.pack_factor
+                    ELSE sku_aliases.pack_factor
+                END,
+                updated_at = excluded.updated_at
+        ''', (alias_norm, supplier_norm, raw_alias, sku, ean, catalog_name, pack_factor, now_iso, 1 if explicit_factor else 0))
+
+        if pack_factor > 1 or explicit_factor:
+            conn.execute('''
+                INSERT INTO sku_pack_defaults (sku, pack_factor, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(sku) DO UPDATE SET
+                    pack_factor = excluded.pack_factor,
+                    updated_at = excluded.updated_at
+            ''', (sku, pack_factor, now_iso))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({'ok': True, 'sku': sku, 'pack_factor': pack_factor}), 200
+
+
+@app.route('/api/catalog/search', methods=['GET'])
+def catalog_search():
+    q = (request.args.get('q') or '').strip()
+    supplier = (request.args.get('supplier') or '').strip()
+    if not q:
+        return jsonify([])
+
+    q_norm = _norm_catalog_text(q)
+    sup_norm = _norm_catalog_text(supplier)
+    q_tokens = [t for t in q_norm.split() if len(t) >= 2] or [q_norm]
+
+    conn = _get_kippe_db()
+    historical_skus = set()
+    alias_rows = []
+    try:
+        if sup_norm:
+            for r in conn.execute(
+                "SELECT DISTINCT sku FROM conference_audit_log WHERE supplier_norm = ?",
+                (sup_norm,)
+            ).fetchall():
+                historical_skus.add(str(r['sku']))
+            for r in conn.execute(
+                "SELECT DISTINCT sku FROM sku_aliases WHERE supplier_norm = ?",
+                (sup_norm,)
+            ).fetchall():
+                historical_skus.add(str(r['sku']))
+
+        alias_rows = conn.execute(
+            "SELECT alias_norm, supplier_norm, sku, ean, catalog_name, pack_factor FROM sku_aliases"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    results_by_sku = {}
+
+    # 1. Verifica De-Para institucional salvo (sku_aliases)
+    for ar in alias_rows:
+        a_norm = ar['alias_norm'] or ''
+        if not a_norm:
+            continue
+        is_exact_alias = (a_norm == q_norm)
+        matched_toks = sum(1 for t in q_tokens if t in a_norm)
+        if is_exact_alias or matched_toks == len(q_tokens):
+            sku = str(ar['sku'])
+            sup_bonus = 0.25 if (sup_norm and ar['supplier_norm'] == sup_norm) else 0.0
+            score = (2.0 if is_exact_alias else 1.2) + sup_bonus
+            if sku not in results_by_sku or score > results_by_sku[sku]['score']:
+                results_by_sku[sku] = {
+                    'id': sku,
+                    'sku': sku,
+                    'ean': str(ar['ean'] or ''),
+                    'name': str(ar['catalog_name'] or sku),
+                    'brand': '',
+                    'category': '',
+                    'pack_factor': int(ar['pack_factor'] or 1),
+                    'alias_match': is_exact_alias,
+                    'supplier_match': sku in historical_skus or (sup_norm and ar['supplier_norm'] == sup_norm),
+                    'score': round(score, 3),
+                }
+
+    # 2. Consulta repositório oficial do KIPPE (use cases nativos)
+    for prod in _query_native_products(q):
+        sku = prod['sku']
+        haystack = _norm_catalog_text(f"{sku} {prod.get('ean', '')} {prod.get('name', '')} {prod.get('brand', '')}")
+        matched = sum(1 for t in q_tokens if t in haystack)
+        if matched > 0 or q.upper() in sku.upper() or (prod.get('ean') and q in prod['ean']):
+            base_score = matched / max(1, len(q_tokens))
+            # Penaliza divergência de gramatura/volume (ex: 1.5KG vs 170G)
+            q_measures = set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|M)\b', q.upper().replace(',', '.')))
+            p_measures = set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|M)\b', (prod.get('name', '')).upper().replace(',', '.')))
+            if q_measures and p_measures and not (q_measures & p_measures):
+                base_score -= 0.45
+            sup_match = (sku in historical_skus) or (
+                bool(sup_norm) and sup_norm in _norm_catalog_text(prod.get('last_supplier', ''))
+            )
+            score = base_score + (0.35 if sup_match else 0.0)
+            if sku not in results_by_sku:
+                results_by_sku[sku] = {
+                    **prod,
+                    'pack_factor': 1,
+                    'alias_match': False,
+                    'supplier_match': sup_match,
+                    'score': round(score, 3),
+                }
+            else:
+                if prod.get('name'):
+                    results_by_sku[sku]['name'] = prod['name']
+                if prod.get('ean'):
+                    results_by_sku[sku]['ean'] = prod['ean']
+                if sup_match:
+                    results_by_sku[sku]['supplier_match'] = True
+
+    conn_pf = _get_kippe_db()
+    try:
+        sku_defaults = {
+            str(r['sku']): int(r['pack_factor'] or 1)
+            for r in conn_pf.execute("SELECT sku, pack_factor FROM sku_pack_defaults").fetchall()
+        }
+    finally:
+        conn_pf.close()
+
+    for item in results_by_sku.values():
+        s_key = item['sku']
+        if int(item.get('pack_factor') or 1) <= 1 and sku_defaults.get(s_key, 1) > 1:
+            item['pack_factor'] = sku_defaults[s_key]
+
+    ranked = sorted(results_by_sku.values(), key=lambda x: (-x['score'], x['name']))
+    return jsonify(ranked[:15])
+
+
+@app.route('/api/invoices/ocr', methods=['POST'])
+def invoices_ocr():
+    raw_files = request.files.getlist('files') or request.files.getlist('file')
+    valid_files = [f for f in raw_files if f and getattr(f, 'filename', '')]
+    if not valid_files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+    if len(valid_files) > 12:
+        return jsonify({'error': 'Limite máximo de 12 fotos por nota fiscal.'}), 400
+
+    file_items = [
+        (f.read(), f.filename, f.mimetype or 'image/jpeg')
+        for f in valid_files
+    ]
+    if len(file_items) == 1:
+        f_bytes, f_name, f_mime = file_items[0]
+        return _ocr_response(f_bytes, f_name, f_mime)
+
+    return _ocr_response_multi(file_items)
+
+
+@app.route('/share-target', methods=['POST'])
+def share_target():
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return redirect('/?share_error=empty', code=303)
+
+    token = uuid.uuid4().hex
+    ext = Path(file.filename).suffix.lower() or '.pdf'
+    target_path = SHARE_TMP_DIR / f"{token}{ext}"
+    file.save(target_path)
+    return redirect(f'/?share_id={token}', code=303)
+
+
+@app.route('/api/invoices/shared/<token>', methods=['GET'])
+def invoices_shared(token):
+    if not re.fullmatch(r'[0-9a-f]{32}', token):
+        return jsonify({'error': 'Token inválido'}), 400
+
+    matches = list(SHARE_TMP_DIR.glob(f"{token}.*"))
+    if not matches:
+        return jsonify({'error': 'Arquivo compartilhado expirado ou já processado'}), 404
+
+    file_path = matches[0]
+    return _ocr_response(file_path.read_bytes(), file_path.name, cleanup_path=file_path)
 
 if __name__ == '__main__':
     is_dev = (

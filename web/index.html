@@ -28,7 +28,185 @@ if ('serviceWorker' in navigator) {
         .bg-kippe-red { background-color: #e31c23; }
         .logo-kippe-sm { font-family: 'Arial Black', sans-serif; font-weight: 900; color: #e31c23; -webkit-text-stroke: 1.5px #ffffff; paint-order: stroke fill; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); transform: scaleY(1.15) skewX(-10deg); display: inline-block; }
         .logo-supermercado { font-family: 'Cooper Black', 'Georgia', serif; font-weight: 900; color: #ffffff; letter-spacing: 0.05em; transform: scaleY(0.85); display: inline-block; }
-    </style>
+    
+  .kippe-ocr-progress {
+    display: none;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+  }
+  .kippe-ocr-progress.is-active {
+    display: block;
+  }
+  .kippe-ocr-progress.is-success {
+    background: #ECFDF5;
+    border-color: #A7F3D0;
+  }
+  .kippe-ocr-progress.is-error {
+    background: #FEF2F2;
+    border-color: #FECACA;
+  }
+  .kippe-ocr-progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #1E293B;
+  }
+  .kippe-ocr-progress.is-success .kippe-ocr-progress-head { color: #065F46; }
+  .kippe-ocr-progress.is-error .kippe-ocr-progress-head { color: #991B1B; }
+  .kippe-ocr-progress-stage {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kippe-ocr-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #16489C;
+    flex-shrink: 0;
+    animation: kippePulse 1.1s ease-in-out infinite;
+  }
+  .kippe-ocr-progress.is-success .kippe-ocr-dot { background: #059669; animation: none; }
+  .kippe-ocr-progress.is-error .kippe-ocr-dot { background: #DC2626; animation: none; }
+  .kippe-ocr-progress-meta {
+    flex-shrink: 0;
+    color: #64748B;
+    font-variant-numeric: tabular-nums;
+  }
+  .kippe-ocr-track {
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: #E2E8F0;
+    overflow: hidden;
+  }
+  .kippe-ocr-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #16489C 0%, #2563EB 100%);
+    transition: width 0.28s ease;
+  }
+  .kippe-ocr-progress.is-success .kippe-ocr-fill { background: #10B981; }
+  .kippe-ocr-progress.is-error .kippe-ocr-fill { background: #EF4444; }
+  @keyframes kippePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+</style>
+<style id="kippe-ocr-enterprise-styles">
+  .kippe-ocr-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #E2E8F0;
+  }
+  .kippe-ocr-btn {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 44px;
+    padding: 7px 10px;
+    border-radius: 11px;
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .kippe-ocr-btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .kippe-ocr-btn:disabled {
+    opacity: 0.72;
+    cursor: wait;
+  }
+  .kippe-ocr-btn--camera {
+    background: #F8FAFC;
+    border: 1.5px solid #CBD5E1;
+    color: #0F172A;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .kippe-ocr-btn--pdf {
+    background: linear-gradient(135deg, #16489C 0%, #0E3170 100%);
+    border: 1.5px solid #123B82;
+    color: #FFFFFF;
+    box-shadow: 0 2px 6px rgba(22, 72, 156, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+  .kippe-ocr-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .kippe-ocr-btn--camera .kippe-ocr-icon {
+    background: #EFF6FF;
+    color: #16489C;
+    border: 1px solid #DBEAFE;
+  }
+  .kippe-ocr-btn--pdf .kippe-ocr-icon {
+    background: rgba(255, 255, 255, 0.14);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+  .kippe-ocr-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.15;
+  }
+  .kippe-ocr-title {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kippe-ocr-sub {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kippe-ocr-btn--camera .kippe-ocr-sub {
+    color: #64748B;
+  }
+  .kippe-ocr-btn--pdf .kippe-ocr-sub {
+    color: rgba(255, 255, 255, 0.78);
+  }
+  @keyframes kippeSpin {
+    to { transform: rotate(360deg); }
+  }
+  .kippe-spin {
+    animation: kippeSpin 0.85s linear infinite;
+  }
+</style>
 </head>
 <body class="bg-gray-50 text-gray-900 pb-20 uppercase">
     <!-- AUTENTICAÇÃO NOMINAL DO OPERADOR -->
@@ -973,6 +1151,9 @@ if ('serviceWorker' in navigator) {
     
 
         <!-- TELA DE CONFERÊNCIA -->
+<input type="file" id="ai-upload-camera" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="ai-upload-gallery" accept="image/*" multiple style="display:none">
+<input type="file" id="ai-upload-file" accept="application/pdf,.pdf" style="display:none">
         <section id="conference-view" class="hidden space-y-3 pb-24">
             <div class="flex gap-2">
                 <button type="button" id="btn-back-conference" class="bg-white border px-3 py-1.5 rounded-lg font-bold text-[10px] shadow-sm uppercase">VOLTAR</button>
@@ -992,6 +1173,48 @@ if ('serviceWorker' in navigator) {
                     <div>
                         <label class="block text-[9px] font-black text-gray-500 mb-1 tracking-widest">Nº NF</label>
                         <input type="text" id="conference-invoice-input" placeholder="EX: 000123" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 text-xs font-bold outline-none">
+                    </div>
+                </div>
+                <!-- BARRA DE IMPORTAÇÃO INTELIGENTE DE NF (OCR + LGPD) -->
+                <div class="kippe-ocr-toolbar" role="group" aria-label="Importar itens da Nota Fiscal">
+                    <button type="button" id="btn-ai-camera" class="kippe-ocr-btn kippe-ocr-btn--camera" title="Fotografar Nota Fiscal">
+                        <span class="kippe-ocr-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                                <circle cx="12" cy="13" r="3"/>
+                            </svg>
+                        </span>
+                        <span class="kippe-ocr-text">
+                            <span class="kippe-ocr-title">Foto da NF</span>
+                            <span class="kippe-ocr-sub">1 ou + Fotos</span>
+                        </span>
+                    </button>
+
+                    <button type="button" id="btn-ai-file" class="kippe-ocr-btn kippe-ocr-btn--pdf" title="Importar PDF da DANFE">
+                        <span class="kippe-ocr-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </span>
+                        <span class="kippe-ocr-text">
+                            <span class="kippe-ocr-title">Importar PDF</span>
+                            <span class="kippe-ocr-sub">DANFE / Scan</span>
+                        </span>
+                    </button>
+                </div>
+                <div id="kippe-ocr-progress" class="kippe-ocr-progress" aria-live="polite">
+                    <div class="kippe-ocr-progress-head">
+                        <span class="kippe-ocr-progress-stage">
+                            <span class="kippe-ocr-dot"></span>
+                            <span id="kippe-ocr-stage-text">Preparando arquivo...</span>
+                        </span>
+                        <span id="kippe-ocr-meta-text" class="kippe-ocr-progress-meta">0% · 0.0s</span>
+                    </div>
+                    <div class="kippe-ocr-track">
+                        <div id="kippe-ocr-fill" class="kippe-ocr-fill"></div>
                     </div>
                 </div>
 
@@ -2209,7 +2432,7 @@ if ('serviceWorker' in navigator) {
         </button>
     </nav>
 
-    <script src="/web/js/features/conference.js?v=9" type="module"></script>
+    <script src="/web/js/features/conference.js?v=48" type="module"></script>
     <script src="/web/js/features/validity.js?v=2" type="module"></script>
     <script src="/web/js/app.js?v=nuke_1784753602" type="module"></script>
     <script src="/web/js/product_search.js?v=canonical_1" type="module"></script>
@@ -2752,5 +2975,58 @@ if ('serviceWorker' in navigator) {
         </div>
     </div>
     
+
+<!-- MODAL QUICK CREATE (Cadastro no meio do Lote) -->
+<div id="quick-create-modal" class="hidden fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+        <div class="p-4 bg-yellow-500 text-white">
+            <h3 class="font-black text-sm uppercase">Produto Novo Detectado!</h3>
+            <p class="text-xs opacity-90 mt-1">Cadastre rapidamente para continuar a conferência.</p>
+        </div>
+        <div class="p-4 space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[9px] font-black text-gray-500 mb-1">EAN (SE HOUVER)</label>
+                    <input type="text" id="qc-ean" placeholder="Opcional" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-gray-500 mb-1">CÓD. INTERNO (A GRANEL)</label>
+                    <input type="text" id="qc-internal-code" placeholder="Opcional" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none">
+                </div>
+            </div>
+            <div>
+                <label class="block text-[9px] font-black text-gray-500 mb-1">NOME DO PRODUTO *</label>
+                <input type="text" id="qc-name" placeholder="Ex: Arroz Tio Joao 5kg Branco" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[9px] font-black text-gray-500 mb-1">CATEGORIA</label>
+                    <select id="qc-category" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold outline-none">
+                        <option value="MERCEARIA">MERCEARIA</option>
+                        <option value="BEBIDAS">BEBIDAS</option>
+                        <option value="LIMPEZA">LIMPEZA</option>
+                        <option value="HIGIENE">HIGIENE</option>
+                        <option value="HORTIFRUTI">HORTIFRUTI</option>
+                        <option value="FRIOS">FRIOS</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-gray-500 mb-1">UNIDADE</label>
+                    <select id="qc-unit" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold outline-none">
+                        <option value="UN">UNIDADE (UN)</option>
+                        <option value="KG">QUILO (KG)</option>
+                        <option value="CX">CAIXA (CX)</option>
+                        <option value="PCT">PACOTE (PCT)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="p-4 bg-gray-50 flex gap-2">
+            <button type="button" id="qc-cancel" class="flex-1 bg-white border border-gray-300 text-gray-700 font-bold py-2 rounded-lg">CANCELAR</button>
+            <button type="button" id="qc-save" class="flex-1 bg-green-600 text-white font-bold py-2 rounded-lg">SALVAR E ADICIONAR</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
