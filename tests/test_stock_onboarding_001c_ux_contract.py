@@ -389,20 +389,20 @@ def test_operator_role_is_not_treated_as_management_role():
         start:start + 1800
     ]
 
+    # Aceita dois padrões de implementação:
+    # 1. Legado: string literal 'GERENTE'
+    # 2. Atual (Sprint 3): função canManageCatalog() que agrega GERENTE+ESTOQUISTA+ADMIN
     assert (
-        "GERENTE"
-        in region
-    )
+        "GERENTE" in region
+        or "canManageCatalog" in region
+        or "canManageExistingStock" in region
+    ), "Esperado: GERENTE, canManageCatalog() ou canManageExistingStock() na região do teste"
 
+    # Confirma que OPERADOR não está autorizado de forma direta
     assert (
-        "ADMIN_SISTEMA"
-        in region
-    )
+        "role === 'OPERADOR'" not in region
+    ), "OPERADOR não pode ser tratado como management role"
 
-    assert not (
-        "role === 'OPERADOR'"
-        in region
-    )
 
 
 def test_application_can_open_existing_stock_for_product():

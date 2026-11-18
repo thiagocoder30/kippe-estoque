@@ -47,3 +47,24 @@ class SQLiteOperatorRepository:
                     role=row['role']
                 )
             return None
+
+    def list_all(self) -> list[Operator]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                'SELECT id, name, pin_hash, role FROM operators ORDER BY name ASC'
+            ).fetchall()
+            return [
+                Operator(
+                    id=row['id'],
+                    name=row['name'],
+                    pin_hash=row['pin_hash'],
+                    role=row['role'],
+                )
+                for row in rows
+            ]
+
+    def delete_by_id(self, operator_id: str) -> bool:
+        with self._get_connection() as conn:
+            cur = conn.execute('DELETE FROM operators WHERE id = ?', (operator_id,))
+            conn.commit()
+            return cur.rowcount > 0

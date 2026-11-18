@@ -2823,13 +2823,39 @@ def _call_gemini_fast(
 
 
 def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
+    """Prepara uma página da DANFE para envio ao Gemini.
+
+    Camadas de privacidade (LGPD):
+    - [BOTTOM] Corte físico: remove rodapé (impostos, totais, transporte, cobrança)
+    - [TOP] Mascaramento cirúrgico: pinta de preto a faixa da Chave de Acesso (44 dígitos),
+      que permitiria a qualquer um consultar a NF inteira no SEFAZ. O resto do cabeçalho
+      (nome do fornecedor, número da NF) permanece visível para o OCR.
+    - [MIDDLE] Prompt restritivo: IA instruída a ignorar CNPJ, CPF, endereços e valores.
+    """
     image = img.convert('L')
     width, height = image.size
+
+    # ─── 1. CORTE DO RODAPÉ (impostos, totais, transporte) ───
     cut_ratio = 0.88 if is_last_page else 0.96
     bottom_cut = int(height * cut_ratio)
     if bottom_cut > 200:
         image = image.crop((0, 0, width, bottom_cut))
 
+    # ─── 2. MASCARAMENTO DA CHAVE DE ACESSO ───
+    # A Chave de Acesso (44 dígitos) fica no canhoto, canto superior direito,
+    # tipicamente entre 2% e 8% da altura. Pintamos uma faixa preta sobre ela.
+    draw = ImageDraw.Draw(image)
+    height_now = image.size[1]
+    top_band_top = int(height_now * 0.02)
+    top_band_bottom = int(height_now * 0.08)
+    if top_band_bottom > top_band_top + 10:
+        # Pintar apenas o quadrante direito (onde a chave aparece na DANFE padrão)
+        draw.rectangle(
+            [(int(width * 0.55), top_band_top), (width, top_band_bottom)],
+            fill=0,  # preto na escala de cinza
+        )
+
+    # ─── 3. NORMALIZAÇÃO ───
     image = ImageOps.autocontrast(image, cutoff=1)
     resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
     image.thumbnail((2000, 2000), resample_filter)

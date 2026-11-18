@@ -589,16 +589,957 @@ class KippeApplication {
         );
     }
 
-    canManageExistingStock() {
+    async refreshEstoquistaPendingQueue() {
+        if (!this.canManageCatalog()) return;
+        try {
+            const res = await fetch('/api/receiving/pending', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const totalPending = (data.pending_conferences_count || 0) + (data.pending_products_count || 0);
+
+            let card = document.getElementById('estoquista-pending-card');
+            const homeView = document.getElementById('home-module-view');
+            if (!homeView) return;
+
+            if (totalPending === 0) {
+                card?.remove();
+                return;
+            }
+
+            if (!card) {
+                card = document.createElement('div');
+                card.id = 'estoquista-pending-card';
+                card.className = 'bg-amber-50 border-2 border-amber-400 rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-2';
+                homeView.insertBefore(card, homeView.children[1] || null);
+            }
+
+            card.innerHTML = `
+                <div>
+                    <span class="inline-block bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                        PENDÊNCIAS DO ESTOQUISTA
+                    </span>
+                    <p class="text-xs font-black text-gray-800 mt-1">
+                        ${data.pending_conferences_count || 0} conferência(s) · ${data.pending_products_count || 0} produto(s) novo(s)
+                    </p>
+                    <p class="text-[10px] text-gray-600">Aguardando cadastro/armazenagem no estoque</p>
+                </div>
+                <button type="button" id="btn-open-estoquista-queue"
+                    class="bg-[#124191] text-white text-[10px] font-black uppercase px-3 py-2.5 rounded-lg shadow active:scale-95 shrink-0">
+                    REVISAR
+                </button>
+            `;
+
+            document.getElementById('btn-open-estoquista-queue')?.addEventListener('click', () => {
+                this.openEstoquistaQueueModal(data);
+            });
+        } catch { /* ignora falha silenciosa */ }
+    }
+
+    openEstoquistaQueueModal(data) {
+        document.getElementById('estoquista-queue-modal')?.remove();
+        const modal = document.createElement('div');
+        modal.id = 'estoquista-queue-modal';
+        modal.className = 'fixed inset-0 z-[180] bg-black/75 flex items-center justify-center p-3';
+
+        const prodHtml = (data.product_requests || []).map(pr => `
+            <div class="border border-amber-200 bg-amber-50/70 rounded-lg p-2.5 space-y-1.5">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <span class="text-[9px] font-black uppercase text-amber-800">SOLICITADO POR ${pr.requested_by_name}</span>
+                        <p class="text-xs font-black text-gray-900 uppercase">${pr.raw_description}</p>
+                        <p class="text-[10px] text-gray-600">NF: ${pr.invoice_number || '-'} · ${pr.supplier || '-'} · Qtd: ${pr.nf_qty} × ${pr.pack_factor} UN</p>
+                    </div>
+                </div>
+                <div class="flex gap-1.5 pt-1">
+                    <button type="button" data-pr-register="${pr.id}" data-pr-ean="${pr.suggested_ean || ''}" data-pr-desc="${pr.raw_description}"
+                        class="flex-1 bg-[#124191] text-white text-[10px] font-black uppercase py-1.5 px-2 rounded active:scale-95">
+                        + CADASTRAR PRODUTO
+                    </button>
+                    <button type="button" data-pr-discard="${pr.id}"
+                        class="bg-white border border-gray-300 text-gray-600 text-[10px] font-bold uppercase py-1.5 px-2 rounded active:scale-95">
+                        DESCARTAR
+                    </button>
+                </div>
+            </div>
+        `).join('') || '<p class="text-[11px] text-gray-400">Nenhum produto novo pendente.</p>';
+
+        const confHtml = (data.conferences || []).map(cf => `
+            <div class="border border-blue-200 bg-blue-50/50 rounded-lg p-2.5 space-y-1.5">
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black text-[#124191] uppercase">${cf.supplier} · NF ${cf.invoice_number || 'S/N'}</span>
+                    <span class="text-[9px] font-bold text-gray-500">Por ${cf.submitted_by_name}</span>
+                </div>
+                <ul class="text-[11px] text-gray-800 space-y-0.5">
+                    ${(cf.items || []).map(it => `<li>• <strong>${it.quantity || it.scanned || 0} UN</strong> — ${it.name || it.sku} ${it.batch_code ? `(Lote: ${it.batch_code})` : ''}</li>`).join('')}
+                </ul>
+                <div class="flex gap-1.5 pt-1">
+                    <button type="button" data-cf-approve="${cf.id}"
+                        class="flex-1 bg-green-600 text-white text-[10px] font-black uppercase py-2 px-2 rounded shadow-sm active:scale-95">
+                        ✅ APROVAR & ARMAZENAR
+                    </button>
+                    <button type="button" data-cf-reject="${cf.id}"
+                        class="bg-white border border-red-200 text-red-600 text-[10px] font-bold uppercase py-2 px-2 rounded active:scale-95">
+                        REJEITAR
+                    </button>
+                </div>
+            </div>
+        `).join('') || '<p class="text-[11px] text-gray-400">Nenhuma conferência aguardando armazenagem.</p>';
+
+        modal.innerHTML = `
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden">
+                <div class="bg-[#124191] text-white p-3.5 flex justify-between items-center">
+                    <div>
+                        <h3 class="text-sm font-black uppercase">Fila do Estoquista / Armazenagem</h3>
+                        <p class="text-[10px] text-blue-200">Cadastros solicitados e entradas conferidas</p>
+                    </div>
+                    <button type="button" id="close-estoquista-queue" class="text-white font-black text-lg px-2">✕</button>
+                </div>
+                <div class="p-3.5 overflow-y-auto space-y-4">
+                    <div>
+                        <h4 class="text-[10px] font-black uppercase text-gray-500 mb-1.5">1. Produtos Novos Solicitados</h4>
+                        <div class="space-y-2">${prodHtml}</div>
+                    </div>
+                    <div>
+                        <h4 class="text-[10px] font-black uppercase text-gray-500 mb-1.5">2. Conferências para Dar Entrada</h4>
+                        <div class="space-y-2">${confHtml}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('close-estoquista-queue')?.addEventListener('click', () => modal.remove());
+
+        modal.querySelectorAll('[data-pr-register]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const reqId = btn.getAttribute('data-pr-register');
+                const ean = btn.getAttribute('data-pr-ean') || '';
+                const desc = btn.getAttribute('data-pr-desc') || '';
+                modal.remove();
+                await this.openNewProductRegistration(ean);
+                const nameInput = document.getElementById('new-product-name');
+                if (nameInput && !nameInput.value) nameInput.value = desc;
+                await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ action: 'CADASTRADO', name: desc, ean })
+                }).catch(() => {});
+                this.refreshEstoquistaPendingQueue();
+            });
+        });
+
+        modal.querySelectorAll('[data-pr-discard]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const reqId = btn.getAttribute('data-pr-discard');
+                await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ action: 'DESCARTADO' })
+                });
+                modal.remove();
+                this.refreshEstoquistaPendingQueue();
+            });
+        });
+
+        modal.querySelectorAll('[data-cf-approve]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const cfId = btn.getAttribute('data-cf-approve');
+                btn.disabled = true;
+                const res = await fetch(`/api/receiving/pending/${cfId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({})
+                });
+                const out = await res.json();
+                if (!res.ok) {
+                    alert('❌ ' + (out.error || 'Falha ao aprovar conferência.'));
+                    btn.disabled = false;
+                    return;
+                }
+                alert(`✅ Armazenagem confirmada! ${out.approved} item(ns) lançados no estoque.`);
+                modal.remove();
+                this.refreshEstoquistaPendingQueue();
+            });
+        });
+
+        modal.querySelectorAll('[data-cf-reject]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const cfId = btn.getAttribute('data-cf-reject');
+                if (!confirm('Rejeitar esta conferência pendente?')) return;
+                await fetch(`/api/receiving/pending/${cfId}/reject`, {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+                modal.remove();
+                this.refreshEstoquistaPendingQueue();
+            });
+        });
+    }
+
+    isSystemAdmin() {
+        const role = String(this.currentOperator?.role || '').trim().toUpperCase();
+        return role === 'ADMIN_SISTEMA';
+    }
+
+    syncSelfPinButton() {
+        const homeView = document.getElementById('home-module-view');
+        if (!homeView) return;
+
+        let selfCard = document.getElementById('operator-self-security-card');
+        if (!this.currentOperator?.id) {
+            selfCard?.remove();
+            return;
+        }
+
+        if (!selfCard) {
+            selfCard = document.createElement('div');
+            selfCard.id = 'operator-self-security-card';
+            selfCard.style.cssText = 'background:#FFFFFF;border:1px solid #E2E8F0;border-radius:14px;padding:12px 16px;box-shadow:0 1px 2px rgba(15,23,42,0.04);display:flex;align-items:center;justify-content:space-between;gap:12px;';
+            selfCard.innerHTML = `
+                <div style="min-width:0;">
+                    <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;text-transform:uppercase;letter-spacing:0.02em;">
+                        Credencial de Acesso
+                    </p>
+                    <p style="font-size:10px;color:#64748B;margin:2px 0 0;">
+                        Alterar seu PIN pessoal de autenticação
+                    </p>
+                </div>
+                <button type="button" id="btn-open-change-own-pin"
+                    style="background:#F8FAFC;color:#124191;border:1.5px solid #CBD5E1;border-radius:10px;padding:8px 12px;font-size:10px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;flex-shrink:0;">
+                    🔑 MEU PIN
+                </button>
+            `;
+            homeView.appendChild(selfCard);
+            document.getElementById('btn-open-change-own-pin')?.addEventListener('click', () => {
+                this.openChangeOwnPinModal();
+            });
+        }
+    }
+
+    openChangeOwnPinModal() {
+        document.getElementById('change-own-pin-modal')?.remove();
+        const modal = document.createElement('div');
+        modal.id = 'change-own-pin-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.78);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const inputStyle = 'width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:10px;padding:11px 12px;font-size:13px;font-weight:800;color:#0F172A;outline:none;';
+        const labelStyle = 'display:block;font-size:9px;font-weight:900;color:#64748B;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:6px;';
+
+        modal.innerHTML = `
+            <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 20px 45px rgba(15,23,42,0.35);width:100%;max-width:400px;overflow:hidden;">
+                <div style="background:#124191;color:#FFFFFF;padding:18px 20px;border-bottom:4px solid #D32F2F;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                    <div>
+                        <p style="font-size:9px;font-weight:900;letter-spacing:0.1em;color:#93C5FD;text-transform:uppercase;margin:0 0 4px;">
+                            SEGURANÇA DO OPERADOR
+                        </p>
+                        <h3 style="font-size:15px;font-weight:900;text-transform:uppercase;margin:0;">
+                            Alterar Meu PIN
+                        </h3>
+                    </div>
+                    <button type="button" id="close-own-pin-modal"
+                        style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);color:#FFFFFF;width:32px;height:32px;border-radius:8px;font-size:14px;font-weight:900;cursor:pointer;">
+                        ✕
+                    </button>
+                </div>
+                <form id="form-change-own-pin" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+                    <div>
+                        <label style="${labelStyle}">PIN Atual</label>
+                        <input type="password" inputmode="numeric" id="own-pin-current" placeholder="••••" required style="${inputStyle}">
+                    </div>
+                    <div>
+                        <label style="${labelStyle}">Novo PIN (Mínimo 4 dígitos)</label>
+                        <input type="password" inputmode="numeric" id="own-pin-new" placeholder="••••" required style="${inputStyle}">
+                    </div>
+                    <div>
+                        <label style="${labelStyle}">Confirmar Novo PIN</label>
+                        <input type="password" inputmode="numeric" id="own-pin-confirm" placeholder="••••" required style="${inputStyle}">
+                    </div>
+                    <button type="submit" id="btn-save-own-pin"
+                        style="width:100%;margin-top:4px;background:#124191;color:#FFFFFF;border:none;border-radius:12px;padding:13px 16px;font-size:11px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;box-shadow:0 4px 12px rgba(18,65,145,0.28);cursor:pointer;">
+                        ATUALIZAR MEU PIN
+                    </button>
+                </form>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        document.getElementById('close-own-pin-modal')?.addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (ev) => {
+            if (ev.target === modal) modal.remove();
+        });
+
+        document.getElementById('form-change-own-pin')?.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const current_pin = document.getElementById('own-pin-current')?.value || '';
+            const new_pin = document.getElementById('own-pin-new')?.value || '';
+            const confirm_pin = document.getElementById('own-pin-confirm')?.value || '';
+
+            if (new_pin !== confirm_pin) {
+                alert('❌ A confirmação do novo PIN não confere.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-own-pin');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'SALVANDO...';
+            }
+
+            try {
+                const res = await fetch('/api/auth/change-pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ current_pin, new_pin }),
+                });
+                const out = await res.json();
+                if (!res.ok) {
+                    alert('❌ ' + (out.error || 'Não foi possível alterar o PIN.'));
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'ATUALIZAR MEU PIN';
+                    }
+                    return;
+                }
+                alert('✅ PIN alterado com sucesso!');
+                modal.remove();
+            } catch (err) {
+                alert('❌ ' + err.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'ATUALIZAR MEU PIN';
+                }
+            }
+        });
+    }
+
+    syncAdminTeamButton() {
+        const homeView = document.getElementById('home-module-view');
+        if (!homeView) return;
+
+        let btnCard = document.getElementById('admin-team-profiles-card');
+        if (!this.isSystemAdmin()) {
+            btnCard?.remove();
+            return;
+        }
+
+        if (!btnCard) {
+            btnCard = document.createElement('div');
+            btnCard.id = 'admin-team-profiles-card';
+            btnCard.style.cssText = 'background:#FFFFFF;border:1px solid #E2E8F0;border-left:4px solid #124191;border-radius:14px;padding:14px 16px;box-shadow:0 1px 3px rgba(15,23,42,0.06);display:flex;flex-direction:column;gap:12px;';
+            btnCard.innerHTML = `
+                <div>
+                    <span style="display:inline-block;background:#EFF6FF;color:#124191;border:1px solid #DBEAFE;font-size:9px;font-weight:900;padding:2px 8px;border-radius:6px;letter-spacing:0.06em;text-transform:uppercase;">
+                        ADMINISTRAÇÃO &amp; GOVERNANÇA
+                    </span>
+                    <p style="font-size:12px;font-weight:900;color:#1E293B;margin:6px 0 2px;text-transform:uppercase;letter-spacing:0.02em;">
+                        Controle Institucional WMS
+                    </p>
+                    <p style="font-size:10px;color:#64748B;margin:0;line-height:1.35;">
+                        Gerencie perfis, redefina senhas e consulte a trilha de auditoria
+                    </p>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;">
+                    <button type="button" id="btn-open-team-profiles"
+                        style="background:#124191;color:#FFFFFF;border:none;border-radius:10px;padding:10px 8px;font-size:9.5px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;box-shadow:0 2px 6px rgba(18,65,145,0.24);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
+                        <span>👥 PERFIS</span>
+                    </button>
+                    <button type="button" id="btn-open-audit-logs"
+                        style="background:#0F172A;color:#FFFFFF;border:none;border-radius:10px;padding:10px 8px;font-size:9.5px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;box-shadow:0 2px 6px rgba(15,23,42,0.22);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
+                        <span>📋 AUDITORIA</span>
+                    </button>
+                    <button type="button" id="btn-open-backup-export"
+                        style="background:#065F46;color:#FFFFFF;border:none;border-radius:10px;padding:10px 8px;font-size:9.5px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;box-shadow:0 2px 6px rgba(6,95,70,0.24);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
+                        <span>💾 BACKUP</span>
+                    </button>
+                </div>
+            `;
+            homeView.appendChild(btnCard);
+            document.getElementById('btn-open-team-profiles')?.addEventListener('click', () => {
+                this.openTeamProfilesModal();
+            });
+            document.getElementById('btn-open-audit-logs')?.addEventListener('click', () => {
+                this.openAuditLogsModal();
+            });
+            document.getElementById('btn-open-backup-export')?.addEventListener('click', () => {
+                this.openBackupAndExportModal();
+            });
+        }
+    }
+
+    openBackupAndExportModal() {
+        if (!this.isSystemAdmin()) return;
+
+        document.getElementById('backup-export-modal')?.remove();
+        const modal = document.createElement('div');
+        modal.id = 'backup-export-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.78);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const reportCard = (slug, title, desc, badge) => `
+            <div style="padding:12px 14px;border-radius:12px;border:1px solid #E2E8F0;background:#F8FAFC;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <div style="min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <span style="font-size:11px;font-weight:900;color:#0F172A;text-transform:uppercase;">${title}</span>
+                        <span style="font-size:8.5px;font-weight:900;padding:2px 6px;border-radius:5px;background:#EFF6FF;color:#124191;border:1px solid #BFDBFE;">${badge}</span>
+                    </div>
+                    <p style="font-size:10px;color:#64748B;margin:4px 0 0;line-height:1.3;">${desc}</p>
+                </div>
+                <a href="/api/reports/export/${slug}.csv" download
+                    style="background:#124191;color:#FFFFFF;text-decoration:none;border-radius:9px;padding:8px 11px;font-size:9.5px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;flex-shrink:0;box-shadow:0 2px 5px rgba(18,65,145,0.2);">
+                    ⬇️ CSV
+                </a>
+            </div>
+        `;
+
+        modal.innerHTML = `
+            <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 20px 45px rgba(15,23,42,0.35);width:100%;max-width:450px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+                <div style="background:#124191;color:#FFFFFF;padding:18px 20px;border-bottom:4px solid #D32F2F;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                    <div>
+                        <p style="font-size:9px;font-weight:900;letter-spacing:0.1em;color:#93C5FD;text-transform:uppercase;margin:0 0 4px;">
+                            KIPPE SUPERMERCADO · CONTINUIDADE
+                        </p>
+                        <h3 style="font-size:16px;font-weight:900;letter-spacing:0.02em;text-transform:uppercase;margin:0;">
+                            Backup &amp; Relatórios CSV
+                        </h3>
+                        <p style="font-size:10px;color:#DBEAFE;margin:4px 0 0;">
+                            Cópia íntegra SQLite e planilhas gerenciais WMS
+                        </p>
+                    </div>
+                    <button type="button" id="close-backup-modal"
+                        style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);color:#FFFFFF;width:32px;height:32px;border-radius:8px;font-size:14px;font-weight:900;cursor:pointer;flex-shrink:0;">
+                        ✕
+                    </button>
+                </div>
+
+                <div style="overflow-y:auto;flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:16px;">
+                    <div style="padding:14px;border-radius:14px;border:1.5px solid #A7F3D0;background:#ECFDF5;display:flex;flex-direction:column;gap:10px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                            <span style="font-size:10px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;color:#065F46;">
+                                🛡️ Backup Banco de Dados SQLite
+                            </span>
+                            <span style="font-size:8.5px;font-weight:900;background:#065F46;color:#FFFFFF;padding:2px 7px;border-radius:5px;">
+                                INTEGRITY CHECK
+                            </span>
+                        </div>
+                        <p style="font-size:10.5px;color:#047857;margin:0;line-height:1.35;">
+                            Gera snapshot atômico validado via <strong>PRAGMA integrity_check</strong> e salva automaticamente na pasta <strong>Download</strong> do aparelho.
+                        </p>
+                        <button type="button" id="btn-run-sqlite-backup"
+                            style="width:100%;background:#065F46;color:#FFFFFF;border:none;border-radius:11px;padding:12px 14px;font-size:11px;font-weight:900;letter-spacing:0.05em;text-transform:uppercase;box-shadow:0 4px 10px rgba(6,95,70,0.25);cursor:pointer;">
+                            GERAR BACKUP VALIDADO (.DB)
+                        </button>
+                        <div id="sqlite-backup-result" style="display:none;padding:10px 12px;border-radius:10px;background:#FFFFFF;border:1px solid #A7F3D0;font-size:10px;color:#0F172A;"></div>
+                    </div>
+
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <p style="font-size:10px;font-weight:900;letter-spacing:0.07em;text-transform:uppercase;color:#64748B;margin:0;">
+                            Exportação Gerencial (Excel / Sheets)
+                        </p>
+                        ${reportCard('inventario', 'Posição de Inventário', 'Saldos totais, reservas, disponível e categorias', 'CSV')}
+                        ${reportCard('fefo', 'Validades & Lotes (FEFO)', 'Lotes ativos ordenados por vencimento e faixa de risco', 'FEFO')}
+                        ${reportCard('recebimentos', 'Recebimentos & Divergências', 'Entradas por NF, fornecedor, divergências e operador', 'AUDITORIA')}
+                        ${reportCard('divergencias', 'Ocorrências de Divergência', 'Faltas, sobras, avarias e motivos formalizados na doca', 'DIVERGÊNCIAS')}
+                    </div>
+                </div>
+
+                <div style="padding:10px 16px;background:#F1F5F9;border-top:1px solid #E2E8F0;text-align:center;">
+                    <span style="font-size:9px;font-weight:800;letter-spacing:0.06em;color:#64748B;text-transform:uppercase;">
+                        Exportações registradas na trilha de auditoria
+                    </span>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        document.getElementById('close-backup-modal')?.addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (ev) => {
+            if (ev.target === modal) modal.remove();
+        });
+
+        document.getElementById('btn-run-sqlite-backup')?.addEventListener('click', async () => {
+            const btn = document.getElementById('btn-run-sqlite-backup');
+            const box = document.getElementById('sqlite-backup-result');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'VALIDANDO INTEGRIDADE SQLITE...';
+            }
+            try {
+                const res = await fetch('/api/admin/backup', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                });
+                const out = await res.json();
+                if (!res.ok) {
+                    alert('❌ ' + (out.error || 'Falha ao gerar backup.'));
+                    return;
+                }
+                const kb = Math.max(1, Math.round((out.size_bytes || 0) / 1024));
+                if (box) {
+                    box.style.display = 'block';
+                    box.innerHTML = `
+                        <p style="font-weight:900;color:#065F46;margin:0 0 4px;">✅ INTEGRITY CHECK: OK (${kb} KB)</p>
+                        <p style="margin:0 0 4px;word-break:break-all;"><strong>Arquivo:</strong> ${out.filename}</p>
+                        <p style="margin:0 0 8px;font-family:monospace;font-size:9px;color:#475569;">SHA-256: ${(out.sha256 || '').slice(0, 24)}...</p>
+                        ${out.download_folder_saved ? '<p style="margin:0 0 8px;color:#047857;font-weight:800;">📂 Cópia salva em /sdcard/Download</p>' : ''}
+                        <a href="${out.download_url}" download="${out.filename}"
+                            style="display:block;text-align:center;background:#124191;color:#FFFFFF;text-decoration:none;border-radius:8px;padding:8px 10px;font-size:9.5px;font-weight:900;text-transform:uppercase;">
+                            ⬇️ BAIXAR CÓPIA NO NAVEGADOR
+                        </a>
+                    `;
+                }
+            } catch (err) {
+                alert('❌ ' + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'GERAR BACKUP VALIDADO (.DB)';
+                }
+            }
+        });
+    }
+
+    async openAuditLogsModal() {
+        if (!this.isSystemAdmin()) return;
+
+        document.getElementById('institutional-audit-modal')?.remove();
+        const modal = document.createElement('div');
+        modal.id = 'institutional-audit-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.78);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        let activeCategory = 'ALL';
+        let searchQuery = '';
+
+        const catBadgeStyle = (cat) => {
+            if (cat === 'ESTOQUE') return 'background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0;';
+            if (cat === 'RECEBIMENTO') return 'background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;';
+            if (cat === 'CATALOGO') return 'background:#EFF6FF;color:#124191;border:1px solid #BFDBFE;';
+            if (cat === 'GOVERNANCA') return 'background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;';
+            return 'background:#F1F5F9;color:#334155;border:1px solid #CBD5E1;';
+        };
+
+        const loadAndRender = async () => {
+            const params = new URLSearchParams({
+                category: activeCategory,
+                q: searchQuery,
+                limit: '100',
+            });
+            let logs = [];
+            try {
+                const res = await fetch(`/api/audit/logs?${params.toString()}`, { credentials: 'same-origin' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Falha ao carregar auditoria.');
+                logs = data.logs || [];
+            } catch (err) {
+                alert('❌ ' + err.message);
+                modal.remove();
+                return;
+            }
+
+            const categories = ['ALL', 'ESTOQUE', 'RECEBIMENTO', 'CATALOGO', 'GOVERNANCA', 'ACESSO'];
+            const pillsHtml = categories.map(cat => {
+                const isSelected = cat === activeCategory;
+                const label = cat === 'ALL' ? 'TODOS' : cat;
+                return `<button type="button" data-audit-cat="${cat}"
+                    style="padding:6px 10px;border-radius:8px;font-size:9px;font-weight:900;letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;border:1px solid ${isSelected ? '#124191' : '#CBD5E1'};background:${isSelected ? '#124191' : '#FFFFFF'};color:${isSelected ? '#FFFFFF' : '#475569'};flex-shrink:0;">
+                    ${label}
+                </button>`;
+            }).join('');
+
+            const rowsHtml = logs.map(item => `
+                <div style="padding:12px 14px;border-radius:12px;border:1px solid #E2E8F0;background:#FFFFFF;display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                        <span style="font-size:9px;font-weight:900;padding:2px 8px;border-radius:6px;letter-spacing:0.05em;${catBadgeStyle(item.category)}">
+                            ${item.category}
+                        </span>
+                        <span style="font-size:9px;font-weight:700;color:#64748B;font-variant-numeric:tabular-nums;">
+                            ${(item.created_at || '').replace('T', ' ')}
+                        </span>
+                    </div>
+                    <p style="font-size:11px;font-weight:800;color:#0F172A;margin:0;line-height:1.35;">
+                        ${item.summary}
+                    </p>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;font-weight:800;color:#64748B;text-transform:uppercase;">
+                        <span>POR: <strong style="color:#1E293B;">${item.actor_name}</strong> (${item.actor_role})</span>
+                        ${item.target_ref ? `<span style="background:#F1F5F9;color:#334155;padding:2px 6px;border-radius:4px;">${item.target_ref}</span>` : ''}
+                    </div>
+                </div>
+            `).join('') || '<p style="font-size:11px;color:#94A3B8;text-align:center;padding:24px 0;margin:0;">Nenhum registro encontrado para este filtro.</p>';
+
+            modal.innerHTML = `
+                <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 20px 45px rgba(15,23,42,0.35);width:100%;max-width:460px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+                    <div style="background:#124191;color:#FFFFFF;padding:18px 20px;border-bottom:4px solid #D32F2F;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                        <div>
+                            <p style="font-size:9px;font-weight:900;letter-spacing:0.1em;color:#93C5FD;text-transform:uppercase;margin:0 0 4px;">
+                                KIPPE SUPERMERCADO · RASTREABILIDADE
+                            </p>
+                            <h3 style="font-size:16px;font-weight:900;letter-spacing:0.02em;text-transform:uppercase;margin:0;">
+                                Auditoria Operacional
+                            </h3>
+                            <p style="font-size:10px;color:#DBEAFE;margin:4px 0 0;">
+                                Histórico imutável de ações, acessos e movimentações
+                            </p>
+                        </div>
+                        <button type="button" id="close-audit-modal"
+                            style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);color:#FFFFFF;width:32px;height:32px;border-radius:8px;font-size:14px;font-weight:900;cursor:pointer;flex-shrink:0;">
+                            ✕
+                        </button>
+                    </div>
+
+                    <div style="padding:14px 16px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;display:flex;flex-direction:column;gap:10px;">
+                        <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;">
+                            ${pillsHtml}
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <input type="text" id="audit-search-input" value="${searchQuery}" placeholder="Filtrar por NF, fornecedor, operador, SKU..."
+                                style="flex:1;box-sizing:border-box;background:#FFFFFF;border:1.5px solid #CBD5E1;border-radius:10px;padding:9px 12px;font-size:11px;font-weight:700;color:#0F172A;outline:none;">
+                            <button type="button" id="audit-search-btn"
+                                style="background:#124191;color:#FFFFFF;border:none;border-radius:10px;padding:0 14px;font-size:10px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                BUSCAR
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="padding:14px 16px;overflow-y:auto;flex:1;background:#F1F5F9;display:flex;flex-direction:column;gap:8px;">
+                        ${rowsHtml}
+                    </div>
+
+                    <div style="padding:10px 16px;background:#FFFFFF;border-top:1px solid #E2E8F0;text-align:center;">
+                        <span style="font-size:9px;font-weight:800;letter-spacing:0.06em;color:#64748B;text-transform:uppercase;">
+                            Exibindo ${logs.length} evento(s) auditados
+                        </span>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('close-audit-modal')?.addEventListener('click', () => modal.remove());
+            modal.querySelectorAll('[data-audit-cat]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    activeCategory = btn.getAttribute('data-audit-cat') || 'ALL';
+                    loadAndRender();
+                });
+            });
+            const triggerSearch = () => {
+                searchQuery = document.getElementById('audit-search-input')?.value || '';
+                loadAndRender();
+            };
+            document.getElementById('audit-search-btn')?.addEventListener('click', triggerSearch);
+            document.getElementById('audit-search-input')?.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    triggerSearch();
+                }
+            });
+        };
+
+        modal.addEventListener('click', (ev) => {
+            if (ev.target === modal) modal.remove();
+        });
+        document.body.appendChild(modal);
+        await loadAndRender();
+    }
+
+    async openTeamProfilesModal() {
+        if (!this.isSystemAdmin()) return;
+
+        const fetchOperators = async () => {
+            const res = await fetch('/api/operators', { credentials: 'same-origin' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao carregar equipe.');
+            return data.operators || [];
+        };
+
+        let operators = [];
+        try {
+            operators = await fetchOperators();
+        } catch (err) {
+            alert('❌ ' + err.message);
+            return;
+        }
+
+        document.getElementById('team-profiles-modal')?.remove();
+        const modal = document.createElement('div');
+        modal.id = 'team-profiles-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.78);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const roleBadgeStyle = (role) => {
+            if (role === 'ADMIN_SISTEMA') return 'background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;';
+            if (role === 'ESTOQUISTA') return 'background:#EFF6FF;color:#124191;border:1px solid #BFDBFE;';
+            if (role === 'CONFERENTE') return 'background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;';
+            return 'background:#F1F5F9;color:#334155;border:1px solid #CBD5E1;';
+        };
+
+        const inputStyle = 'width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;color:#0F172A;outline:none;';
+        const labelStyle = 'display:block;font-size:9px;font-weight:900;color:#64748B;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:6px;';
+
+        const renderBody = (list) => {
+            const currentId = String(this.currentOperator?.id || '').trim();
+            const listHtml = list.map(op => {
+                const isSelf = op.id === currentId;
+                return `
+                    <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:12px;border:1px solid #E2E8F0;background:#F8FAFC;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                            <div style="min-width:0;">
+                                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                    <span style="font-size:12px;font-weight:900;color:#0F172A;text-transform:uppercase;">${op.name}</span>
+                                    <span style="font-size:9px;font-weight:900;padding:2px 8px;border-radius:6px;letter-spacing:0.04em;${roleBadgeStyle(op.role)}">${op.role}</span>
+                                </div>
+                                <p style="font-size:10px;font-weight:700;color:#64748B;margin:5px 0 0;">
+                                    ID / LOGIN: <span style="color:#1E293B;font-weight:900;">${op.id}</span>
+                                </p>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                                <button type="button" data-toggle-reset-pin="${op.id}"
+                                    style="background:#EFF6FF;border:1.5px solid #BFDBFE;color:#124191;font-size:9px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;padding:7px 9px;border-radius:8px;cursor:pointer;">
+                                    🔑 PIN
+                                </button>
+                                ${
+                                    isSelf
+                                        ? '<span style="font-size:9px;font-weight:900;color:#94A3B8;letter-spacing:0.06em;text-transform:uppercase;padding:6px 8px;background:#F1F5F9;border-radius:6px;">VOCÊ</span>'
+                                        : `<button type="button" data-del-op="${op.id}" data-del-name="${op.name}"
+                                             style="background:#FFFFFF;border:1.5px solid #FECACA;color:#DC2626;font-size:9px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;padding:7px 9px;border-radius:8px;cursor:pointer;">
+                                             EXCLUIR
+                                           </button>`
+                                }
+                            </div>
+                        </div>
+                        <div id="reset-pin-box-${op.id}" style="display:none;padding-top:8px;border-top:1px dashed #CBD5E1;gap:8px;align-items:center;">
+                            <input type="password" inputmode="numeric" id="reset-pin-input-${op.id}" placeholder="Novo PIN (4+ dígitos)"
+                                style="flex:1;box-sizing:border-box;background:#FFFFFF;border:1.5px solid #CBD5E1;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;color:#0F172A;outline:none;">
+                            <button type="button" data-confirm-reset-pin="${op.id}" data-confirm-reset-name="${op.name}"
+                                style="background:#124191;color:#FFFFFF;border:none;border-radius:8px;padding:8px 12px;font-size:9px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                SALVAR PIN
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('') || '<p style="font-size:11px;color:#94A3B8;text-align:center;padding:14px 0;margin:0;">Nenhum perfil cadastrado.</p>';
+
+            modal.innerHTML = `
+                <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 20px 45px rgba(15,23,42,0.35);width:100%;max-width:440px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+                    <div style="background:#124191;color:#FFFFFF;padding:18px 20px;border-bottom:4px solid #D32F2F;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                        <div>
+                            <p style="font-size:9px;font-weight:900;letter-spacing:0.1em;color:#93C5FD;text-transform:uppercase;margin:0 0 4px;">
+                                KIPPE SUPERMERCADO · GOVERNANÇA
+                            </p>
+                            <h3 style="font-size:16px;font-weight:900;letter-spacing:0.02em;text-transform:uppercase;margin:0;">
+                                Equipe &amp; Perfis
+                            </h3>
+                            <p style="font-size:10px;color:#DBEAFE;margin:4px 0 0;">
+                                Cadastro, redefinição de PIN e exclusão de acessos
+                            </p>
+                        </div>
+                        <button type="button" id="close-team-profiles"
+                            style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);color:#FFFFFF;width:32px;height:32px;border-radius:8px;font-size:14px;font-weight:900;cursor:pointer;flex-shrink:0;">
+                            ✕
+                        </button>
+                    </div>
+
+                    <div style="overflow-y:auto;flex:1;">
+                        <form id="form-create-operator" style="padding:20px;background:#FFFFFF;border-bottom:1px solid #E2E8F0;display:flex;flex-direction:column;gap:14px;">
+                            <div style="display:flex;align-items:center;gap:8px;padding-bottom:6px;border-bottom:1px dashed #E2E8F0;">
+                                <span style="width:8px;height:8px;border-radius:999px;background:#124191;display:inline-block;"></span>
+                                <p style="font-size:10px;font-weight:900;letter-spacing:0.07em;text-transform:uppercase;color:#124191;margin:0;">
+                                    Novo Perfil de Acesso
+                                </p>
+                            </div>
+
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div>
+                                    <label style="${labelStyle}">ID / Login</label>
+                                    <input type="text" id="new-op-id" placeholder="EX: 2001" required
+                                        style="${inputStyle}text-transform:uppercase;">
+                                </div>
+                                <div>
+                                    <label style="${labelStyle}">PIN (4+ Dígitos)</label>
+                                    <input type="password" inputmode="numeric" id="new-op-pin" placeholder="EX: 1234" required
+                                        style="${inputStyle}">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style="${labelStyle}">Nome do Colaborador</label>
+                                <input type="text" id="new-op-name" placeholder="EX: CARLOS CONFERENTE" required
+                                    style="${inputStyle}text-transform:uppercase;">
+                            </div>
+
+                            <div>
+                                <label style="${labelStyle}">Função / Perfil Operacional</label>
+                                <select id="new-op-role" style="${inputStyle}font-weight:800;">
+                                    <option value="CONFERENTE" selected>CONFERENTE (Doca / Conferência NF)</option>
+                                    <option value="ESTOQUISTA">ESTOQUISTA (Cadastro / Armazenagem)</option>
+                                    <option value="GERENTE">GERENTE (Gestão Operacional)</option>
+                                    <option value="ADMIN_SISTEMA">ADMIN_SISTEMA (Acesso Total)</option>
+                                </select>
+                            </div>
+
+                            <button type="submit" id="btn-submit-new-op"
+                                style="width:100%;margin-top:4px;background:#124191;color:#FFFFFF;border:none;border-radius:12px;padding:13px 16px;font-size:11px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;box-shadow:0 4px 12px rgba(18,65,145,0.28);cursor:pointer;">
+                                CADASTRAR PERFIL
+                            </button>
+                        </form>
+
+                        <div style="padding:18px 20px 20px;background:#F8FAFC;display:flex;flex-direction:column;gap:10px;">
+                            <p style="font-size:10px;font-weight:900;letter-spacing:0.07em;text-transform:uppercase;color:#64748B;margin:0 0 2px;">
+                                Perfis Cadastrados (${list.length})
+                            </p>
+                            ${listHtml}
+                        </div>
+                    </div>
+
+                    <div style="padding:10px 16px;background:#F1F5F9;border-top:1px solid #E2E8F0;text-align:center;">
+                        <span style="font-size:9px;font-weight:800;letter-spacing:0.06em;color:#64748B;text-transform:uppercase;">
+                            Acessos vinculados à auditoria operacional WMS
+                        </span>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('close-team-profiles')?.addEventListener('click', () => modal.remove());
+            modal.addEventListener('click', (ev) => {
+                if (ev.target === modal) modal.remove();
+            });
+
+            modal.querySelectorAll('[data-toggle-reset-pin]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const opId = btn.getAttribute('data-toggle-reset-pin');
+                    const box = document.getElementById(`reset-pin-box-${opId}`);
+                    if (box) {
+                        const isHidden = box.style.display === 'none';
+                        box.style.display = isHidden ? 'flex' : 'none';
+                        if (isHidden) {
+                            document.getElementById(`reset-pin-input-${opId}`)?.focus();
+                        }
+                    }
+                });
+            });
+
+            modal.querySelectorAll('[data-confirm-reset-pin]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const opId = btn.getAttribute('data-confirm-reset-pin');
+                    const opName = btn.getAttribute('data-confirm-reset-name');
+                    const inp = document.getElementById(`reset-pin-input-${opId}`);
+                    const newPin = inp?.value || '';
+                    btn.disabled = true;
+                    btn.textContent = '...';
+                    try {
+                        const res = await fetch(`/api/operators/${encodeURIComponent(opId)}/pin`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({ pin: newPin }),
+                        });
+                        const out = await res.json();
+                        if (!res.ok) {
+                            alert('❌ ' + (out.error || 'Erro ao redefinir PIN.'));
+                            btn.disabled = false;
+                            btn.textContent = 'SALVAR PIN';
+                            return;
+                        }
+                        alert(`✅ PIN de ${opName} (${opId}) atualizado com sucesso!`);
+                        if (inp) inp.value = '';
+                        const box = document.getElementById(`reset-pin-box-${opId}`);
+                        if (box) box.style.display = 'none';
+                    } catch (err) {
+                        alert('❌ ' + err.message);
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = 'SALVAR PIN';
+                    }
+                });
+            });
+
+            document.getElementById('form-create-operator')?.addEventListener('submit', async (ev) => {
+                ev.preventDefault();
+                const btn = document.getElementById('btn-submit-new-op');
+                const payload = {
+                    id: document.getElementById('new-op-id')?.value || '',
+                    name: document.getElementById('new-op-name')?.value || '',
+                    pin: document.getElementById('new-op-pin')?.value || '',
+                    role: document.getElementById('new-op-role')?.value || 'CONFERENTE',
+                };
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'SALVANDO PERFIL...';
+                }
+                try {
+                    const res = await fetch('/api/operators', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                    });
+                    const out = await res.json();
+                    if (!res.ok) {
+                        alert('❌ ' + (out.error || 'Erro ao criar perfil.'));
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = 'CADASTRAR PERFIL';
+                        }
+                        return;
+                    }
+                    const refreshed = await fetchOperators();
+                    renderBody(refreshed);
+                } catch (err) {
+                    alert('❌ ' + err.message);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'CADASTRAR PERFIL';
+                    }
+                }
+            });
+
+            modal.querySelectorAll('[data-del-op]').forEach(delBtn => {
+                delBtn.addEventListener('click', async () => {
+                    const opId = delBtn.getAttribute('data-del-op');
+                    const opName = delBtn.getAttribute('data-del-name');
+                    if (!confirm(`Excluir permanentemente o perfil ${opName} (${opId})?`)) return;
+                    delBtn.disabled = true;
+                    delBtn.textContent = '...';
+                    try {
+                        const res = await fetch(`/api/operators/${encodeURIComponent(opId)}`, {
+                            method: 'DELETE',
+                            credentials: 'same-origin',
+                        });
+                        const out = await res.json();
+                        if (!res.ok) {
+                            alert('❌ ' + (out.error || 'Falha ao excluir perfil.'));
+                            delBtn.disabled = false;
+                            delBtn.textContent = 'EXCLUIR';
+                            return;
+                        }
+                        const refreshed = await fetchOperators();
+                        renderBody(refreshed);
+                    } catch (err) {
+                        alert('❌ ' + err.message);
+                        delBtn.disabled = false;
+                        delBtn.textContent = 'EXCLUIR';
+                    }
+                });
+            });
+        };
+
+        document.body.appendChild(modal);
+        renderBody(operators);
+    }
+
+    canManageCatalog() {
         const role = String(
             this.currentOperator?.role || ''
-        ).trim();
+        ).trim().toUpperCase();
 
         return (
-            role === 'GERENTE'
+            role === 'ESTOQUISTA'
+            || role === 'GERENTE'
             || role === 'ADMIN_SISTEMA'
             || role === 'SYSTEM'
         );
+    }
+
+    canManageExistingStock() {
+        return this.canManageCatalog();
     }
 
     updateExistingStockActionVisibility() {
@@ -609,6 +1550,30 @@ class KippeApplication {
             document.getElementById(
                 'btn-existing-stock-onboarding'
             );
+
+        window.kippeCanManageCatalog = () => this.canManageCatalog();
+        window.kippeCurrentOperator = () => this.currentOperator;
+        const confFinBtn = document.getElementById('btn-conference-finalize');
+        if (confFinBtn) {
+            confFinBtn.textContent = allowed ? 'FINALIZAR CONFERÊNCIA' : '📤 ENVIAR PARA ARMAZENAGEM';
+        }
+
+        const homeNewProdBtn = document.getElementById('btn-new-product-registration');
+        if (homeNewProdBtn) {
+            homeNewProdBtn.classList.toggle('hidden', !allowed);
+        }
+
+        if (allowed && typeof this.refreshEstoquistaPendingQueue === 'function') {
+            this.refreshEstoquistaPendingQueue();
+        } else {
+            document.getElementById('estoquista-pending-card')?.remove();
+        }
+        if (typeof this.syncAdminTeamButton === 'function') {
+            this.syncAdminTeamButton();
+        }
+        if (typeof this.syncSelfPinButton === 'function') {
+            this.syncSelfPinButton();
+        }
 
         if (catalogButton) {
             catalogButton.classList.toggle(
