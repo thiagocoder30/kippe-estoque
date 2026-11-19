@@ -556,11 +556,14 @@ class KippeApplication {
         }
 
         const hideAllViews = () => {
+            document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
             [
                 'home-module-view',
                 'dashboard-view',
                 'reports-view',
                 'replenishment-view',
+                'conference-view',
+                'validity-view',
             ].forEach(id => {
                 const el = document.getElementById(id);
                 if(el) el.classList.add('hidden');
@@ -569,8 +572,10 @@ class KippeApplication {
 
         const showHome = () => {
             hideAllViews();
-            document.getElementById('home-module-view').classList.remove('hidden');
+            document.getElementById('home-module-view')?.classList.remove('hidden');
+            window.scrollTo(0, 0);
         };
+        window.showHome = showHome;
 
         document.getElementById('btn-back-dashboard')?.addEventListener('click', showHome);
         document.getElementById('btn-back-reports')?.addEventListener('click', showHome);
@@ -7681,8 +7686,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // Validade — Tela operacional (feature isolada)
 // ═══════════════════════════════════════════════════════════
 document.getElementById('btn-module-validity')?.addEventListener('click', () => {
-  document.getElementById('home-module-view')?.classList.add('hidden');
+  document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
   document.getElementById('validity-view')?.classList.remove('hidden');
+  window.scrollTo(0, 0);
   window.ValidityFeature?.mount();
 });
 

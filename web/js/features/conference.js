@@ -1256,8 +1256,9 @@ const ConferenceFeature = (() => {
       openBtn.dataset.wired = '1';
       openBtn.addEventListener('click', () => {
         document.getElementById('inbound-method-modal')?.classList.add('hidden');
-        document.getElementById('home-module-view')?.classList.add('hidden');
+        document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
         document.getElementById('conference-view')?.classList.remove('hidden');
+        window.scrollTo(0, 0);
         mount();
       });
     }
@@ -1267,8 +1268,13 @@ const ConferenceFeature = (() => {
     if (backBtn && !backBtn.dataset.wired) {
       backBtn.dataset.wired = '1';
       backBtn.addEventListener('click', () => {
-        document.getElementById('conference-view')?.classList.add('hidden');
-        document.getElementById('home-module-view')?.classList.remove('hidden');
+        if (typeof window.showHome === 'function') {
+          window.showHome();
+        } else {
+          document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
+          document.getElementById('home-module-view')?.classList.remove('hidden');
+          window.scrollTo(0, 0);
+        }
       });
     }
 
