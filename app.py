@@ -20,7 +20,11 @@ import io
 import json
 import os
 from PIL import Image, ImageDraw
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args, **kwargs):
+        return False
 from flask import Flask, jsonify, request, session, send_from_directory, send_file
 from src.infrastructure.container import Container
 from src.domain.services.expiration_analyzer import ExpirationAnalyzer
