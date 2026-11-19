@@ -3894,6 +3894,7 @@ def approve_pending_conference(queue_id: int):
 
     data = request.json or {}
     sku_overrides = data.get('sku_overrides') or {}
+    item_overrides = data.get('item_overrides') or {}
     now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
 
     conn = _get_kippe_db()
@@ -3930,9 +3931,10 @@ def approve_pending_conference(queue_id: int):
             return jsonify({'error': 'Nenhum item válido com quantidade > 0 para aprovar.'}), 400
 
         committed = []
-        for sku, qty, it in resolved_items:
-            batch_code = str(it.get('batch_code') or '').strip()
-            expiration_date = str(it.get('expiration_date') or '').strip()
+        for idx_pos, (sku, qty, it) in enumerate(resolved_items):
+            ov = item_overrides.get(str(idx_pos)) or {}
+            batch_code = str(ov.get('batch_code') if ov.get('batch_code') is not None else (it.get('batch_code') or '')).strip()
+            expiration_date = str(ov.get('expiration_date') if ov.get('expiration_date') is not None else (it.get('expiration_date') or '')).strip()
             manufacturing_date = str(it.get('manufacturing_date') or '').strip()
             item_inv = str(it.get('invoice_number') or ctx_invoice or '').strip()
             res = container.receive_use_case.execute(

@@ -315,32 +315,34 @@ const ConferenceFeature = (() => {
           ])
         ]),
 
-        // Linha 2: Lote + Validade
-        el('div', { className: 'grid grid-cols-2 gap-2 pt-2 border-t border-gray-200' }, [
-          el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2' }, [
-            el('label', { className: 'block text-[9px] font-black text-gray-500 uppercase mb-1' }, 'LOTE'),
-            el('input', {
-              type: 'text',
-              value: item.batch_code || '',
-              placeholder: 'EX: L123',
-              className: 'w-full h-8 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold uppercase text-gray-800 outline-none focus:bg-white focus:border-blue-300',
-              onchange: (e) => {
-                item.batch_code = e.target.value.trim().toUpperCase();
-                save();
-              }
-            })
-          ]),
-          el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2' }, [
-            el('label', { className: 'block text-[9px] font-black text-gray-500 uppercase mb-1' }, 'VALIDADE'),
-            el('input', {
-              type: 'date',
-              value: item.expiration_date || '',
-              className: 'w-full h-8 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1 text-xs font-bold text-gray-800 outline-none focus:bg-white focus:border-blue-300',
-              onchange: (e) => {
-                item.expiration_date = e.target.value;
-                save();
-              }
-            })
+        // Linha 2: Lote + Validade (apenas para Estoquista / Gerente / Admin)
+        ...(isConferenceOnlyRole() ? [] : [
+          el('div', { className: 'grid grid-cols-2 gap-2 pt-2 border-t border-gray-200' }, [
+            el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2' }, [
+              el('label', { className: 'block text-[9px] font-black text-gray-500 uppercase mb-1' }, 'LOTE'),
+              el('input', {
+                type: 'text',
+                value: item.batch_code || '',
+                placeholder: 'EX: L123',
+                className: 'w-full h-8 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold uppercase text-gray-800 outline-none focus:bg-white focus:border-blue-300',
+                onchange: (e) => {
+                  item.batch_code = e.target.value.trim().toUpperCase();
+                  save();
+                }
+              })
+            ]),
+            el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2' }, [
+              el('label', { className: 'block text-[9px] font-black text-gray-500 uppercase mb-1' }, 'VALIDADE'),
+              el('input', {
+                type: 'date',
+                value: item.expiration_date || '',
+                className: 'w-full h-8 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1 text-xs font-bold text-gray-800 outline-none focus:bg-white focus:border-blue-300',
+                onchange: (e) => {
+                  item.expiration_date = e.target.value;
+                  save();
+                }
+              })
+            ])
           ])
         ])
       ]),
@@ -1168,7 +1170,7 @@ const ConferenceFeature = (() => {
       return;
     }
 
-    const missingExp = state.items.filter(it => it.scanned > 0 && !it.expiration_date);
+    const missingExp = isConfRole ? [] : state.items.filter(it => it.scanned > 0 && !it.expiration_date);
     if (missingExp.length > 0) {
       await window.kippeModalAlert(
         `⚠️ Informe a DATA DE VALIDADE para:

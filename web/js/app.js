@@ -765,9 +765,19 @@ class KippeApplication {
                     <span class="text-[10px] font-black text-[#124191] uppercase">${cf.supplier} · NF ${cf.invoice_number || 'S/N'}</span>
                     <span class="text-[9px] font-bold text-gray-500">Por ${cf.submitted_by_name}</span>
                 </div>
-                <ul class="text-[11px] text-gray-800 space-y-0.5">
-                    ${(cf.items || []).map(it => `<li>• <strong>${it.quantity || it.scanned || 0} UN</strong> — ${it.name || it.sku} ${it.batch_code ? `(Lote: ${it.batch_code})` : ''}</li>`).join('')}
-                </ul>
+                <div class="space-y-1.5 pt-1">
+                    ${(cf.items || []).map((it, idx) => `
+                        <div class="bg-white border border-blue-100 rounded-lg p-2 space-y-1.5">
+                            <p class="text-[11px] font-black text-gray-800">• <strong>${it.quantity || it.scanned || 0} UN</strong> — ${it.name || it.sku}</p>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <input type="text" data-cf-batch="${cf.id}:${idx}" value="${it.batch_code || ''}" placeholder="LOTE (OPC.)"
+                                    class="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-[10px] font-bold uppercase outline-none">
+                                <input type="date" data-cf-exp="${cf.id}:${idx}" value="${it.expiration_date || ''}"
+                                    class="w-full bg-gray-50 border border-gray-200 rounded px-1.5 py-1 text-[10px] font-bold outline-none">
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
                 <div class="flex gap-1.5 pt-1">
                     <button type="button" data-cf-approve="${cf.id}"
                         class="flex-1 bg-green-600 text-white text-[10px] font-black uppercase py-2 px-2 rounded shadow-sm active:scale-95">
@@ -842,16 +852,27 @@ class KippeApplication {
         modal.querySelectorAll('[data-cf-approve]').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const cfId = btn.getAttribute('data-cf-approve');
+                const itemOverrides = {};
+                modal.querySelectorAll(`[data-cf-batch^="${cfId}:"]`).forEach(inp => {
+                    const idx = inp.getAttribute('data-cf-batch').split(':')[1];
+                    itemOverrides[idx] = itemOverrides[idx] || {};
+                    itemOverrides[idx].batch_code = inp.value.trim().toUpperCase();
+                });
+                modal.querySelectorAll(`[data-cf-exp^="${cfId}:"]`).forEach(inp => {
+                    const idx = inp.getAttribute('data-cf-exp').split(':')[1];
+                    itemOverrides[idx] = itemOverrides[idx] || {};
+                    itemOverrides[idx].expiration_date = inp.value;
+                });
                 btn.disabled = true;
                 const res = await fetch(`/api/receiving/pending/${cfId}/approve`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({})
+                    body: JSON.stringify({ item_overrides: itemOverrides })
                 });
                 const out = await res.json();
                 if (!res.ok) {
-                    alert('❌ ' + (out.error || 'Falha ao aprovar conferência.'));
+                    await window.kippeModalAlert('❌ ' + (out.error || 'Falha ao aprovar conferência.'), 'VALIDAÇÃO PENDENTE');
                     btn.disabled = false;
                     return;
                 }
