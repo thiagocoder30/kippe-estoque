@@ -2784,77 +2784,73 @@ def _call_gemini_fast(
         "chave de acesso, impostos e totais gerais da nota.\n\n"
         "REGRAS RÍGIDAS DE LEITURA DA TABELA DE PRODUTOS (LEIA LINHA POR LINHA HORIZONTALMENTE):\n"
         "- Cada linha da tabela tem colunas como: CÓD | DESCRIÇÃO | NCM | CST | CFOP | UN | QUANT. | V.UNIT | V.TOTAL.\n"
-        "- NUNCA misture a quantidade ou embalagem de uma linha com a linha de cima ou de baixo.\n"
+        "- NUNCA misture a quantidade, unidade ou embalagem de uma linha com a linha de cima ou de baixo.\n"
         "- Confira mentalmente se QUANT. × V.UNIT ≈ V.TOTAL da mesma linha.\n"
         "- 'description': Copie a descrição completa da coluna DESCRIÇÃO, MANTENDO OBRIGATORIAMENTE gramatura, volume e multiplicador de caixa "
-        "(ex: 'MILHO CONSERVA 24X170G LATA STELLA DORO', 'GOIABADA FLOW PACK 16X1.01KG STELLA DORO'). Nunca apague '24X170G' ou '16X1.01KG'.\n"
-        "- 'quantity': Número exato da coluna QUANT. / QTD daquela linha.\n"
+        "(ex: 'MILHO CONSERVA 24X170G LATA STELLA DORO', 'BACON PALETA COM PELE FREE CARNE APX.11KG COD.251').\n"
+        "- 'unit': Sigla exata da coluna UN / UNID daquela linha (ex: 'KG', 'CX', 'FD', 'UN', 'PCT', 'LT').\n"
+        "- 'quantity': Número exato da coluna QUANT. / QTD daquela linha (mantenha decimais se houver, ex: 11.0 ou 11.45).\n"
         "- 'pack_factor': Número inteiro de unidades dentro da caixa/fardo indicado na própria descrição da linha "
-        "(ex: '24X170G' -> 24, '16X1.01KG' -> 16, '8X1.7KG' -> 8, 'CX C/ 12' -> 12). Se não houver multiplicador de caixa, use 1.\n\n"
+        "(ex: '24X170G' -> 24, '16X1.01KG' -> 16, 'CX C/ 12' -> 12). "
+        "ATENÇÃO A PRODUTOS NO KG (AÇOUGUE / FRIOS / CONGELADOS): Se a coluna UN for 'KG' ou a descrição indicar peso aproximado por peça/caixa "
+        "(ex: 'APX.11KG', 'PESO VARIAVEL'), use 'pack_factor': 1. NUNCA confunda o peso '11KG' com 11 unidades.\n\n"
         "Extraia também:\n"
         "- 'supplier': Nome do FORNECEDOR / EMITENTE no topo da nota.\n"
         "- 'invoice_number': Número da NF-e / DANFE próximo a 'Nº' e 'SÉRIE' (apenas dígitos, sem CEP/telefone/página).\n\n"
         "Retorne SOMENTE JSON válido: "
-        '{"supplier": "NOME DO FORNECEDOR", "invoice_number": "123456", "items": [{"description": "DESCRICAO COMPLETA COM GRAMATURA", "quantity": 1, "pack_factor": 1}]}'
+        '{"supplier": "NOME DO FORNECEDOR", "invoice_number": "123456", "items": [{"description": "DESCRICAO COMPLETA", "unit": "UN", "quantity": 1, "pack_factor": 1}]}'
     )
 
-    models_to_try = [
-        "gemini-flash-lite-latest",
-        "gemini-3.1-flash-lite-preview",
-        "gemini-3-flash-preview",
-    ]
-    thinking_configs = [
-        {"thinkingLevel": "minimal"},
-        None,
+    attempts = [
+        ("gemini-flash-lite-latest", {"thinkingBudget": 0}),
+        ("gemini-2.5-flash", {"thinkingBudget": 0}),
+        ("gemini-flash-lite-latest", None),
+        ("gemini-3-flash-preview", {"thinkingLevel": "minimal"}),
     ]
 
     last_err = None
 
-    for model_name in models_to_try:
+    for model_name, t_cfg in attempts:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        gen_cfg = {
+            "responseMimeType": "application/json",
+            "temperature": 0.0,
+            "maxOutputTokens": 4096,
+        }
+        if t_cfg is not None:
+            gen_cfg["thinkingConfig"] = t_cfg
 
-        for t_cfg in thinking_configs:
-            gen_cfg = {
-                "responseMimeType": "application/json",
-                "temperature": 0.0,
-                "maxOutputTokens": 6144 if mime_type == "application/pdf" else 4096,
-            }
-            if t_cfg is not None:
-                gen_cfg["thinkingConfig"] = t_cfg
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": mime_type, "data": media_b64}}
+                ]
+            }],
+            "generationConfig": gen_cfg,
+        }
 
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": prompt},
-                        {"inline_data": {"mime_type": mime_type, "data": media_b64}}
-                    ]
-                }],
-                "generationConfig": gen_cfg,
-            }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
 
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-
-            try:
-                with urllib.request.urlopen(req, timeout=18) as resp:
-                    result = json.loads(resp.read().decode("utf-8"))
-                texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-                return json.loads(texto)
-            except urllib.error.HTTPError as e:
-                err_body = e.read().decode("utf-8", errors="ignore")
-                last_err = RuntimeError(f"Erro API Google ({e.code}): {err_body}")
-                if e.code == 400 and t_cfg is not None:
-                    continue
-                if e.code in (404, 429, 503):
-                    break
-                raise last_err
-            except (TimeoutError, urllib.error.URLError) as e:
-                last_err = RuntimeError(f"Timeout/Rede em {model_name}: {e}")
-                break
+        try:
+            with urllib.request.urlopen(req, timeout=22) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return json.loads(texto)
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            last_err = RuntimeError(f"Erro API Google ({e.code}): {err_body}")
+            if e.code in (400, 404, 429, 503):
+                continue
+            raise last_err
+        except (TimeoutError, urllib.error.URLError) as e:
+            last_err = RuntimeError(f"Timeout/Rede em {model_name}: {e}")
+            continue
 
     if last_err:
         raise last_err
@@ -2897,10 +2893,10 @@ def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
     # ─── 3. NORMALIZAÇÃO ───
     image = ImageOps.autocontrast(image, cutoff=1)
     resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
-    image.thumbnail((2000, 2000), resample_filter)
+    image.thumbnail((1550, 1550), resample_filter)
 
     buf = io.BytesIO()
-    image.save(buf, format='JPEG', quality=88, optimize=True)
+    image.save(buf, format='JPEG', quality=80, optimize=True)
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 
@@ -3035,7 +3031,7 @@ def _extract_embedded_flate_images_from_pdf(pdf_bytes: bytes) -> list:
 
 
 
-def _render_pdf_pages_python(tmpdir: str, src_pdf: str, out_prefix: str, dpi: int = 185, max_pages: int = 8):
+def _render_pdf_pages_python(tmpdir: str, src_pdf: str, out_prefix: str, dpi: int = 145, max_pages: int = 8):
     for old_p in Path(tmpdir).glob("page*.png"):
         old_p.unlink(missing_ok=True)
     errors = []
@@ -3234,39 +3230,59 @@ def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = "")
         merged_invoice = ""
         all_raw_items = []
 
-        for idx, tot, media_b64, m_type in page_payloads:
-            base_pct = 35 + int(((idx - 1) / max(1, tot)) * 50)
+        if total_pages == 1:
+            idx, tot, media_b64, m_type = page_payloads[0]
             stage_txt = (
                 "IA lendo PDF nativo da NF..."
                 if m_type == "application/pdf" else
-                (f"IA lendo página {idx} de {tot} da NF..." if tot > 1 else "IA lendo cada linha e embalagem da NF...")
+                "IA lendo itens e unidades da NF..."
             )
-            yield {"progress": base_pct, "stage": stage_txt}
-
+            yield {"progress": 40, "stage": stage_txt}
             box = {"data": None, "error": None}
 
-            def worker(b64=media_b64, p_n=idx, t_n=tot, mt=m_type):
+            def worker_single():
                 try:
-                    box["data"] = _call_gemini_fast(api_key, b64, page_num=p_n, total_pages=t_n, mime_type=mt)
+                    box["data"] = _call_gemini_fast(api_key, media_b64, page_num=1, total_pages=1, mime_type=m_type)
                 except Exception as exc:
                     box["error"] = str(exc)
 
-            t = threading.Thread(target=worker, daemon=True)
+            t = threading.Thread(target=worker_single, daemon=True)
             t.start()
-
-            pct = base_pct
-            max_step_pct = 35 + int((idx / max(1, tot)) * 52)
+            pct = 40
             while t.is_alive():
-                t.join(timeout=2.0)
-                if t.is_alive() and pct < max_step_pct:
-                    pct += 2
+                t.join(timeout=1.5)
+                if t.is_alive() and pct < 88:
+                    pct += 3
                     yield {"progress": pct, "stage": stage_txt}
 
             if box["error"]:
-                yield {"error": f"Erro na IA (pág. {idx}): {box['error']}"}
+                yield {"error": f"Erro na IA: {box['error']}"}
                 return
+            page_results = [(1, box["data"] or {})]
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            stage_txt = f"IA lendo {total_pages} páginas em paralelo..."
+            yield {"progress": 40, "stage": stage_txt}
 
-            p_data = box["data"] or {}
+            def _run_page(payload_tuple):
+                p_idx, p_tot, b64_data, mt = payload_tuple
+                return p_idx, (_call_gemini_fast(api_key, b64_data, page_num=p_idx, total_pages=p_tot, mime_type=mt) or {})
+
+            with ThreadPoolExecutor(max_workers=min(4, total_pages)) as pool:
+                fut = pool.submit(lambda: list(pool.map(_run_page, page_payloads)))
+                pct = 40
+                while not fut.done():
+                    time.sleep(1.5)
+                    if not fut.done() and pct < 88:
+                        pct += 3
+                        yield {"progress": pct, "stage": stage_txt}
+                try:
+                    page_results = sorted(fut.result(), key=lambda x: x[0])
+                except Exception as exc:
+                    yield {"error": f"Erro na IA: {exc}"}
+                    return
+
+        for _, p_data in page_results:
             if not merged_supplier and p_data.get("supplier"):
                 merged_supplier = str(p_data.get("supplier")).strip().upper()
             if not merged_invoice and p_data.get("invoice_number"):
@@ -3284,17 +3300,45 @@ def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = "")
             desc = str(it.get("description") or "").strip().upper()
             if not desc:
                 continue
-            qty = max(1, int(float(it.get("quantity") or 1)))
+            raw_unit = str(it.get("unit") or "UN").strip().upper()
+            if raw_unit in ("KGS", "QUILO", "QUILOS", "QUILOGRAMA", "QUILOGRAMAS"):
+                raw_unit = "KG"
+
+            raw_qty = max(0.001, float(it.get("quantity") or 1))
             pf = max(1, int(float(it.get("pack_factor") or 1)))
-            if pf == 1:
-                m_pack = re.search(r'\b(\d{1,3})\s*[Xx]\s*\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|UN|M)\b', desc)
-                if m_pack:
-                    pf = max(1, int(m_pack.group(1)))
-            clean_items.append({
-                "description": desc,
-                "quantity": qty,
-                "pack_factor": pf,
-            })
+
+            m_apx_kg = re.search(r'\bAPX\.?\s*(\d+(?:[.,]\d+)?)\s*KG\b', desc)
+            is_kg = (raw_unit == "KG") or (
+                bool(m_apx_kg) and pf == 1 and abs(raw_qty - float(m_apx_kg.group(1).replace(',', '.'))) <= 1.5
+            )
+
+            if is_kg:
+                weight_kg = round(raw_qty, 3)
+                if m_apx_kg:
+                    apx_box_kg = float(m_apx_kg.group(1).replace(',', '.'))
+                    box_qty = max(1, int(round(weight_kg / apx_box_kg))) if apx_box_kg > 0 else 1
+                else:
+                    box_qty = 1
+                clean_items.append({
+                    "description": desc,
+                    "unit": "KG",
+                    "weight_kg": weight_kg,
+                    "quantity": box_qty,
+                    "pack_factor": 1,
+                })
+            else:
+                qty = max(1, int(round(raw_qty)))
+                if pf == 1:
+                    m_pack = re.search(r'\b(\d{1,3})\s*[Xx]\s*\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|UN|M)\b', desc)
+                    if m_pack:
+                        pf = max(1, int(m_pack.group(1)))
+                clean_items.append({
+                    "description": desc,
+                    "unit": raw_unit or "UN",
+                    "weight_kg": 0,
+                    "quantity": qty,
+                    "pack_factor": pf,
+                })
 
         yield {
             "progress": 100,

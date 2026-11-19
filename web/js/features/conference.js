@@ -223,6 +223,15 @@ const ConferenceFeature = (() => {
         }, badgeLabel[st]),
       ]),
 
+      // Etiqueta de item pesável (KG -> Caixas/Volumes)
+      ...((String(item.unit || '').toUpperCase() === 'KG' || Number(item.weight_kg) > 0) ? [
+        el('div', { className: 'mt-1.5' }, [
+          el('span', {
+            className: 'inline-block px-2 py-0.5 rounded bg-purple-50 border border-purple-300 text-purple-900 text-[9px] font-black uppercase'
+          }, `⚖️ PESÁVEL (KG) · NF: ${Number(item.weight_kg || 0).toLocaleString('pt-BR')} KG (${item.nf_qty} CX/VOL)`)
+        ])
+      ] : []),
+
       // Subtítulo SKU / EAN
       unlinked
         ? el('div', { className: 'mt-1.5' }, [
@@ -1408,6 +1417,10 @@ const ConferenceFeature = (() => {
             const target = state.items[existingIdx];
             target.nf_qty = (target.nf_qty || 0) + (newItem.nf_qty || 0);
             target.expected = (target.expected || 0) + (newItem.expected || 0);
+            if (newItem.weight_kg) {
+                target.weight_kg = Number(((target.weight_kg || 0) + Number(newItem.weight_kg || 0)).toFixed(3));
+                target.unit = 'KG';
+            }
             if (!Array.isArray(target.nf_allocations)) {
                 target.nf_allocations = [];
             }
@@ -1516,6 +1529,8 @@ const ConferenceFeature = (() => {
                         name: `${learned.name} (NF: ${item.description})`,
                         catalog_name: learned.name,
                         raw_ocr_name: item.description,
+                        unit: item.unit || 'UN',
+                        weight_kg: Number(item.weight_kg) || 0,
                         nf_qty: nfQty,
                         pack_factor: factor,
                         expected: nfQty * factor,
@@ -1548,6 +1563,8 @@ const ConferenceFeature = (() => {
                             name: `${matchedCatalog.name} (NF: ${item.description})`,
                             catalog_name: matchedCatalog.name,
                             raw_ocr_name: item.description,
+                            unit: item.unit || 'UN',
+                            weight_kg: Number(item.weight_kg) || 0,
                             nf_qty: nfQty,
                             pack_factor: effectiveFactor,
                             expected: nfQty * effectiveFactor,
@@ -1562,6 +1579,8 @@ const ConferenceFeature = (() => {
                             ean: '',
                             name: item.description,
                             raw_ocr_name: item.description,
+                            unit: item.unit || 'UN',
+                            weight_kg: Number(item.weight_kg) || 0,
                             nf_qty: nfQty,
                             pack_factor: factor,
                             expected: nfQty * factor,
