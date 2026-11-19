@@ -149,6 +149,23 @@ export class ScannerManager {
             }
         }
 
+        const rearCandidates = cameras.filter((cam) => {
+            const lbl = String(cam.label || '').toLowerCase();
+            const isBack = /back|rear|traseira|environment|facing back/.test(lbl);
+            const isAux = /front|frontal|wide|ultra|macro|depth|tele/.test(lbl);
+            return isBack && !isAux;
+        });
+        if (rearCandidates.length > 0) {
+            return rearCandidates[0];
+        }
+
+        const anyBack = cameras.find((cam) =>
+            /back|rear|traseira|environment/.test(String(cam.label || '').toLowerCase())
+        );
+        if (anyBack) {
+            return anyBack;
+        }
+
         return cameras[0];
     }
 
@@ -343,6 +360,74 @@ export class ScannerManager {
             this.selectedCameraId;
     }
 
+    async setupOpticalControls() {
+        try {
+            if (!this.html5Qrcode) return;
+            await this.html5Qrcode.applyVideoConstraints({
+                advanced: [{ focusMode: 'continuous' }]
+            }).catch(() => {});
+
+            const caps = typeof this.html5Qrcode.getRunningTrackCapabilities === 'function'
+                ? this.html5Qrcode.getRunningTrackCapabilities()
+                : {};
+
+            let bar = document.getElementById('scanner-optical-controls');
+            const wrapper = document.getElementById('scanner-camera-selector-wrapper');
+            if (!bar && wrapper) {
+                bar = document.createElement('div');
+                bar.id = 'scanner-optical-controls';
+                bar.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+                wrapper.appendChild(bar);
+            }
+            if (!bar) return;
+            bar.innerHTML = '';
+
+            if (caps && caps.torch) {
+                let torchOn = false;
+                const torchBtn = document.createElement('button');
+                torchBtn.type = 'button';
+                torchBtn.textContent = '🔦 LANTERNA: OFF';
+                torchBtn.style.cssText = 'flex:1;padding:7px 10px;border-radius:6px;border:1px solid #4B5563;background:#1F2937;color:#F9FAFB;font-size:11px;font-weight:800;letter-spacing:0.04em;';
+                torchBtn.addEventListener('click', async () => {
+                    torchOn = !torchOn;
+                    try {
+                        await this.html5Qrcode.applyVideoConstraints({
+                            advanced: [{ torch: torchOn }]
+                        });
+                        torchBtn.textContent = torchOn ? '🔦 LANTERNA: ON' : '🔦 LANTERNA: OFF';
+                        torchBtn.style.background = torchOn ? '#D97706' : '#1F2937';
+                    } catch (_) {
+                        torchOn = false;
+                    }
+                });
+                bar.appendChild(torchBtn);
+            }
+
+            if (caps && caps.zoom && typeof caps.zoom.max === 'number' && caps.zoom.max >= 1.5) {
+                let zoomed = false;
+                const targetZoom = Math.min(2.0, caps.zoom.max);
+                const zoomBtn = document.createElement('button');
+                zoomBtn.type = 'button';
+                zoomBtn.textContent = '🔍 ZOOM: 1.0x';
+                zoomBtn.style.cssText = 'flex:1;padding:7px 10px;border-radius:6px;border:1px solid #4B5563;background:#1F2937;color:#F9FAFB;font-size:11px;font-weight:800;letter-spacing:0.04em;';
+                zoomBtn.addEventListener('click', async () => {
+                    zoomed = !zoomed;
+                    const zVal = zoomed ? targetZoom : (caps.zoom.min || 1.0);
+                    try {
+                        await this.html5Qrcode.applyVideoConstraints({
+                            advanced: [{ zoom: zVal }]
+                        });
+                        zoomBtn.textContent = zoomed ? `🔍 ZOOM: ${targetZoom.toFixed(1)}x` : '🔍 ZOOM: 1.0x';
+                        zoomBtn.style.background = zoomed ? '#124191' : '#1F2937';
+                    } catch (_) {
+                        zoomed = false;
+                    }
+                });
+                bar.appendChild(zoomBtn);
+            }
+        } catch (_) {}
+    }
+
     async destroyScannerInstance() {
         const scanner =
             this.html5Qrcode;
@@ -451,8 +536,15 @@ export class ScannerManager {
                     height: 150
                 },
 
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                },
+
                 formatsToSupport: [
                     Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.ITF,
+                    Html5QrcodeSupportedFormats.UPC_A,
                     Html5QrcodeSupportedFormats.CODE_128
                 ]
             };
@@ -518,6 +610,8 @@ export class ScannerManager {
 
             this.status =
                 'SCANNING';
+
+            this.setupOpticalControls();
 
         } catch (error) {
             console.error(

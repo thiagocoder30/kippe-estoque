@@ -55,6 +55,14 @@ class KippeApplication {
         this.scannerTarget = 'search';
 
         this.scanner = new ScannerManager((decodedText) => {
+            if (this.scannerTarget === 'conference') {
+                this.scannerTarget = 'search';
+                if (window.ConferenceFeature && typeof window.ConferenceFeature.scan === 'function') {
+                    window.ConferenceFeature.scan(decodedText);
+                }
+                return;
+            }
+
             if (this.scannerTarget === 'new-product') {
                 const newProductInput =
                     document.getElementById(
@@ -1566,6 +1574,26 @@ class KippeApplication {
         const homeNewProdBtn = document.getElementById('btn-new-product-registration');
         if (homeNewProdBtn) {
             homeNewProdBtn.classList.toggle('hidden', !allowed);
+        }
+
+        const roleUpper = String(this.currentOperator?.role || '').trim().toUpperCase();
+        const isConferente = roleUpper === 'CONFERENTE';
+        [
+            'btn-module-putaway',
+            'btn-module-replenishment',
+            'btn-module-reports',
+            'btn-module-validity',
+        ].forEach((modId) => {
+            document.getElementById(modId)?.classList.toggle('hidden', isConferente);
+        });
+
+        const inboundLabel = document.querySelector('#btn-module-inbound h3');
+        if (inboundLabel) {
+            inboundLabel.textContent = isConferente ? '1. CONFERÊNCIA NF' : '1. RECEBER';
+        }
+        const scanLabel = document.querySelector('#btn-module-scan h3');
+        if (scanLabel) {
+            scanLabel.textContent = isConferente ? '2. CONSULTA EAN' : '4. CONSULTA';
         }
 
         if (allowed && typeof this.refreshEstoquistaPendingQueue === 'function') {
@@ -4352,7 +4380,19 @@ class KippeApplication {
             }
         );
 
-        document.getElementById('btn-module-inbound')?.addEventListener('click', () => methodModal?.classList.remove('hidden'));
+        document.getElementById('btn-module-inbound')?.addEventListener('click', () => {
+            const roleUpper = String(this.currentOperator?.role || '').trim().toUpperCase();
+            if (roleUpper === 'CONFERENTE') {
+                document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
+                document.getElementById('conference-view')?.classList.remove('hidden');
+                window.scrollTo(0, 0);
+                if (window.ConferenceFeature && typeof window.ConferenceFeature.mount === 'function') {
+                    window.ConferenceFeature.mount();
+                }
+                return;
+            }
+            methodModal?.classList.remove('hidden');
+        });
         document.getElementById('close-inbound-method')?.addEventListener('click', () => methodModal?.classList.add('hidden'));
         document.getElementById('close-receive-modal')?.addEventListener('click', () => modalReceive?.classList.add('hidden'));
 
@@ -6899,9 +6939,14 @@ class KippeApplication {
         );
 
         const openScanner = () => {
-            this.scannerTarget =
-                'search';
+            const confView = document.getElementById('conference-view');
+            const isConfOpen = confView && !confView.classList.contains('hidden');
+            this.scannerTarget = isConfOpen ? 'conference' : 'search';
 
+            this.scanner.start();
+        };
+        window.kippeOpenConferenceScanner = () => {
+            this.scannerTarget = 'conference';
             this.scanner.start();
         };
 

@@ -1997,6 +1997,24 @@ const ConferenceFeature = (() => {
       if (identifier) scan(identifier);
     });
 
+    const scanBtnEl = document.getElementById('conf-scan-btn');
+    if (scanBtnEl && !document.getElementById('conf-camera-scan-btn')) {
+      const camScanBtn = document.createElement('button');
+      camScanBtn.type = 'button';
+      camScanBtn.id = 'conf-camera-scan-btn';
+      camScanBtn.title = 'Abrir câmera para bipar código';
+      camScanBtn.className = 'bg-slate-800 text-white px-3 rounded-lg font-black text-xs shadow-sm active:scale-95 flex items-center justify-center';
+      camScanBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>';
+      camScanBtn.addEventListener('click', () => {
+        if (typeof window.kippeOpenConferenceScanner === 'function') {
+          window.kippeOpenConferenceScanner();
+        } else {
+          document.getElementById('nav-scan')?.click();
+        }
+      });
+      scanBtnEl.before(camScanBtn);
+    }
+
     document.getElementById('conf-scan-btn')?.addEventListener('click', () => {
       const input = document.getElementById('conf-scan-input');
       if (input) {
@@ -2023,7 +2041,7 @@ const ConferenceFeature = (() => {
     });
   }
 
-  return { mount, wire };
+  return { mount, wire, scan };
 })();
 
 window.ConferenceFeature = ConferenceFeature;
