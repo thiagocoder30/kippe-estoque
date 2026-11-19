@@ -1441,45 +1441,67 @@ const ConferenceFeature = (() => {
             state.invoices = state.invoice_number ? [String(state.invoice_number).trim()] : [];
         }
 
+        const effectiveSupplier = state.supplier || incomingSupplier;
+
+        let dupPromise = Promise.resolve(null);
         if (incomingInvoice) {
             if (state.invoices.includes(incomingInvoice)) {
                 ocrProgress.fail(`NF ${incomingInvoice} já está anexada`);
                 alert(`⚠️ A NF ${incomingInvoice} já foi adicionada neste romaneio de conferência.`);
                 return;
             }
-            try {
-                const chkRes = await fetch('/api/invoices/check-duplicate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({
-                        supplier: state.supplier || incomingSupplier,
-                        invoice_number: incomingInvoice,
-                    }),
-                });
-                if (chkRes.ok) {
-                    const chkData = await chkRes.json();
-                    if (chkData.duplicate) {
-                        const proceedDup = confirm(
-                            `⚠️ TRAVA DE NF-e DUPLICADA:\n\n${chkData.message}\n\nDeseja importar esta nota mesmo assim?`
-                        );
-                        if (!proceedDup) {
-                            ocrProgress.fail(`NF ${incomingInvoice} bloqueada (duplicada)`);
-                            return;
-                        }
-                    }
-                }
-            } catch { /* ignora falha de rede opcional */ }
+            dupPromise = fetch('/api/invoices/check-duplicate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    supplier: effectiveSupplier,
+                    invoice_number: incomingInvoice,
+                }),
+            }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+        }
 
+        const rawItems = Array.isArray(data.items) ? data.items : [];
+        const learnedMap = loadLearnedMap();
+
+        // Dispara todas as buscas de catálogo em paralelo (elimina cascata sequencial na nuvem)
+        const searchPromises = rawItems.map((item) => {
+            const normKey = normalizeDesc(item.description);
+            const learned = learnedMap[normKey];
+            if (learned && learned.sku) {
+                return Promise.resolve(null);
+            }
+            return fetch(
+                `/api/catalog/search?q=${encodeURIComponent(item.description)}&supplier=${encodeURIComponent(effectiveSupplier)}`,
+                { credentials: 'same-origin' }
+            )
+                .then(r => (r.ok ? r.json() : null))
+                .catch(() => null);
+        });
+
+        const [chkData, searchResults] = await Promise.all([
+            dupPromise,
+            Promise.all(searchPromises),
+        ]);
+
+        if (incomingInvoice) {
+            if (chkData && chkData.duplicate) {
+                const proceedDup = confirm(
+                    `⚠️ TRAVA DE NF-e DUPLICADA:\n\n${chkData.message}\n\nDeseja importar esta nota mesmo assim?`
+                );
+                if (!proceedDup) {
+                    ocrProgress.fail(`NF ${incomingInvoice} bloqueada (duplicada)`);
+                    return;
+                }
+            }
             state.invoices.push(incomingInvoice);
             state.invoice_number = state.invoices.join(', ');
         }
 
-        if (data.items && data.items.length > 0) {
-            const learnedMap = loadLearnedMap();
+        if (rawItems.length > 0) {
             let autoLinkedCount = 0;
 
-            for (const item of data.items) {
+            rawItems.forEach((item, idx) => {
                 const normKey = normalizeDesc(item.description);
                 const learned = learnedMap[normKey];
                 const aiFactor = Math.max(1, parseInt(item.pack_factor, 10) || 1);
@@ -1503,22 +1525,17 @@ const ConferenceFeature = (() => {
                     }, incomingInvoice);
                 } else {
                     let matchedCatalog = null;
-                    try {
-                        const qRes = await fetch(`/api/catalog/search?q=${encodeURIComponent(item.description)}&supplier=${encodeURIComponent(state.supplier || '')}`, { credentials: 'same-origin' });
-                        if (qRes.ok) {
-                            const candidates = await qRes.json();
-                            const top = Array.isArray(candidates) ? candidates[0] : null;
-                            if (top && top.sku) {
-                                const nfTokens = normKey.split(' ').filter(t => t.length >= 2);
-                                const catTokens = normalizeDesc(top.name).split(' ').filter(t => t.length >= 2);
-                                const common = catTokens.filter(t => nfTokens.includes(t)).length;
-                                const ratio = catTokens.length > 0 ? (common / catTokens.length) : 0;
-                                if (top.alias_match || ratio >= 0.70) {
-                                    matchedCatalog = top;
-                                }
-                            }
+                    const candidates = searchResults[idx];
+                    const top = Array.isArray(candidates) ? candidates[0] : null;
+                    if (top && top.sku) {
+                        const nfTokens = normKey.split(' ').filter(t => t.length >= 2);
+                        const catTokens = normalizeDesc(top.name).split(' ').filter(t => t.length >= 2);
+                        const common = catTokens.filter(t => nfTokens.includes(t)).length;
+                        const ratio = catTokens.length > 0 ? (common / catTokens.length) : 0;
+                        if (top.alias_match || ratio >= 0.70) {
+                            matchedCatalog = top;
                         }
-                    } catch { /* ignora falha opcional */ }
+                    }
 
                     if (matchedCatalog) {
                         const mSku = matchedCatalog.sku || matchedCatalog.id;
@@ -1554,14 +1571,14 @@ const ConferenceFeature = (() => {
                         }, incomingInvoice);
                     }
                 }
-            }
+            });
 
             save();
             render();
             const pgInfo = data.pages_processed > 1 ? ` de ${data.pages_processed} págs` : '';
             const nfTag = incomingInvoice ? ` (NF ${incomingInvoice})` : '';
             const suffix = autoLinkedCount > 0 ? ` · ${autoLinkedCount} vinculados` : '';
-            ocrProgress.succeed(`${data.items.length} itens importados${nfTag}${pgInfo}${suffix}`);
+            ocrProgress.succeed(`${rawItems.length} itens importados${nfTag}${pgInfo}${suffix}`);
         } else {
             save();
             render();
