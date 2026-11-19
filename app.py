@@ -3956,9 +3956,21 @@ def approve_pending_conference(queue_id: int):
                 (_norm_catalog_text(ctx_supplier), item_inv, sku, qty, batch_code, expiration_date, op_id or 'SYSTEM', now_iso),
             )
 
+        updated_items_snapshot = []
+        for idx_pos, it in enumerate(items):
+            ov = item_overrides.get(str(idx_pos)) or {}
+            sku_final = str(sku_overrides.get(str(idx_pos)) or it.get('sku') or '').strip()
+            batch_final = str(ov.get('batch_code') if ov.get('batch_code') is not None else (it.get('batch_code') or '')).strip()
+            exp_final = str(ov.get('expiration_date') if ov.get('expiration_date') is not None else (it.get('expiration_date') or '')).strip()
+            it_copy = dict(it)
+            it_copy['sku'] = sku_final
+            it_copy['batch_code'] = batch_final
+            it_copy['expiration_date'] = exp_final
+            updated_items_snapshot.append(it_copy)
+
         conn.execute(
-            "UPDATE receiving_pending_queue SET status = 'APROVADO', resolved_at = ?, resolved_by = ? WHERE id = ?",
-            (now_iso, op_id or 'SYSTEM', queue_id),
+            "UPDATE receiving_pending_queue SET status = 'APROVADO', items_json = ?, resolved_at = ?, resolved_by = ? WHERE id = ?",
+            (json.dumps(updated_items_snapshot, ensure_ascii=False), now_iso, op_id or 'SYSTEM', queue_id),
         )
         conn.commit()
     finally:
@@ -3974,6 +3986,204 @@ def approve_pending_conference(queue_id: int):
         'ok': True,
         'approved': len(committed),
         'results': committed,
+    }), 200
+
+
+@app.route('/api/receiving/audit', methods=['GET'])
+def search_receiving_audit():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    query_text = str(request.args.get('q') or '').strip().upper()
+    status_filter = str(request.args.get('status') or 'ALL').strip().upper()
+    try:
+        limit = min(200, max(1, int(request.args.get('limit') or 60)))
+    except Exception:
+        limit = 60
+
+    conn = _get_kippe_db()
+    try:
+        op_rows = conn.execute("SELECT id, name, role FROM operators").fetchall()
+        op_map = {str(r['id']): {'name': r['name'], 'role': r['role']} for r in op_rows}
+
+        q_rows = conn.execute(
+            "SELECT * FROM receiving_pending_queue ORDER BY id DESC LIMIT 300"
+        ).fetchall()
+        div_rows = conn.execute(
+            "SELECT * FROM receiving_divergences ORDER BY id DESC LIMIT 500"
+        ).fetchall()
+        req_rows = conn.execute(
+            "SELECT * FROM product_registration_requests ORDER BY id DESC LIMIT 500"
+        ).fetchall()
+        direct_log_rows = conn.execute(
+            "SELECT * FROM conference_audit_log ORDER BY id DESC LIMIT 500"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    div_by_key = {}
+    for d in div_rows:
+        key = (_norm_catalog_text(d['supplier'] or ''), str(d['invoice_number'] or '').strip())
+        div_by_key.setdefault(key, []).append({
+            'id': int(d['id']),
+            'sku': d['sku'],
+            'product_name': d['product_name'] or d['sku'],
+            'expected_qty': int(d['expected_qty'] or 0),
+            'counted_qty': int(d['counted_qty'] or 0),
+            'divergence_qty': int(d['divergence_qty'] or 0),
+            'reason': d['reason'] or '',
+            'notes': d['notes'] or '',
+            'operator_name': d['operator_name'] or d['operator_id'] or '',
+            'created_at': d['created_at'] or '',
+        })
+
+    req_by_key = {}
+    for pr in req_rows:
+        key = (_norm_catalog_text(pr['supplier'] or ''), str(pr['invoice_number'] or '').strip())
+        req_by_key.setdefault(key, []).append({
+            'id': int(pr['id']),
+            'raw_description': pr['raw_description'] or '',
+            'suggested_ean': pr['suggested_ean'] or '',
+            'nf_qty': int(pr['nf_qty'] or 1),
+            'pack_factor': int(pr['pack_factor'] or 1),
+            'status': pr['status'] or 'PENDENTE',
+            'created_sku': pr['created_sku'] or '',
+            'created_at': pr['created_at'] or '',
+        })
+
+    records = []
+    seen_keys = set()
+
+    for r in q_rows:
+        sup = str(r['supplier'] or '').strip()
+        inv = str(r['invoice_number'] or '').strip()
+        st = str(r['status'] or 'PENDENTE').strip().upper()
+        key = (_norm_catalog_text(sup), inv)
+        if inv:
+            seen_keys.add(key)
+
+        try:
+            raw_items = json.loads(r['items_json'] or '[]')
+        except Exception:
+            raw_items = []
+
+        norm_items = []
+        total_units = 0
+        for it in raw_items:
+            qty = int(it.get('quantity') or it.get('scanned') or 0)
+            total_units += qty
+            sku_val = str(it.get('sku') or '').strip()
+            norm_items.append({
+                'sku': sku_val,
+                'name': str(it.get('name') or sku_val or 'ITEM SEM NOME').strip(),
+                'quantity': qty,
+                'batch_code': str(it.get('batch_code') or '').strip(),
+                'expiration_date': str(it.get('expiration_date') or '').strip(),
+                'is_unlinked': sku_val.startswith('TEMP-'),
+            })
+
+        res_by_id = str(r['resolved_by'] or '').strip()
+        res_by_name = op_map.get(res_by_id, {}).get('name', res_by_id) if res_by_id else ''
+
+        records.append({
+            'protocol': f"REC-{int(r['id']):04d}",
+            'queue_id': int(r['id']),
+            'source': 'QUEUE',
+            'supplier': sup or 'NÃO INFORMADO',
+            'invoice_number': inv or 'S/N',
+            'status': st,
+            'submitted_by_id': r['submitted_by_id'] or '',
+            'submitted_by_name': r['submitted_by_name'] or r['submitted_by_id'] or '',
+            'created_at': r['created_at'] or '',
+            'resolved_at': r['resolved_at'] or '',
+            'resolved_by_id': res_by_id,
+            'resolved_by_name': res_by_name,
+            'notes': r['notes'] or '',
+            'total_items': len(norm_items),
+            'total_units': total_units,
+            'items': norm_items,
+            'divergences': div_by_key.get(key, []),
+            'product_requests': req_by_key.get(key, []),
+        })
+
+    # Inclui também conferências efetivadas diretamente pelo Estoquista/Admin (fora da fila do conferente)
+    direct_grouped = {}
+    for lg in direct_log_rows:
+        sup_norm = str(lg['supplier_norm'] or '').strip()
+        inv = str(lg['invoice_number'] or '').strip()
+        key = (sup_norm, inv)
+        if inv and key in seen_keys:
+            continue
+        grp = direct_grouped.setdefault(key, {
+            'protocol': f"DIR-{int(lg['id']):04d}",
+            'queue_id': None,
+            'source': 'DIRECT',
+            'supplier': sup_norm or 'NÃO INFORMADO',
+            'invoice_number': inv or 'S/N',
+            'status': 'APROVADO',
+            'submitted_by_id': lg['operator_id'] or '',
+            'submitted_by_name': op_map.get(str(lg['operator_id'] or ''), {}).get('name', lg['operator_id'] or 'ESTOQUISTA'),
+            'created_at': lg['created_at'] or '',
+            'resolved_at': lg['created_at'] or '',
+            'resolved_by_id': lg['operator_id'] or '',
+            'resolved_by_name': op_map.get(str(lg['operator_id'] or ''), {}).get('name', lg['operator_id'] or 'ESTOQUISTA'),
+            'notes': 'Conferência efetivada diretamente no estoque',
+            'total_items': 0,
+            'total_units': 0,
+            'items': [],
+            'divergences': div_by_key.get(key, []),
+            'product_requests': req_by_key.get(key, []),
+        })
+        qty = int(lg['quantity'] or 0)
+        sku_val = str(lg['sku'] or '').strip()
+        prod_obj = container.product_repository.get_by_id(sku_val) if sku_val else None
+        grp['items'].append({
+            'sku': sku_val,
+            'name': prod_obj.name if prod_obj else sku_val,
+            'quantity': qty,
+            'batch_code': str(lg['batch_code'] or '').strip(),
+            'expiration_date': str(lg['expiration_date'] or '').strip(),
+            'is_unlinked': False,
+        })
+        grp['total_items'] += 1
+        grp['total_units'] += qty
+
+    records.extend(direct_grouped.values())
+
+    filtered = []
+    for rec in records:
+        if status_filter not in ('', 'ALL', 'TODOS') and rec['status'] != status_filter:
+            continue
+        if query_text:
+            haystack_parts = [
+                rec['protocol'],
+                rec['supplier'],
+                rec['invoice_number'],
+                rec['submitted_by_name'],
+                rec['submitted_by_id'],
+                rec['resolved_by_name'],
+                rec['status'],
+            ]
+            for it in rec['items']:
+                haystack_parts.append(it['sku'])
+                haystack_parts.append(it['name'])
+                haystack_parts.append(it['batch_code'])
+            haystack = " ".join(haystack_parts).upper()
+            if query_text not in haystack:
+                continue
+        filtered.append(rec)
+
+    summary = {
+        'total': len(filtered),
+        'pendente': sum(1 for r in filtered if r['status'] == 'PENDENTE'),
+        'aprovado': sum(1 for r in filtered if r['status'] == 'APROVADO'),
+        'rejeitado': sum(1 for r in filtered if r['status'] == 'REJEITADO'),
+        'com_divergencia': sum(1 for r in filtered if len(r['divergences']) > 0),
+    }
+
+    return jsonify({
+        'records': filtered[:limit],
+        'summary': summary,
     }), 200
 
 

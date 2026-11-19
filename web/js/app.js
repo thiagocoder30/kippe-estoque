@@ -273,6 +273,7 @@ class KippeApplication {
         this.bindPutawayModule();
         this.bindReplenishmentModule();
         this.bindScannerModule();
+        this.initReceivingAuditModule();
         this.bindReportsModule();
 
         await this.restoreOperatorSession();
@@ -1686,10 +1687,11 @@ class KippeApplication {
             'btn-module-putaway',
             'btn-module-replenishment',
             'btn-module-reports',
-            'btn-module-validity',
         ].forEach((modId) => {
             document.getElementById(modId)?.classList.toggle('hidden', isConferente);
         });
+        document.getElementById('btn-module-validity')?.classList.remove('hidden');
+        document.getElementById('btn-module-receiving-audit')?.classList.remove('hidden');
 
         const inboundLabel = document.querySelector('#btn-module-inbound h3');
         if (inboundLabel) {
@@ -1698,6 +1700,14 @@ class KippeApplication {
         const scanLabel = document.querySelector('#btn-module-scan h3');
         if (scanLabel) {
             scanLabel.textContent = isConferente ? '2. CONSULTA EAN' : '4. CONSULTA';
+        }
+        const validityLabel = document.querySelector('#btn-module-validity h3');
+        if (validityLabel) {
+            validityLabel.textContent = isConferente ? '3. VALIDADE' : '6. VALIDADE';
+        }
+        const auditLabel = document.querySelector('#btn-module-receiving-audit h3');
+        if (auditLabel) {
+            auditLabel.textContent = isConferente ? '4. RECEBIMENTOS' : '7. RECEBIMENTOS';
         }
 
         if (allowed && typeof this.refreshEstoquistaPendingQueue === 'function') {
@@ -7823,6 +7833,187 @@ class KippeApplication {
                 ? "❌ PRODUTO NÃO CADASTRADO.\n\nSe este item veio na nota fiscal, abra '1. CONFERÊNCIA NF' e solicite o cadastro ao Estoquista."
                 : "❌ PRODUTO NÃO ENCONTRADO.\n\nUse '1. RECEBER' ou '+ NOVO PRODUTO' para cadastrar no catálogo.";
             await window.kippeModalAlert(notFoundMsg, 'CONSULTA DE PRODUTO');
+        }
+    }
+
+    initReceivingAuditModule() {
+        if (this._receivingAuditWired) return;
+        this._receivingAuditWired = true;
+        this._receivingAuditStatus = 'ALL';
+
+        const openAuditView = async () => {
+            document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById('receiving-audit-view')?.classList.remove('hidden');
+            window.scrollTo(0, 0);
+            await this.loadReceivingAudit();
+        };
+
+        document.getElementById('btn-module-receiving-audit')?.addEventListener('click', openAuditView);
+        document.getElementById('btn-back-receiving-audit')?.addEventListener('click', () => {
+            if (typeof window.showHome === 'function') {
+                window.showHome();
+            } else {
+                document.getElementById('receiving-audit-view')?.classList.add('hidden');
+                document.getElementById('home-module-view')?.classList.remove('hidden');
+            }
+        });
+        document.getElementById('btn-refresh-receiving-audit')?.addEventListener('click', () => this.loadReceivingAudit());
+        document.getElementById('btn-search-receiving-audit')?.addEventListener('click', () => this.loadReceivingAudit());
+        document.getElementById('receiving-audit-search')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.loadReceivingAudit();
+            }
+        });
+
+        document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this._receivingAuditStatus = btn.getAttribute('data-audit-status') || 'ALL';
+                document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(b => {
+                    const active = b === btn;
+                    b.className = active
+                        ? 'py-1.5 px-2 rounded-lg text-[9px] font-black uppercase bg-[#124191] text-white'
+                        : 'py-1.5 px-2 rounded-lg text-[9px] font-black uppercase bg-gray-100 text-gray-600';
+                });
+                this.loadReceivingAudit();
+            });
+        });
+    }
+
+    async loadReceivingAudit() {
+        const listEl = document.getElementById('receiving-audit-list');
+        const summaryEl = document.getElementById('receiving-audit-summary');
+        const q = (document.getElementById('receiving-audit-search')?.value || '').trim();
+        const status = this._receivingAuditStatus || 'ALL';
+
+        if (listEl) {
+            listEl.innerHTML = '<div class="bg-white rounded-xl p-6 text-center text-xs font-bold text-gray-400">Carregando registros de recebimento...</div>';
+        }
+
+        try {
+            const params = new URLSearchParams({ q, status, limit: '80' });
+            const res = await fetch(`/api/receiving/audit?${params.toString()}`, { credentials: 'same-origin' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Falha ao consultar recebimentos.');
+
+            const s = data.summary || { total: 0, pendente: 0, aprovado: 0, com_divergencia: 0 };
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-2">
+                        <p class="text-sm font-black text-gray-800">${s.total}</p>
+                        <p class="text-[8px] font-black text-gray-500 uppercase">TOTAL</p>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                        <p class="text-sm font-black text-amber-700">${s.pendente}</p>
+                        <p class="text-[8px] font-black text-amber-700 uppercase">PENDENTE</p>
+                    </div>
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-2">
+                        <p class="text-sm font-black text-green-700">${s.aprovado}</p>
+                        <p class="text-[8px] font-black text-green-700 uppercase">APROVADO</p>
+                    </div>
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-2">
+                        <p class="text-sm font-black text-red-700">${s.com_divergencia}</p>
+                        <p class="text-[8px] font-black text-red-700 uppercase">DIVERG.</p>
+                    </div>
+                `;
+            }
+
+            const records = data.records || [];
+            if (!listEl) return;
+            if (records.length === 0) {
+                listEl.innerHTML = '<div class="bg-white rounded-xl p-6 text-center text-xs font-bold text-gray-400">Nenhum recebimento encontrado para este filtro.</div>';
+                return;
+            }
+
+            const statusBadge = (st) => {
+                if (st === 'APROVADO') return '<span class="px-2 py-0.5 rounded bg-green-100 text-green-800 border border-green-300 text-[9px] font-black uppercase">✅ APROVADO</span>';
+                if (st === 'REJEITADO') return '<span class="px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-300 text-[9px] font-black uppercase">✕ REJEITADO</span>';
+                return '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase">⏳ AGUARDANDO ESTOQUISTA</span>';
+            };
+
+            const fmtDate = (iso) => (iso || '').replace('T', ' ').slice(0, 16) || '-';
+
+            listEl.innerHTML = records.map(rec => {
+                const itemsHtml = (rec.items || []).map(it => {
+                    const meta = [
+                        it.sku && !it.is_unlinked ? `SKU: ${it.sku}` : 'SEM CADASTRO PRÉVIO',
+                        it.batch_code ? `Lote: ${it.batch_code}` : '',
+                        it.expiration_date ? `Val: ${it.expiration_date}` : '',
+                    ].filter(Boolean).join(' · ');
+                    return `
+                        <div class="flex justify-between items-start gap-2 py-1.5 border-b border-gray-100 last:border-b-0">
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-black text-gray-800 leading-tight break-words">${it.name}</p>
+                                <p class="text-[9px] font-bold text-gray-500 mt-0.5">${meta}</p>
+                            </div>
+                            <span class="shrink-0 bg-blue-50 text-[#124191] border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black">
+                                ${it.quantity} UN
+                            </span>
+                        </div>
+                    `;
+                }).join('');
+
+                const divHtml = (rec.divergences || []).length > 0 ? `
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-2.5 space-y-1">
+                        <p class="text-[9px] font-black text-red-800 uppercase">⚠️ Divergências Formalizadas (${rec.divergences.length})</p>
+                        ${rec.divergences.map(d => `
+                            <p class="text-[10px] text-red-900 font-bold">
+                                • ${d.product_name}: Esperado <strong>${d.expected_qty}</strong> / Conferido <strong>${d.counted_qty}</strong>
+                                (${d.divergence_qty > 0 ? '+' : ''}${d.divergence_qty}) — <span class="uppercase">${d.reason}</span>
+                                ${d.notes ? `(${d.notes})` : ''}
+                            </p>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                const reqHtml = (rec.product_requests || []).length > 0 ? `
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1">
+                        <p class="text-[9px] font-black text-amber-900 uppercase">🚩 Solicitações de Cadastro (${rec.product_requests.length})</p>
+                        ${rec.product_requests.map(pr => `
+                            <p class="text-[10px] text-amber-950 font-bold">
+                                • ${pr.raw_description} — <span class="uppercase">${pr.status}</span>${pr.created_sku ? ` (SKU: ${pr.created_sku})` : ''}
+                            </p>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                const validationLine = rec.status === 'PENDENTE'
+                    ? '<span class="text-amber-700 font-black">Aguardando cadastro e validação do Estoquista</span>'
+                    : `<span>Validado por <strong class="text-gray-800">${rec.resolved_by_name || rec.resolved_by_id}</strong> em ${fmtDate(rec.resolved_at)}</span>`;
+
+                return `
+                    <article class="bg-white rounded-xl p-4 shadow-sm border border-gray-200 border-l-4 ${rec.status === 'APROVADO' ? 'border-l-green-600' : rec.status === 'REJEITADO' ? 'border-l-red-600' : 'border-l-amber-500'} space-y-2.5">
+                        <div class="flex justify-between items-start gap-2">
+                            <div>
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="text-[9px] font-mono font-black bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${rec.protocol}</span>
+                                    <span class="text-xs font-black text-[#124191] uppercase">NF ${rec.invoice_number}</span>
+                                </div>
+                                <h3 class="text-sm font-black text-gray-900 uppercase mt-1">${rec.supplier}</h3>
+                            </div>
+                            ${statusBadge(rec.status)}
+                        </div>
+
+                        <div class="bg-gray-50 rounded-lg p-2.5 text-[10px] text-gray-600 space-y-1 border border-gray-100">
+                            <p>Conferido por <strong class="text-gray-800">${rec.submitted_by_name}</strong> (${rec.submitted_by_id}) em <strong>${fmtDate(rec.created_at)}</strong></p>
+                            <p>${validationLine}</p>
+                            <p>Totais: <strong>${rec.total_items} item(ns)</strong> · <strong>${rec.total_units} unidade(s)</strong></p>
+                        </div>
+
+                        <div class="pt-1">
+                            <p class="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Itens Conferidos</p>
+                            <div>${itemsHtml}</div>
+                        </div>
+
+                        ${divHtml}
+                        ${reqHtml}
+                    </article>
+                `;
+            }).join('');
+        } catch (err) {
+            if (listEl) {
+                listEl.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700">❌ ${err.message}</div>`;
+            }
         }
     }
 }
