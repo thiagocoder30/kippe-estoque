@@ -40,6 +40,36 @@ def _replace_outside_quotes(sql: str, replacer) -> str:
     return "".join(parts)
 
 
+
+def _glob_pattern_to_pg_regex(match: re.Match) -> str:
+    pat = match.group(1)
+    out = ["^"]
+    i = 0
+    while i < len(pat):
+        ch = pat[i]
+        if ch == "*":
+            out.append(".*")
+        elif ch == "?":
+            out.append(".")
+        elif ch == "[":
+            j = pat.find("]", i + 1)
+            if j != -1:
+                bracket = pat[i : j + 1]
+                if bracket.startswith("[!"):
+                    bracket = "[^" + bracket[2:]
+                out.append(bracket)
+                i = j
+            else:
+                out.append(r"\[")
+        elif ch in r"\.$^+{}()|":
+            out.append("\\" + ch)
+        else:
+            out.append(ch)
+        i += 1
+    out.append("$")
+    return f"~ '{''.join(out)}'"
+
+
 def translate_sql_to_postgres(sql: str) -> tuple[str, dict]:
     raw = sql.strip()
     meta: dict[str, Any] = {}
@@ -117,6 +147,9 @@ def translate_sql_to_postgres(sql: str) -> tuple[str, dict]:
         )
         translated = translated.rstrip(";") + " ON CONFLICT (sku) DO UPDATE SET data = EXCLUDED.data"
 
+    # 5b. GLOB -> POSIX regex (~) (GLOB_TRANSLATED_IN_FUNC)
+    translated = re.sub(r"\bGLOB\s+'([^']*)'", _glob_pattern_to_pg_regex, translated, flags=re.IGNORECASE)
+
     # 6. Placeholders ? -> %s fora de literais
     translated = _replace_outside_quotes(translated, lambda seg: seg.replace("?", "%s"))
 
@@ -150,6 +183,18 @@ class PostgresCursorAdapter:
             self._cur.execute(pg_sql, tuple(params))
         else:
             self._cur.execute(pg_sql)
+
+        if meta.get("returning_id"):
+            row = self._cur.fetchone()
+            if row is not None:
+                self.lastrowid = int(row["id"] if isinstance(row, dict) else row[0])
+        return self
+
+        if params is not None:
+            self._cur.execute(pg_sql, tuple(params))
+        else:
+            pg_sql = re.sub(r"\bGLOB\s+'([^']*)'", _glob_pattern_to_pg_regex, pg_sql, flags=re.IGNORECASE)
+        self._cur.execute(pg_sql)
 
         if meta.get("returning_id"):
             row = self._cur.fetchone()
