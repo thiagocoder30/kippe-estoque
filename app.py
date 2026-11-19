@@ -3036,22 +3036,72 @@ def _extract_embedded_flate_images_from_pdf(pdf_bytes: bytes) -> list:
 
 
 
+def _render_pdf_pages_python(tmpdir: str, src_pdf: str, out_prefix: str, dpi: int = 185, max_pages: int = 8):
+    for old_p in Path(tmpdir).glob("page*.png"):
+        old_p.unlink(missing_ok=True)
+    errors = []
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(src_pdf)
+        total = min(len(doc), max_pages)
+        for idx in range(total):
+            page = doc.load_page(idx)
+            pix = page.get_pixmap(dpi=dpi)
+            pix.save(f"{out_prefix}-{idx + 1:02d}.png")
+        doc.close()
+        pages = sorted(Path(tmpdir).glob("page*.png"))
+        if pages:
+            return pages, ""
+    except Exception as exc:
+        errors.append(f"fitz: {exc}")
+
+    try:
+        import pypdfium2 as pdfium
+        pdf = pdfium.PdfDocument(src_pdf)
+        total = min(len(pdf), max_pages)
+        scale = dpi / 72.0
+        for idx in range(total):
+            page = pdf[idx]
+            bitmap = page.render(scale=scale)
+            pil_img = bitmap.to_pil()
+            pil_img.save(f"{out_prefix}-{idx + 1:02d}.png", format="PNG")
+        pages = sorted(Path(tmpdir).glob("page*.png"))
+        if pages:
+            return pages, ""
+    except Exception as exc:
+        errors.append(f"pypdfium2: {exc}")
+
+    return [], "; ".join(errors)
+
+
 def _render_pdf_pages_resilient(tmpdir: str, pdf_path: str):
     import shutil
     out_prefix = f"{tmpdir}/page"
+    has_pdftoppm = bool(shutil.which("pdftoppm"))
+    first_err = ""
 
-    # 1. Tentativa direta via pdftoppm (páginas 1 a 8)
-    proc = subprocess.run(
-        ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", pdf_path, out_prefix],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    pages = sorted(Path(tmpdir).glob("page*.png"))
-    if proc.returncode == 0 and pages:
+    # 1. Tentativa direta via pdftoppm (quando disponível no SO) ou fallback Python (PyMuPDF/pypdfium2)
+    if has_pdftoppm:
+        try:
+            proc = subprocess.run(
+                ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", pdf_path, out_prefix],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            pages = sorted(Path(tmpdir).glob("page*.png"))
+            if proc.returncode == 0 and pages:
+                return pages, ""
+            first_err = (proc.stderr or "").strip()
+        except FileNotFoundError as exc:
+            has_pdftoppm = False
+            first_err = str(exc)
+
+    pages, py_err = _render_pdf_pages_python(tmpdir, pdf_path, out_prefix)
+    if pages:
         return pages, ""
-
-    first_err = (proc.stderr or "").strip()
+    if not first_err and py_err:
+        first_err = py_err
 
     # 2. Reparo em Python para "Invalid XRef entry 0" / tabela XRef fora do padrão
     try:
@@ -3060,16 +3110,20 @@ def _render_pdf_pages_resilient(tmpdir: str, pdf_path: str):
         if rebuilt_bytes:
             py_repaired = f"{tmpdir}/repaired_py.pdf"
             Path(py_repaired).write_bytes(rebuilt_bytes)
-            for old_p in Path(tmpdir).glob("page*.png"):
-                old_p.unlink(missing_ok=True)
-            proc_py = subprocess.run(
-                ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", py_repaired, out_prefix],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            pages = sorted(Path(tmpdir).glob("page*.png"))
-            if proc_py.returncode == 0 and pages:
+            if has_pdftoppm:
+                for old_p in Path(tmpdir).glob("page*.png"):
+                    old_p.unlink(missing_ok=True)
+                proc_py = subprocess.run(
+                    ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", py_repaired, out_prefix],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                pages = sorted(Path(tmpdir).glob("page*.png"))
+                if proc_py.returncode == 0 and pages:
+                    return pages, ""
+            pages, _ = _render_pdf_pages_python(tmpdir, py_repaired, out_prefix)
+            if pages:
                 return pages, ""
     except Exception:
         pass
@@ -3095,16 +3149,20 @@ def _render_pdf_pages_resilient(tmpdir: str, pdf_path: str):
             repaired_ok = True
 
     if repaired_ok:
-        for old_p in Path(tmpdir).glob("page*.png"):
-            old_p.unlink(missing_ok=True)
-        proc2 = subprocess.run(
-            ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", repaired_pdf, out_prefix],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        pages = sorted(Path(tmpdir).glob("page*.png"))
-        if proc2.returncode == 0 and pages:
+        if has_pdftoppm:
+            for old_p in Path(tmpdir).glob("page*.png"):
+                old_p.unlink(missing_ok=True)
+            proc2 = subprocess.run(
+                ["pdftoppm", "-png", "-r", "185", "-f", "1", "-l", "8", repaired_pdf, out_prefix],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            pages = sorted(Path(tmpdir).glob("page*.png"))
+            if proc2.returncode == 0 and pages:
+                return pages, ""
+        pages, _ = _render_pdf_pages_python(tmpdir, repaired_pdf, out_prefix)
+        if pages:
             return pages, ""
 
     return [], first_err
