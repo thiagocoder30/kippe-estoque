@@ -1,3 +1,4 @@
+from src.infrastructure.db_adapter import connect_db
 import sqlite3
 from typing import List
 from src.domain.ledger import LedgerEntry
@@ -10,7 +11,7 @@ class SQLiteLedgerRepository:
         self.db_path = db_path
         self._init_db()
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
     def _init_db(self) -> None:

@@ -8,7 +8,10 @@ def sprint1_client():
     assert gateway_app.container.config.ENV == "testing"
     client = gateway_app.app.test_client()
 
-    gateway_app.container.operator_repository._init_db()
+    for attr_name in dir(gateway_app.container):
+        repo_obj = getattr(gateway_app.container, attr_name, None)
+        if hasattr(repo_obj, "_init_db") and callable(repo_obj._init_db):
+            repo_obj._init_db()
     with gateway_app.container.operator_repository._get_connection() as conn:
         conn.execute("DELETE FROM operators")
         conn.commit()

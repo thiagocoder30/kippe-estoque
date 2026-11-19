@@ -1651,6 +1651,82 @@ const ConferenceFeature = (() => {
         renderMultiPhotoTray();
     };
 
+    const postFilesToOcr = async (fileEntries) => {
+        const totalBytes = fileEntries.reduce((acc, item) => acc + (item.blob?.size || 0), 0);
+        const VERCEL_SAFE_LIMIT = 3.5 * 1024 * 1024;
+
+        if (totalBytes > VERCEL_SAFE_LIMIT) {
+            try {
+                const signRes = await fetch('/api/invoices/upload-urls', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        files: fileEntries.map((f, idx) => ({
+                            name: f.name || `arquivo_${idx + 1}`,
+                            type: f.type || f.blob?.type || 'application/octet-stream',
+                        })),
+                    }),
+                });
+                if (signRes.ok) {
+                    const signData = await signRes.json();
+                    if (signData.enabled && Array.isArray(signData.uploads) && signData.uploads.length === fileEntries.length) {
+                        const storagePaths = [];
+                        for (let i = 0; i < fileEntries.length; i++) {
+                            const entry = fileEntries[i];
+                            const target = signData.uploads[i];
+                            const putRes = await fetch(target.signed_url, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': entry.type || entry.blob?.type || 'application/octet-stream',
+                                    'x-upsert': 'true',
+                                },
+                                body: entry.blob,
+                            });
+                            if (!putRes.ok) {
+                                throw new Error(`Falha ao transferir arquivo grande (${putRes.status})`);
+                            }
+                            storagePaths.push({
+                                path: target.path,
+                                name: target.name,
+                                mime_type: target.mime_type,
+                            });
+                        }
+
+                        return fetch('/api/invoices/ocr', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/x-ndjson',
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({ storage_paths: storagePaths }),
+                        });
+                    }
+                }
+            } catch (storageErr) {
+                console.warn('Fallback para envio direto:', storageErr);
+            }
+        }
+
+        const formData = new FormData();
+        if (fileEntries.length === 1) {
+            const single = fileEntries[0];
+            formData.append('file', single.blob, single.name || 'nota_fiscal.pdf');
+        } else {
+            fileEntries.forEach((item, idx) => {
+                formData.append('files', item.blob, item.name || `pagina_${idx + 1}.jpg`);
+            });
+        }
+
+        return fetch('/api/invoices/ocr', {
+            method: 'POST',
+            headers: { 'Accept': 'application/x-ndjson' },
+            body: formData,
+            credentials: 'same-origin',
+        });
+    };
+
     const uploadNfPhotoBatch = async (photoItems) => {
         if (!photoItems || photoItems.length === 0) return;
         setOcrLoading(true, 'camera');
@@ -1658,17 +1734,13 @@ const ConferenceFeature = (() => {
         ocrProgress.start(total > 1 ? `Enviando ${total} fotos da NF para IA...` : 'Lendo foto da NF...');
 
         try {
-            const formData = new FormData();
-            photoItems.forEach((item, idx) => {
-                formData.append('files', item.blob, item.name || `pagina_${idx + 1}.jpg`);
-            });
-
-            const res = await fetch('/api/invoices/ocr', {
-                method: 'POST',
-                headers: { 'Accept': 'application/x-ndjson' },
-                body: formData,
-                credentials: 'same-origin',
-            });
+            const res = await postFilesToOcr(
+                photoItems.map((item, idx) => ({
+                    blob: item.blob,
+                    name: item.name || `pagina_${idx + 1}.jpg`,
+                    type: item.blob?.type || 'image/jpeg',
+                }))
+            );
 
             const data = await consumeOcrStream(res);
             await appendExtractedItems(data);
@@ -1816,15 +1888,13 @@ const ConferenceFeature = (() => {
                 safeBlob = file;
             }
 
-            const formData = new FormData();
-            formData.append('file', safeBlob, file.name || 'nota_fiscal.pdf');
-
-            const res = await fetch('/api/invoices/ocr', {
-                method: 'POST',
-                headers: { 'Accept': 'application/x-ndjson' },
-                body: formData,
-                credentials: 'same-origin',
-            });
+            const res = await postFilesToOcr([
+                {
+                    blob: safeBlob,
+                    name: file.name || 'nota_fiscal.pdf',
+                    type: file.type || 'application/pdf',
+                },
+            ]);
 
             const data = await consumeOcrStream(res);
             await appendExtractedItems(data);

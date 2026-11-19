@@ -1,3 +1,4 @@
+from src.infrastructure.db_adapter import connect_db
 import sqlite3
 import logging
 from datetime import datetime
@@ -13,7 +14,7 @@ class FefoEnterpriseService:
     def get_critical_batches(self) -> List[Dict]:
         logging.info(f"[*] Iniciando Varredura FEFO no banco: {self.db_path}")
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with connect_db(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
 

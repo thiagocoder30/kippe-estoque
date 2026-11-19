@@ -1,3 +1,4 @@
+from src.infrastructure.db_adapter import connect_db, is_postgres_enabled
 import os
 import sqlite3
 import traceback
@@ -10,12 +11,12 @@ DB_PATH = os.path.join(BASE_DIR, 'kippe.db')
 class DashboardReadModel:
     @staticmethod
     def get_product_dashboard(sku_or_barcode: str) -> Optional[Dict[str, Any]]:
-        if not os.path.exists(DB_PATH):
+        if not is_postgres_enabled() and not os.path.exists(DB_PATH):
             print(f"[CRÍTICO] Banco de dados não encontrado no caminho: {DB_PATH}")
             return None
             
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = connect_db(DB_PATH)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             

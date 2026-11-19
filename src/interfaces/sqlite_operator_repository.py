@@ -1,3 +1,4 @@
+from src.infrastructure.db_adapter import connect_db
 import sqlite3
 from typing import Optional
 from src.domain.operator import Operator
@@ -8,7 +9,7 @@ class SQLiteOperatorRepository:
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_db(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

@@ -1,3 +1,4 @@
+from src.infrastructure.db_adapter import connect_db
 import sqlite3
 import pickle
 import os
@@ -14,7 +15,7 @@ class SQLiteCatalog:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             # Cria a tabela adicionando a coluna photo para auditoria visual enterprise
             conn.execute('''CREATE TABLE IF NOT EXISTS catalog
                             (sku TEXT PRIMARY KEY, description TEXT, brand TEXT, category TEXT, photo TEXT)''')
@@ -26,14 +27,14 @@ class SQLiteCatalog:
                 pass # Coluna já existe
 
     def register_product(self, sku, description, category, photo=None):
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO catalog (sku, description, brand, category, photo) VALUES (?, ?, ?, ?, ?)",
                 (sku, description, "Genérica", category, photo)
             )
 
     def get_by_sku(self, sku):
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute("SELECT description, brand, category, photo FROM catalog WHERE sku = ?", (sku,))
             row = cursor.fetchone()
             
@@ -49,7 +50,7 @@ class SQLiteCatalog:
         return p
 
     def search_by_term(self, term: str):
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT sku, description, photo FROM catalog WHERE sku LIKE ? OR description LIKE ? LIMIT 10", 
                 (f'%{term}%', f'%{term}%')
@@ -65,17 +66,17 @@ class SQLiteLedgerRepo(InventoryAccountRepository):
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute('''CREATE TABLE IF NOT EXISTS ledger
                             (sku TEXT PRIMARY KEY, data BLOB)''')
 
     def save(self, account: InventoryAccount) -> None:
         data = pickle.dumps(account)
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("INSERT OR REPLACE INTO ledger (sku, data) VALUES (?, ?)", (account.sku, data))
 
     def get_by_sku(self, sku: str) -> InventoryAccount:
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute("SELECT data FROM ledger WHERE sku = ?", (sku,))
             row = cursor.fetchone()
             if row:
@@ -84,7 +85,7 @@ class SQLiteLedgerRepo(InventoryAccountRepository):
     
     def get_all(self):
         accounts = []
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute("SELECT data FROM ledger")
             for row in cursor.fetchall():
                 accounts.append(pickle.loads(row[0]))

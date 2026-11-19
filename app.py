@@ -1,3 +1,4 @@
+from src.infrastructure.db_adapter import connect_db, is_postgres_enabled
 from src.domain.access_control import AccessControl
 import re
 import unicodedata
@@ -369,6 +370,42 @@ def create_sqlite_backup_api():
     import shutil
     from datetime import datetime
 
+    if is_postgres_enabled():
+        import hashlib
+        from datetime import datetime
+
+        tables_to_dump = [
+            "categories", "products", "batches", "operators", "transactions",
+            "operational_audit_events", "sku_sequences", "sku_aliases",
+            "sku_pack_defaults", "receiving_pending_queue",
+            "product_registration_requests", "institutional_audit_log",
+            "receiving_divergences", "conference_audit_log",
+        ]
+        conn_pg = connect_db()
+        snapshot = {"engine": "postgresql", "exported_at": datetime.now().isoformat(), "tables": {}}
+        try:
+            for tbl in tables_to_dump:
+                try:
+                    rows = conn_pg.execute(f"SELECT * FROM {tbl}").fetchall()
+                    snapshot["tables"][tbl] = [dict(r) for r in rows]
+                except Exception:
+                    snapshot["tables"][tbl] = []
+        finally:
+            conn_pg.close()
+
+        raw_json = json.dumps(snapshot, ensure_ascii=False, default=str, indent=2).encode("utf-8")
+        sha256_hex = hashlib.sha256(raw_json).hexdigest()
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"kippe_supabase_snapshot_{stamp}.json"
+        return Response(
+            raw_json,
+            mimetype="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Backup-SHA256": sha256_hex,
+            },
+        )
+
     src_db_path = Path(container.config.DB_PATH).resolve()
     if not src_db_path.exists():
         return jsonify({'error': f'Banco de dados não encontrado em {src_db_path}.'}), 404
@@ -484,8 +521,7 @@ def export_management_csv_api(report_type: str):
     if rtype not in {'inventario', 'fefo', 'recebimentos', 'divergencias'}:
         return jsonify({'error': 'Tipo de relatório inválido. Use: inventario, fefo ou recebimentos.'}), 400
 
-    conn = sqlite3.connect(str(container.config.DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = connect_db(str(container.config.DB_PATH))
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=';', lineterminator='\n')
 
@@ -3327,8 +3363,7 @@ def _get_kippe_db():
     db_path = base_dir / 'kippe.db'
     if not db_path.exists():
         db_path = Path('kippe.db')
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+    conn = connect_db(str(db_path))
     conn.execute('''
         CREATE TABLE IF NOT EXISTS sku_aliases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4027,8 +4062,149 @@ def catalog_search():
     return jsonify(ranked[:15])
 
 
+def _supabase_storage_config() -> tuple[str, str, str]:
+    sb_url = os.getenv('SUPABASE_URL', '').strip().rstrip('/')
+    sb_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+    sb_bucket = os.getenv('SUPABASE_INVOICES_BUCKET', 'invoices-tmp').strip() or 'invoices-tmp'
+    return sb_url, sb_key, sb_bucket
+
+
+def _supabase_delete_objects(sb_url: str, sb_key: str, sb_bucket: str, paths: list[str]) -> None:
+    if not (sb_url and sb_key and paths):
+        return
+    import urllib.request
+
+    endpoint = f"{sb_url}/storage/v1/object/{sb_bucket}"
+    body = json.dumps({'prefixes': paths}).encode('utf-8')
+    req = urllib.request.Request(
+        endpoint,
+        data=body,
+        method='DELETE',
+        headers={
+            'Authorization': f'Bearer {sb_key}',
+            'apikey': sb_key,
+            'Content-Type': 'application/json',
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception:
+        pass
+
+
+@app.route('/api/invoices/upload-urls', methods=['POST'])
+def invoices_signed_upload_urls():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    sb_url, sb_key, sb_bucket = _supabase_storage_config()
+    if not sb_url or not sb_key:
+        return jsonify({'enabled': False}), 200
+
+    data = request.json or {}
+    files_meta = data.get('files') or []
+    if not isinstance(files_meta, list) or not files_meta:
+        return jsonify({'error': 'Nenhum metadado de arquivo informado.'}), 400
+    if len(files_meta) > 12:
+        return jsonify({'error': 'Limite máximo de 12 arquivos por nota fiscal.'}), 400
+
+    import urllib.parse
+    import urllib.request
+
+    uploads = []
+    for item in files_meta:
+        raw_name = str((item or {}).get('name') or 'nota.pdf')
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)[:80] or 'nota.pdf'
+        mime_type = str((item or {}).get('type') or 'application/octet-stream')
+        obj_path = f"ocr/{uuid.uuid4().hex}_{safe_name}"
+        sign_endpoint = f"{sb_url}/storage/v1/object/upload/sign/{sb_bucket}/{urllib.parse.quote(obj_path)}"
+
+        req = urllib.request.Request(
+            sign_endpoint,
+            data=b'{}',
+            method='POST',
+            headers={
+                'Authorization': f'Bearer {sb_key}',
+                'apikey': sb_key,
+                'Content-Type': 'application/json',
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                payload = json.loads(resp.read().decode('utf-8'))
+        except Exception as exc:
+            return jsonify({'error': f'Falha ao preparar upload seguro no Supabase: {exc}'}), 502
+
+        rel_url = str(payload.get('url') or '')
+        if rel_url.startswith('http'):
+            full_signed_url = rel_url
+        elif rel_url.startswith('/storage/v1/'):
+            full_signed_url = f"{sb_url}{rel_url}"
+        elif rel_url.startswith('/'):
+            full_signed_url = f"{sb_url}/storage/v1{rel_url}"
+        else:
+            full_signed_url = f"{sb_url}/storage/v1/{rel_url}"
+
+        uploads.append({
+            'path': obj_path,
+            'signed_url': full_signed_url,
+            'name': safe_name,
+            'mime_type': mime_type,
+        })
+
+    return jsonify({'enabled': True, 'uploads': uploads}), 200
+
+
 @app.route('/api/invoices/ocr', methods=['POST'])
 def invoices_ocr():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        storage_items = payload.get('storage_paths') or []
+        if not isinstance(storage_items, list) or not storage_items:
+            return jsonify({'error': 'Nenhum arquivo informado para OCR.'}), 400
+        if len(storage_items) > 12:
+            return jsonify({'error': 'Limite máximo de 12 fotos por nota fiscal.'}), 400
+
+        sb_url, sb_key, sb_bucket = _supabase_storage_config()
+        if not sb_url or not sb_key:
+            return jsonify({'error': 'Supabase Storage não configurado no servidor.'}), 503
+
+        import urllib.parse
+        import urllib.request
+
+        downloaded_items = []
+        paths_to_cleanup = []
+        try:
+            for entry in storage_items:
+                obj_path = str((entry or {}).get('path') or '').strip()
+                if not re.fullmatch(r'ocr/[0-9a-f]{32}_[a-zA-Z0-9._-]+', obj_path):
+                    return jsonify({'error': 'Caminho de arquivo temporário inválido.'}), 400
+
+                paths_to_cleanup.append(obj_path)
+                f_name = str((entry or {}).get('name') or obj_path.split('_', 1)[-1])
+                f_mime = str((entry or {}).get('mime_type') or 'application/octet-stream')
+                dl_url = f"{sb_url}/storage/v1/object/{sb_bucket}/{urllib.parse.quote(obj_path)}"
+                req = urllib.request.Request(
+                    dl_url,
+                    method='GET',
+                    headers={
+                        'Authorization': f'Bearer {sb_key}',
+                        'apikey': sb_key,
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=25) as resp:
+                    f_bytes = resp.read()
+                downloaded_items.append((f_bytes, f_name, f_mime))
+
+            if len(downloaded_items) == 1:
+                f_bytes, f_name, f_mime = downloaded_items[0]
+                return _ocr_response(f_bytes, f_name, f_mime)
+
+            return _ocr_response_multi(downloaded_items)
+        finally:
+            _supabase_delete_objects(sb_url, sb_key, sb_bucket, paths_to_cleanup)
+
     raw_files = request.files.getlist('files') or request.files.getlist('file')
     valid_files = [f for f in raw_files if f and getattr(f, 'filename', '')]
     if not valid_files:
