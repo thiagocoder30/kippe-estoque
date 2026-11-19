@@ -393,7 +393,7 @@ const ConferenceFeature = (() => {
     if (supplierInput) supplierInput.value = state.supplier || '';
     const invoiceInput = document.getElementById('conference-invoice-input');
     if (invoiceInput) invoiceInput.value = state.invoice_number || '';
-    renderAttachedInvoicesBanner();
+    if (typeof renderAttachedInvoicesBanner === 'function') renderAttachedInvoicesBanner();
 
     const list = document.getElementById('conf-items-list');
     if (list) {

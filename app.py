@@ -2799,12 +2799,11 @@ def _call_gemini_fast(
     )
 
     models_to_try = [
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite-preview",
         "gemini-flash-lite-latest",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
     ]
     thinking_configs = [
-        {"thinkingLevel": "low"},
         {"thinkingLevel": "minimal"},
         None,
     ]
@@ -2841,7 +2840,7 @@ def _call_gemini_fast(
             )
 
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with urllib.request.urlopen(req, timeout=18) as resp:
                     result = json.loads(resp.read().decode("utf-8"))
                 texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
                 return json.loads(texto)
