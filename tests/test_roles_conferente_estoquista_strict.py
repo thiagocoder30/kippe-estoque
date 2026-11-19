@@ -321,7 +321,7 @@ def test_frontend_role_separation_contracts():
 
     assert "isConferenceOnlyRole()" in conf_js
     assert "SOLICITAR CADASTRO AO ESTOQUISTA" in conf_js
-    assert "ENVIAR PARA ARMAZENAGEM" in conf_js
+    assert "CONCLUIR E ENVIAR P/ ESTOQUISTA" in conf_js
     assert "nf-multiphoto-modal" in conf_js
     assert "ai-upload-gallery" in conf_js
     assert "uploadNfPhotoBatch" in conf_js
