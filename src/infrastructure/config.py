@@ -1,3 +1,4 @@
+import tempfile
 import os
 
 class Config:
@@ -8,7 +9,8 @@ class Config:
     def __init__(self):
         self.ENV = os.environ.get("KIPPE_ENV", "development")
         self.DB_PATH = os.environ.get("KIPPE_DB_PATH", "data/estoque_producao.db")
-        self.LOG_PATH = os.environ.get("KIPPE_LOG_PATH", "reports/logs/app.log")
+        _default_log = os.path.join(tempfile.gettempdir(), "kippe_app.log") if os.environ.get("VERCEL") else "reports/logs/app.log"
+        self.LOG_PATH = os.environ.get("KIPPE_LOG_PATH", _default_log)
         self.DOCUMENT_ROOT = os.environ.get(
             "KIPPE_DOCUMENT_ROOT",
             "data/documents",
