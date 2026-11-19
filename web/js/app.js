@@ -1,6 +1,89 @@
 import { APIClient } from './api.js';
 import { ScannerManager } from './scanner.js';
 
+(function initKippeDialogs() {
+    if (window.kippeModalAlert && window.kippeModalConfirm) return;
+
+    function detectTheme(msg) {
+        const text = String(msg || '').trim();
+        if (text.startsWith('❌') || /erro|falha|inválid|negad|não encontrado/i.test(text.slice(0, 40))) {
+            return { bg: '#D9232E', badge: 'ALERTA DO SISTEMA', icon: '✕' };
+        }
+        if (text.startsWith('✅') || /sucesso|concluíd|atualizado|aprovad/i.test(text.slice(0, 45))) {
+            return { bg: '#15803D', badge: 'OPERAÇÃO CONCLUÍDA', icon: '✓' };
+        }
+        if (text.startsWith('⚠️') || text.startsWith('🚩') || /atenção|duplicidade|diverg/i.test(text.slice(0, 45))) {
+            return { bg: '#D97706', badge: 'ATENÇÃO OPERACIONAL', icon: '!' };
+        }
+        return { bg: '#124191', badge: 'KIPPE WMS', icon: 'i' };
+    }
+
+    function stripLeadingEmoji(msg) {
+        return String(msg || '').replace(/^(?:❌|✅|⚠️|🚩)\s*/u, '').trim();
+    }
+
+    function buildDialog({ message, title, confirmMode = false, confirmLabel = 'CONFIRMAR', cancelLabel = 'CANCELAR' }) {
+        return new Promise((resolve) => {
+            document.getElementById('kippe-system-dialog')?.remove();
+            const theme = detectTheme(message);
+            const cleanBody = stripLeadingEmoji(message);
+
+            const overlay = document.createElement('div');
+            overlay.id = 'kippe-system-dialog';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.72);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+            const card = document.createElement('div');
+            card.style.cssText = 'width:100%;max-width:360px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.35);border:1px solid #E2E8F0;animation:fadeIn .14s ease-out;';
+
+            const header = document.createElement('div');
+            header.style.cssText = `background:${theme.bg};color:#FFFFFF;padding:12px 16px;display:flex;align-items:center;gap:10px;`;
+            header.innerHTML = `
+                <span style="width:24px;height:24px;border-radius:999px;background:rgba(255,255,255,0.2);display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;flex-shrink:0;">${theme.icon}</span>
+                <span style="font-size:11px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;">${title || theme.badge}</span>
+            `;
+
+            const body = document.createElement('div');
+            body.style.cssText = 'padding:18px 16px;color:#1E293B;font-size:13px;font-weight:700;line-height:1.45;white-space:pre-line;word-break:break-word;';
+            body.textContent = cleanBody;
+
+            const footer = document.createElement('div');
+            footer.style.cssText = 'padding:12px 16px;background:#F8FAFC;border-top:1px solid #E2E8F0;display:flex;gap:8px;';
+
+            const closeWith = (val) => {
+                overlay.remove();
+                resolve(val);
+            };
+
+            if (confirmMode) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.textContent = cancelLabel;
+                cancelBtn.style.cssText = 'flex:1;padding:11px 12px;border-radius:10px;border:1px solid #CBD5E1;background:#FFFFFF;color:#475569;font-size:11px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;';
+                cancelBtn.addEventListener('click', () => closeWith(false));
+                footer.appendChild(cancelBtn);
+            }
+
+            const okBtn = document.createElement('button');
+            okBtn.type = 'button';
+            okBtn.textContent = confirmMode ? confirmLabel : 'ENTENDI';
+            okBtn.style.cssText = `flex:1;padding:11px 12px;border-radius:10px;border:none;background:${theme.bg};color:#FFFFFF;font-size:11px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;box-shadow:0 2px 6px rgba(15,23,42,0.18);cursor:pointer;`;
+            okBtn.addEventListener('click', () => closeWith(true));
+            footer.appendChild(okBtn);
+
+            card.appendChild(header);
+            card.appendChild(body);
+            card.appendChild(footer);
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+            okBtn.focus();
+        });
+    }
+
+    window.kippeModalAlert = (message, title) => buildDialog({ message, title, confirmMode: false });
+    window.kippeModalConfirm = (message, title, confirmLabel = 'CONFIRMAR', cancelLabel = 'CANCELAR') =>
+        buildDialog({ message, title, confirmMode: true, confirmLabel, cancelLabel });
+})();
+
 class KippeApplication {
     constructor() {
         this.api = new APIClient();
@@ -1568,7 +1651,7 @@ class KippeApplication {
         window.kippeCurrentOperator = () => this.currentOperator;
         const confFinBtn = document.getElementById('btn-conference-finalize');
         if (confFinBtn) {
-            confFinBtn.textContent = allowed ? 'FINALIZAR CONFERÊNCIA' : '📤 ENVIAR PARA ARMAZENAGEM';
+            confFinBtn.textContent = allowed ? 'FINALIZAR CONFERÊNCIA' : '✅ CONCLUIR E ENVIAR P/ ESTOQUISTA';
         }
 
         const homeNewProdBtn = document.getElementById('btn-new-product-registration');
@@ -7714,10 +7797,11 @@ class KippeApplication {
         } catch (error) {
             document.getElementById('loader')?.classList.add('hidden');
 
-            alert(
-                "❌ PRODUTO NÃO ENCONTRADO.\n\n" +
-                "Use o botão '1. RECEBER' para dar entrada."
-            );
+            const roleUpper = String(this.currentOperator?.role || '').trim().toUpperCase();
+            const notFoundMsg = roleUpper === 'CONFERENTE'
+                ? "❌ PRODUTO NÃO CADASTRADO.\n\nSe este item veio na nota fiscal, abra '1. CONFERÊNCIA NF' e solicite o cadastro ao Estoquista."
+                : "❌ PRODUTO NÃO ENCONTRADO.\n\nUse '1. RECEBER' ou '+ NOVO PRODUTO' para cadastrar no catálogo.";
+            await window.kippeModalAlert(notFoundMsg, 'CONSULTA DE PRODUTO');
         }
     }
 }

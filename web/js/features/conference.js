@@ -234,10 +234,14 @@ const ConferenceFeature = (() => {
 
       // Subtítulo SKU / EAN
       unlinked
-        ? el('div', { className: 'mt-1.5' }, [
-            el('span', {
-              className: 'inline-block px-2 py-0.5 rounded bg-yellow-50 border border-yellow-300 text-yellow-800 text-[9px] font-black uppercase'
-            }, '⚠ SEM EAN · BIPE O PRODUTO OU VINCULE')
+        ? el('div', { className: 'mt-1.5 flex flex-wrap gap-1' }, [
+            item.pending_registration
+              ? el('span', {
+                  className: 'inline-block px-2 py-0.5 rounded bg-amber-100 border border-amber-400 text-amber-900 text-[9px] font-black uppercase'
+                }, '🚩 CADASTRO SOLICITADO AO ESTOQUISTA')
+              : el('span', {
+                  className: 'inline-block px-2 py-0.5 rounded bg-yellow-50 border border-yellow-300 text-yellow-800 text-[9px] font-black uppercase'
+                }, '⚠ SEM EAN · BIPE O PRODUTO OU VINCULE')
           ])
         : el('div', { className: 'text-[10px] text-gray-500 font-mono font-bold mt-1 truncate' },
             `SKU: ${item.sku}${item.ean && item.ean !== item.sku ? ` · EAN: ${item.ean}` : ''}`
@@ -395,7 +399,7 @@ const ConferenceFeature = (() => {
     const finBtn = document.getElementById('btn-conference-finalize');
     if (finBtn) {
       finBtn.textContent = isConferenceOnlyRole()
-        ? '📤 ENVIAR PARA ARMAZENAGEM'
+        ? '✅ CONCLUIR E ENVIAR P/ ESTOQUISTA'
         : 'FINALIZAR CONFERÊNCIA';
     }
     const supplierInput = document.getElementById('conference-supplier-input');
@@ -826,14 +830,14 @@ const ConferenceFeature = (() => {
                   });
                   const out = await res.json();
                   if (!res.ok) {
-                    alert('❌ ' + (out.error || 'Erro ao solicitar cadastro.'));
+                    await window.kippeModalAlert('❌ ' + (out.error || 'Erro ao solicitar cadastro.'), 'ERRO NA SOLICITAÇÃO');
                     return;
                   }
                   target.pending_registration = true;
                   save();
                   closeModal();
                   render();
-                  alert('🚩 Solicitação enviada! O Estoquista receberá este item para cadastrar.');
+                  await window.kippeModalAlert('🚩 Solicitação enviada! O Estoquista receberá este item para cadastrar e você já pode concluir a conferência.', 'SOLICITAÇÃO ENVIADA');
                 }
               }, '🚩 SOLICITAR CADASTRO AO ESTOQUISTA')
             : el('button', {
@@ -1154,15 +1158,24 @@ const ConferenceFeature = (() => {
   }
 
   async function finalize(forceDuplicate = false, precomputedDivergences = null) {
-    const unlinkedCount = state.items.filter(it => it.scanned > 0 && isUnlinkedItem(it)).length;
-    if (unlinkedCount > 0) {
-      alert(`⚠️ Existem ${unlinkedCount} item(ns) conferido(s) sem EAN/SKU vinculado. Bipe o produto físico ou toque em "Vincular EAN" antes de finalizar.`);
+    const isConfRole = isConferenceOnlyRole();
+    const unlinkedItems = state.items.filter(it => it.scanned > 0 && isUnlinkedItem(it));
+    if (!isConfRole && unlinkedItems.length > 0) {
+      await window.kippeModalAlert(
+        `⚠️ Existem ${unlinkedItems.length} item(ns) conferido(s) sem EAN/SKU vinculado. Bipe o produto físico ou toque em "Vincular EAN" antes de finalizar.`,
+        'VÍNCULO PENDENTE'
+      );
       return;
     }
 
     const missingExp = state.items.filter(it => it.scanned > 0 && !it.expiration_date);
     if (missingExp.length > 0) {
-      alert(`⚠️ Informe a DATA DE VALIDADE para: ${missingExp[0].name}`);
+      await window.kippeModalAlert(
+        `⚠️ Informe a DATA DE VALIDADE para:
+
+${missingExp[0].name}`,
+        'VALIDADE OBRIGATÓRIA'
+      );
       return;
     }
 
@@ -1170,6 +1183,7 @@ const ConferenceFeature = (() => {
       .filter(it => it.scanned > 0)
       .map(it => ({
         sku: it.sku,
+        name: it.name || it.raw_ocr_name || it.sku,
         quantity: it.scanned,
         batch_code: it.batch_code,
         expiration_date: it.expiration_date,
@@ -1179,7 +1193,7 @@ const ConferenceFeature = (() => {
       }));
 
     if (items.length === 0) {
-      alert('Nenhum item com quantidade > 0');
+      await window.kippeModalAlert('⚠️ Nenhum item com quantidade conferida maior que zero.', 'CONFERÊNCIA VAZIA');
       return;
     }
 
@@ -1190,9 +1204,39 @@ const ConferenceFeature = (() => {
         divergences = await promptDivergenceFormalization(divergentItems);
         if (!divergences) return;
       } else {
-        if (!confirm('Finalizar conferência e dar entrada no estoque?')) return;
+        const confirmTitle = isConfRole ? 'ENVIAR AO ESTOQUISTA' : 'FINALIZAR CONFERÊNCIA';
+        const confirmMsg = isConfRole
+          ? `Concluir a conferência de ${items.length} item(ns) e enviar ao Estoquista para cadastro/validação?`
+          : 'Finalizar conferência e dar entrada no estoque?';
+        const confirmBtn = isConfRole ? 'ENVIAR AGORA' : 'FINALIZAR';
+        if (!(await window.kippeModalConfirm(confirmMsg, confirmTitle, confirmBtn))) return;
         divergences = [];
       }
+    }
+
+    if (isConfRole && unlinkedItems.length > 0) {
+      for (const uItem of unlinkedItems) {
+        if (uItem.pending_registration) continue;
+        try {
+          await fetch('/api/receiving/requests/product', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              raw_description: uItem.raw_ocr_name || uItem.name,
+              suggested_ean: '',
+              supplier: state.supplier || '',
+              invoice_number: state.invoice_number || '',
+              nf_qty: uItem.nf_qty || 1,
+              pack_factor: uItem.pack_factor || 1,
+              batch_code: uItem.batch_code || '',
+              expiration_date: uItem.expiration_date || ''
+            })
+          });
+          uItem.pending_registration = true;
+        } catch (_) {}
+      }
+      save();
     }
 
     const invoicesPayload = Array.isArray(state.invoices) && state.invoices.length > 0
@@ -1216,7 +1260,13 @@ const ConferenceFeature = (() => {
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 409 && data.duplicate) {
-        if (confirm(`⚠️ ALERTA DE DUPLICIDADE DE NF-e:\n\n${data.error}\n\nDeseja autorizar o lançamento duplicado mesmo assim?`)) {
+        if (await window.kippeModalConfirm(
+          `⚠️ ${data.error}
+
+Deseja autorizar o envio duplicado mesmo assim?`,
+          'DUPLICIDADE DE NF-e',
+          'AUTORIZAR ENVIO'
+        )) {
           return finalize(true, divergences);
         }
         return;
@@ -1224,13 +1274,27 @@ const ConferenceFeature = (() => {
 
       if (data.errors && data.errors.length > 0) {
         const errList = data.errors.map(e => `• ${e.sku || '?'}: ${e.error}`).join('\n');
-        alert(`⚠️ ${data.success} itens OK, ${data.failed} falharam:\n\n${errList}`);
+        await window.kippeModalAlert(`⚠️ ${data.success} itens OK, ${data.failed} falharam:
+
+${errList}`, 'RESULTADO PARCIAL');
       } else if (res.ok) {
-        const divNote = data.divergences_recorded > 0 ? ` (${data.divergences_recorded} divergência(s) formalizada(s))` : '';
+        const divNote = data.divergences_recorded > 0 ? `
+(${data.divergences_recorded} divergência(s) formalizada(s))` : '';
         if (data.queued) {
-          alert(`✅ ${data.message}${divNote}`);
+          const reqNote = unlinkedItems.length > 0
+            ? `
+
+${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente ao Estoquista.`
+            : '';
+          await window.kippeModalAlert(
+            `✅ Conferência concluída e enviada para a fila do Estoquista!${reqNote}${divNote}`,
+            'CONFERÊNCIA ENVIADA'
+          );
         } else {
-          alert(`✅ ${data.success} itens conferidos e estoque atualizado!${divNote}`);
+          await window.kippeModalAlert(
+            `✅ ${data.success} itens conferidos e estoque atualizado!${divNote}`,
+            'ESTOQUE ATUALIZADO'
+          );
         }
         state = { supplier: '', invoice_number: '', invoices: [], items: [] };
         save();
