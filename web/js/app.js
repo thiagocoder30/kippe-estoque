@@ -706,7 +706,7 @@ class KippeApplication {
             if (!card) {
                 card = document.createElement('div');
                 card.id = 'estoquista-pending-card';
-                card.className = 'bg-amber-50 border-2 border-amber-400 rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-2';
+                card.style.cssText = 'background:#FFFBEB;border:2px solid #F59E0B;border-radius:14px;padding:12px 14px;box-shadow:0 2px 6px rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:space-between;gap:10px;';
                 homeView.insertBefore(card, homeView.children[1] || null);
             }
 
@@ -736,91 +736,123 @@ class KippeApplication {
         document.getElementById('estoquista-queue-modal')?.remove();
         const modal = document.createElement('div');
         modal.id = 'estoquista-queue-modal';
-        modal.className = 'fixed inset-0 z-[180] bg-black/75 flex items-center justify-center p-3';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9990;background:rgba(15,23,42,0.78);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;';
 
-        const prodHtml = (data.product_requests || []).map(pr => `
-            <div class="border border-amber-200 bg-amber-50/70 rounded-lg p-2.5 space-y-1.5">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <span class="text-[9px] font-black uppercase text-amber-800">SOLICITADO POR ${pr.requested_by_name}</span>
-                        <p class="text-xs font-black text-gray-900 uppercase">${pr.raw_description}</p>
-                        <p class="text-[10px] text-gray-600">NF: ${pr.invoice_number || '-'} · ${pr.supplier || '-'} · Qtd: ${pr.nf_qty} × ${pr.pack_factor} UN</p>
-                    </div>
+        const reqList = data.product_requests || [];
+        const confList = data.conferences || [];
+
+        const prodHtml = reqList.map(pr => `
+            <div style="border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:8px;">
+                <div>
+                    <span style="display:inline-block;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:8.5px;font-weight:900;text-transform:uppercase;padding:2px 6px;border-radius:5px;">
+                        SOLICITADO POR ${pr.requested_by_name}
+                    </span>
+                    <p style="font-size:12px;font-weight:900;color:#0F172A;text-transform:uppercase;margin:5px 0 2px;line-height:1.3;word-break:break-word;">
+                        ${pr.raw_description}
+                    </p>
+                    <p style="font-size:10px;font-weight:700;color:#475569;margin:0;line-height:1.35;">
+                        NF: <strong>${pr.invoice_number || '-'}</strong> · ${pr.supplier || '-'} · Qtd: <strong>${pr.nf_qty} × ${pr.pack_factor} UN</strong>
+                    </p>
                 </div>
-                <div class="flex gap-1.5 pt-1">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;">
                     <button type="button" data-pr-register="${pr.id}" data-pr-ean="${pr.suggested_ean || ''}" data-pr-desc="${pr.raw_description}"
-                        class="flex-1 bg-[#124191] text-white text-[10px] font-black uppercase py-1.5 px-2 rounded active:scale-95">
+                        style="background:#124191;color:#FFFFFF;border:none;border-radius:8px;padding:9px 10px;font-size:10px;font-weight:900;text-transform:uppercase;cursor:pointer;">
                         + CADASTRAR PRODUTO
                     </button>
                     <button type="button" data-pr-discard="${pr.id}"
-                        class="bg-white border border-gray-300 text-gray-600 text-[10px] font-bold uppercase py-1.5 px-2 rounded active:scale-95">
+                        style="background:#FFFFFF;color:#475569;border:1px solid #CBD5E1;border-radius:8px;padding:9px 12px;font-size:10px;font-weight:800;text-transform:uppercase;cursor:pointer;">
                         DESCARTAR
                     </button>
                 </div>
             </div>
-        `).join('') || '<p class="text-[11px] text-gray-400">Nenhum produto novo pendente.</p>';
+        `).join('') || '<div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:10px;padding:12px;text-align:center;font-size:11px;font-weight:700;color:#64748B;">Nenhum produto novo pendente.</div>';
 
-        const confHtml = (data.conferences || []).map(cf => `
-            <div style="border:1px solid #BFDBFE;background:#EFF6FF;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-                    <span style="font-size:10px;font-weight:900;color:#124191;text-transform:uppercase;line-height:1.3;flex:1;min-width:0;word-break:break-word;">
-                        ${cf.supplier} · NF ${cf.invoice_number || 'S/N'}
-                    </span>
-                    <span style="font-size:9px;font-weight:800;color:#475569;background:#FFFFFF;border:1px solid #CBD5E1;padding:2px 6px;border-radius:6px;white-space:nowrap;flex-shrink:0;">
+        const confHtml = confList.map(cf => `
+            <div style="border:1.5px solid #93C5FD;background:#EFF6FF;border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding-bottom:8px;border-bottom:1px solid #DBEAFE;">
+                    <div style="min-width:0;flex:1;">
+                        <span style="display:inline-block;background:#124191;color:#FFFFFF;font-size:9px;font-weight:900;padding:2px 7px;border-radius:5px;text-transform:uppercase;">
+                            NF ${cf.invoice_number || 'S/N'}
+                        </span>
+                        <p style="font-size:11px;font-weight:900;color:#0F172A;text-transform:uppercase;margin:4px 0 0;line-height:1.3;word-break:break-word;">
+                            ${cf.supplier}
+                        </p>
+                    </div>
+                    <span style="font-size:9px;font-weight:800;color:#334155;background:#FFFFFF;border:1px solid #CBD5E1;padding:3px 7px;border-radius:6px;white-space:nowrap;flex-shrink:0;">
                         Por ${cf.submitted_by_name}
                     </span>
                 </div>
+
                 <div style="display:flex;flex-direction:column;gap:8px;">
                     ${(cf.items || []).map((it, idx) => `
-                        <div style="background:#FFFFFF;border:1px solid #DBEAFE;border-radius:10px;padding:9px;display:flex;flex-direction:column;gap:7px;">
-                            <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;">
-                                • <strong>${it.quantity || it.scanned || 0} UN</strong> — ${it.name || it.sku}
-                            </p>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                <div>
+                        <div style="background:#FFFFFF;border:1px solid #DBEAFE;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;flex:1;min-width:0;word-break:break-word;">
+                                    ${it.name || it.sku}
+                                </p>
+                                <span style="flex-shrink:0;background:#DBEAFE;color:#124191;font-size:10px;font-weight:900;padding:2px 7px;border-radius:6px;white-space:nowrap;">
+                                    ${it.quantity || it.scanned || 0} UN
+                                </span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;">
+                                <div style="min-width:0;">
                                     <label style="display:block;font-size:8.5px;font-weight:900;color:#64748B;text-transform:uppercase;margin-bottom:3px;">LOTE (OPC.)</label>
                                     <input type="text" data-cf-batch="${cf.id}:${idx}" value="${it.batch_code || ''}" placeholder="EX: L123"
-                                        style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:6px;padding:6px 8px;font-size:10px;font-weight:800;text-transform:uppercase;color:#0F172A;outline:none;">
+                                        style="width:100%;height:36px;box-sizing:border-box;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:7px;padding:0 9px;font-size:11px;font-weight:800;text-transform:uppercase;color:#0F172A;outline:none;">
                                 </div>
-                                <div>
+                                <div style="min-width:0;">
                                     <label style="display:block;font-size:8.5px;font-weight:900;color:#64748B;text-transform:uppercase;margin-bottom:3px;">VALIDADE</label>
                                     <input type="date" data-cf-exp="${cf.id}:${idx}" value="${it.expiration_date || ''}"
-                                        style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:6px;padding:5px 6px;font-size:10px;font-weight:800;color:#0F172A;outline:none;">
+                                        style="width:100%;height:36px;box-sizing:border-box;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:7px;padding:0 8px;font-size:11px;font-weight:800;color:#0F172A;outline:none;">
                                 </div>
                             </div>
                         </div>
                     `).join('')}
                 </div>
-                <div class="flex gap-1.5 pt-1">
+
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding-top:2px;">
                     <button type="button" data-cf-approve="${cf.id}"
-                        class="flex-1 bg-green-600 text-white text-[10px] font-black uppercase py-2 px-2 rounded shadow-sm active:scale-95">
+                        style="background:#16A34A;color:#FFFFFF;border:none;border-radius:9px;padding:11px 12px;font-size:10px;font-weight:900;text-transform:uppercase;box-shadow:0 2px 4px rgba(22,163,74,0.25);cursor:pointer;">
                         ✅ APROVAR & ARMAZENAR
                     </button>
                     <button type="button" data-cf-reject="${cf.id}"
-                        class="bg-white border border-red-200 text-red-600 text-[10px] font-bold uppercase py-2 px-2 rounded active:scale-95">
+                        style="background:#FFFFFF;color:#DC2626;border:1px solid #FECACA;border-radius:9px;padding:11px 12px;font-size:10px;font-weight:900;text-transform:uppercase;cursor:pointer;">
                         REJEITAR
                     </button>
                 </div>
             </div>
-        `).join('') || '<p class="text-[11px] text-gray-400">Nenhuma conferência aguardando armazenagem.</p>';
+        `).join('') || '<div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:10px;padding:12px;text-align:center;font-size:11px;font-weight:700;color:#64748B;">Nenhuma conferência aguardando armazenagem.</div>';
 
         modal.innerHTML = `
-            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden">
-                <div class="bg-[#124191] text-white p-3.5 flex justify-between items-center">
-                    <div>
-                        <h3 class="text-sm font-black uppercase">Fila do Estoquista / Armazenagem</h3>
-                        <p class="text-[10px] text-blue-200">Cadastros solicitados e entradas conferidas</p>
+            <div style="background:#FFFFFF;border-radius:16px;box-shadow:0 24px 48px rgba(15,23,42,0.4);width:100%;max-width:440px;max-height:88dvh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E2E8F0;">
+                <div style="background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0;">
+                    <div style="min-width:0;">
+                        <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:0.03em;">Fila do Estoquista / Armazenagem</h3>
+                        <p style="font-size:10px;color:#BFDBFE;margin:2px 0 0;">Cadastros solicitados e entradas conferidas</p>
                     </div>
-                    <button type="button" id="close-estoquista-queue" class="text-white font-black text-lg px-2">✕</button>
+                    <button type="button" id="close-estoquista-queue"
+                        style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#FFFFFF;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;">
+                        ✕
+                    </button>
                 </div>
-                <div class="p-3.5 overflow-y-auto space-y-4">
-                    <div>
-                        <h4 class="text-[10px] font-black uppercase text-gray-500 mb-1.5">1. Produtos Novos Solicitados</h4>
-                        <div class="space-y-2">${prodHtml}</div>
+
+                <div style="padding:14px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;-webkit-overflow-scrolling:touch;">
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <h4 style="font-size:10px;font-weight:900;text-transform:uppercase;color:#475569;margin:0;letter-spacing:0.04em;">
+                                1. Produtos Novos Solicitados (${reqList.length})
+                            </h4>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:8px;">${prodHtml}</div>
                     </div>
-                    <div>
-                        <h4 class="text-[10px] font-black uppercase text-gray-500 mb-1.5">2. Conferências para Dar Entrada</h4>
-                        <div class="space-y-2">${confHtml}</div>
+
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <h4 style="font-size:10px;font-weight:900;text-transform:uppercase;color:#475569;margin:0;letter-spacing:0.04em;">
+                                2. Conferências para Dar Entrada (${confList.length})
+                            </h4>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:10px;">${confHtml}</div>
                     </div>
                 </div>
             </div>
@@ -828,6 +860,9 @@ class KippeApplication {
         document.body.appendChild(modal);
 
         document.getElementById('close-estoquista-queue')?.addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
 
         modal.querySelectorAll('[data-pr-register]').forEach(btn => {
             btn.addEventListener('click', async () => {
