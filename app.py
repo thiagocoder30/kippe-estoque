@@ -2806,8 +2806,9 @@ def _call_gemini_fast(
     )
 
     attempts = [
-        ("gemini-flash-lite-latest", {"thinkingBudget": 0}),
-        ("gemini-2.5-flash", {"thinkingBudget": 0}),
+        ("gemini-3.8-flash", None),
+        ("gemini-3-flash-preview", {"thinkingLevel": "minimal"}),
+        ("gemini-flash-lite-latest", None),
     ]
 
     last_err = None
@@ -2864,11 +2865,11 @@ def _call_gemini_fast(
     if isinstance(secondary_res, dict) and ("items" in secondary_res or "supplier" in secondary_res):
         return secondary_res
 
+    extra = f" | Fallback: {secondary_diag}" if secondary_diag else ""
     if saw_overload:
-        extra = f" ({secondary_diag})" if secondary_diag else ""
         raise RuntimeError(f"Gemini congestionado (503){extra}. Suas fotos foram preservadas — tente novamente ou siga em Conferência Cega.")
     if last_err:
-        raise last_err
+        raise RuntimeError(f"{last_err}{extra}")
     raise RuntimeError("Não foi possível obter resposta da API Gemini.")
 
 
