@@ -2790,7 +2790,7 @@ def _call_gemini_fast(
         "- Cada linha da tabela tem colunas como: CÓD | DESCRIÇÃO | NCM | CST | CFOP | UN | QUANT. | V.UNIT | V.TOTAL.\n"
         "- NUNCA misture a quantidade, unidade ou embalagem de uma linha com a linha de cima ou de baixo.\n"
         "- Confira mentalmente se QUANT. × V.UNIT ≈ V.TOTAL da mesma linha.\n"
-        "- 'description': Copie a descrição completa da coluna DESCRIÇÃO, MANTENDO OBRIGATORIAMENTE gramatura, volume e multiplicador de caixa "
+        "- 'description': Copie a descrição INTEIRA da coluna DESCRIÇÃO desde a PRIMEIRA letra até a última (NUNCA corte o início como 'IOGURTE', 'IOG.', 'LEITE', 'QUEIJO'), MANTENDO OBRIGATORIAMENTE gramatura, volume e multiplicador de caixa "
         "(ex: 'MILHO CONSERVA 24X170G LATA STELLA DORO', 'BACON PALETA COM PELE FREE CARNE APX.11KG COD.251').\n"
         "- 'unit': Sigla exata da coluna UN / UNID daquela linha (ex: 'KG', 'CX', 'FD', 'UN', 'PCT', 'LT').\n"
         "- 'quantity': Número exato da coluna QUANT. / QTD daquela linha (mantenha decimais se houver, ex: 11.0 ou 11.45).\n"
@@ -2807,7 +2807,7 @@ def _call_gemini_fast(
 
     attempts = [
         ("gemini-3.8-flash", None),
-        ("gemini-3-flash-preview", {"thinkingLevel": "minimal"}),
+        ("gemini-3-flash-preview", {"thinkingLevel": "low"}),
         ("gemini-flash-lite-latest", None),
     ]
 
@@ -2925,7 +2925,7 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
     diag_notes = []
     groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
     if groq_key:
-        for g_model in ("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"):
+        for g_model in ("meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct"):
             try:
                 res = _call_openai_compatible_vision(
                     "Groq",
@@ -2963,45 +2963,38 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
 
 
 def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
-    """Prepara uma página da DANFE para envio ao Gemini.
-
-    Camadas de privacidade (LGPD):
-    - [BOTTOM] Corte físico: remove rodapé (impostos, totais, transporte, cobrança)
-    - [TOP] Mascaramento cirúrgico: pinta de preto a faixa da Chave de Acesso (44 dígitos),
-      que permitiria a qualquer um consultar a NF inteira no SEFAZ. O resto do cabeçalho
-      (nome do fornecedor, número da NF) permanece visível para o OCR.
-    - [MIDDLE] Prompt restritivo: IA instruída a ignorar CNPJ, CPF, endereços e valores.
-    """
-    image = img.convert('L')
+    """Prepara uma página da DANFE para envio à IA com orientação EXIF corrigida, alta nitidez e LGPD."""
+    from PIL import ImageEnhance
+    image = ImageOps.exif_transpose(img).convert('L')
     width, height = image.size
 
-    # ─── 1. CORTE DO RODAPÉ (impostos, totais, transporte) ───
-    cut_ratio = 0.88 if is_last_page else 0.96
-    bottom_cut = int(height * cut_ratio)
-    if bottom_cut > 200:
-        image = image.crop((0, 0, width, bottom_cut))
+    # ─── 1. CORTE DO RODAPÉ (apenas em retrato para não cortar bordas laterais da tabela) ───
+    if height >= width:
+        cut_ratio = 0.90 if is_last_page else 0.97
+        bottom_cut = int(height * cut_ratio)
+        if bottom_cut > 200:
+            image = image.crop((0, 0, width, bottom_cut))
 
-    # ─── 2. MASCARAMENTO DA CHAVE DE ACESSO ───
-    # A Chave de Acesso (44 dígitos) fica no canhoto, canto superior direito,
-    # tipicamente entre 2% e 8% da altura. Pintamos uma faixa preta sobre ela.
+    # ─── 2. MASCARAMENTO DA CHAVE DE ACESSO (44 dígitos) ───
     draw = ImageDraw.Draw(image)
-    height_now = image.size[1]
-    top_band_top = int(height_now * 0.02)
-    top_band_bottom = int(height_now * 0.08)
-    if top_band_bottom > top_band_top + 10:
-        # Pintar apenas o quadrante direito (onde a chave aparece na DANFE padrão)
-        draw.rectangle(
-            [(int(width * 0.55), top_band_top), (width, top_band_bottom)],
-            fill=0,  # preto na escala de cinza
-        )
+    w_now, h_now = image.size
+    if h_now >= w_now:
+        top_band_top = int(h_now * 0.015)
+        top_band_bottom = int(h_now * 0.075)
+        if top_band_bottom > top_band_top + 10:
+            draw.rectangle(
+                [(int(w_now * 0.55), top_band_top), (w_now, top_band_bottom)],
+                fill=0,
+            )
 
-    # ─── 3. NORMALIZAÇÃO ───
-    image = ImageOps.autocontrast(image, cutoff=1)
+    # ─── 3. CONTRASTE, NITIDEZ E ALTA RESOLUÇÃO PARA TABELA DANFE ───
+    image = ImageOps.autocontrast(image, cutoff=0.5)
+    image = ImageEnhance.Sharpness(image).enhance(1.35)
     resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
-    image.thumbnail((1550, 1550), resample_filter)
+    image.thumbnail((2200, 2200), resample_filter)
 
     buf = io.BytesIO()
-    image.save(buf, format='JPEG', quality=80, optimize=True)
+    image.save(buf, format='JPEG', quality=88, optimize=True)
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 
