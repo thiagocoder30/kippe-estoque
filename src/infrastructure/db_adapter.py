@@ -74,6 +74,10 @@ def translate_sql_to_postgres(sql: str) -> tuple[str, dict]:
     raw = sql.strip()
     meta: dict[str, Any] = {}
 
+    # 0. Transacoes SQLite (BEGIN IMMEDIATE/EXCLUSIVE/DEFERRED -> BEGIN)
+    if re.match(r"^BEGIN\s+(?:IMMEDIATE|EXCLUSIVE|DEFERRED)\s*;?$", raw, re.IGNORECASE):
+        return "BEGIN", meta
+
     # 1. PRAGMA table_info(tabela)
     m_pragma = re.match(r"^PRAGMA\s+table_info\(\s*([a-zA-Z0-9_]+)\s*\)\s*;?$", raw, re.IGNORECASE)
     if m_pragma:
