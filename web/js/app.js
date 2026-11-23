@@ -351,9 +351,10 @@ class KippeApplication {
                 'auth-operator-id'
             );
 
-        modal?.classList.remove(
-            'hidden'
-        );
+        if (modal) {
+            modal.style.zIndex = '9995';
+            modal.classList.remove('hidden');
+        }
 
         if (error) {
             error.textContent =
@@ -869,17 +870,11 @@ class KippeApplication {
                 const reqId = btn.getAttribute('data-pr-register');
                 const ean = btn.getAttribute('data-pr-ean') || '';
                 const desc = btn.getAttribute('data-pr-desc') || '';
+                this._pendingProductRequest = { reqId, desc };
                 modal.remove();
                 await this.openNewProductRegistration(ean);
                 const nameInput = document.getElementById('new-product-name');
                 if (nameInput && !nameInput.value) nameInput.value = desc;
-                await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ action: 'CADASTRADO', name: desc, ean })
-                }).catch(() => {});
-                this.refreshEstoquistaPendingQueue();
             });
         });
 
@@ -4423,6 +4418,23 @@ class KippeApplication {
                         throw new Error(
                             'Backend não retornou o SKU gerado.'
                         );
+                    }
+
+                    if (this._pendingProductRequest) {
+                        const pendingReq = this._pendingProductRequest;
+                        this._pendingProductRequest = null;
+                        await fetch(`/api/receiving/pending/${pendingReq.reqId}/resolve-product`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                action: 'CADASTRADO',
+                                created_sku: product.id,
+                                name: product.name || name,
+                                ean: product.ean || ean
+                            })
+                        }).catch(() => {});
+                        this.refreshEstoquistaPendingQueue();
                     }
 
                     const successName =

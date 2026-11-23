@@ -358,6 +358,7 @@ export class ScannerManager {
         }
 
         this.status = 'STARTING';
+        this.modal.style.zIndex = '9999';
         this.modal.classList.remove('hidden');
 
         try {
