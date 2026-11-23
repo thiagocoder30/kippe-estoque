@@ -1853,8 +1853,82 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
         });
     };
 
+    const showOcrContingencyModal = (errMsg, photoItems) => {
+        document.getElementById('kippe-ocr-contingency-modal')?.remove();
+        const ov = document.createElement('div');
+        ov.id = 'kippe-ocr-contingency-modal';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(15,23,42,0.82);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+        const count = Array.isArray(photoItems) ? photoItems.length : 0;
+
+        ov.innerHTML = `
+            <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 24px 48px rgba(15,23,42,0.35);width:100%;max-width:410px;overflow:hidden;border:1px solid #E2E8F0;">
+                <div style="background:#B45309;color:#FFFFFF;padding:14px 16px;border-bottom:3px solid #D9232E;display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <h3 style="margin:0;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;">Contingência de Leitura (IA Indisponível)</h3>
+                        <p style="margin:3px 0 0 0;font-size:10px;color:#FEF3C7;font-weight:600;">${count > 0 ? `${count} página(s) preservada(s) na fila` : 'Continuidade operacional de doca'}</p>
+                    </div>
+                </div>
+                <div style="padding:16px;">
+                    <p style="margin:0 0 12px 0;font-size:11px;line-height:1.5;color:#334155;font-weight:600;">
+                        ${String(errMsg || 'Instabilidade temporária no servidor de IA.')}
+                    </p>
+                    <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:12px;padding:11px 12px;margin-bottom:14px;">
+                        <p style="margin:0;font-size:10px;font-weight:900;text-transform:uppercase;color:#124191;">Não pare a operação na doca:</p>
+                        <p style="margin:4px 0 0 0;font-size:10px;line-height:1.45;color:#475569;">
+                            Você pode <b>tentar ler novamente</b> agora ou ativar a <b>Conferência Cega</b>: a foto da NF fica anexada e você já sai bipando as caixas fisicamente.
+                        </p>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <button type="button" id="ocr-cont-retry"
+                            style="width:100%;padding:12px;border-radius:12px;border:none;background:#124191;color:#FFFFFF;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;">
+                            TENTAR LER NOVAMENTE AGORA
+                        </button>
+                        <button type="button" id="ocr-cont-blind"
+                            style="width:100%;padding:12px;border-radius:12px;border:none;background:#059669;color:#FFFFFF;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;">
+                            CONFERÊNCIA CEGA (BIPAR PRODUTOS COM FOTO ANEXA)
+                        </button>
+                        <button type="button" id="ocr-cont-tray"
+                            style="width:100%;padding:10px;border-radius:12px;border:1px solid #CBD5E1;background:#FFFFFF;color:#475569;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;">
+                            VOLTAR À BANDEJA DE FOTOS
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(ov);
+
+        document.getElementById('ocr-cont-retry')?.addEventListener('click', () => {
+            ov.remove();
+            if (nfPhotoQueue.length > 0) {
+                uploadNfPhotoBatch([...nfPhotoQueue]);
+            } else {
+                renderMultiPhotoTray();
+            }
+        });
+
+        document.getElementById('ocr-cont-blind')?.addEventListener('click', () => {
+            ov.remove();
+            state.blind_receiving = true;
+            state.attached_nf_pages = (state.attached_nf_pages || 0) + count;
+            clearNfPhotoQueue();
+            save();
+            render();
+            const scanInput = document.getElementById('conf-scan-input') || document.querySelector('input[placeholder*="EAN"]');
+            if (scanInput) scanInput.focus();
+            window.kippeModalAlert?.(
+                `Modo Conferência Cega ativado (${state.attached_nf_pages} página(s) da NF anexada(s)). Preencha Fornecedor / Nº NF e bipe os produtos fisicamente.`,
+                'CONFERÊNCIA CEGA ATIVA'
+            );
+        });
+
+        document.getElementById('ocr-cont-tray')?.addEventListener('click', () => {
+            ov.remove();
+            renderMultiPhotoTray();
+        });
+    };
+
     const uploadNfPhotoBatch = async (photoItems) => {
-        if (!photoItems || photoItems.length === 0) return;
+        if (!photoItems || photoItems.length === 0) return false;
         setOcrLoading(true, 'camera');
         const total = photoItems.length;
         ocrProgress.start(total > 1 ? `Enviando ${total} fotos da NF para IA...` : 'Lendo foto da NF...');
@@ -1870,9 +1944,12 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
 
             const data = await consumeOcrStream(res);
             await appendExtractedItems(data);
+            clearNfPhotoQueue();
+            return true;
         } catch (err) {
-            ocrProgress.fail('Falha na leitura das fotos');
-            alert('❌ Erro ao ler NF: ' + err.message);
+            ocrProgress.fail('IA temporariamente indisponível — fotos preservadas');
+            showOcrContingencyModal(err.message, photoItems);
+            return false;
         } finally {
             setOcrLoading(false);
         }
@@ -2003,15 +2080,8 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
         document.getElementById('nf-tray-submit')?.addEventListener('click', async () => {
             if (nfPhotoQueue.length === 0) return;
             const batch = [...nfPhotoQueue];
-            nfPhotoQueue = [];
             modal.remove();
-            try {
-                await uploadNfPhotoBatch(batch);
-            } finally {
-                batch.forEach(item => {
-                    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-                });
-            }
+            await uploadNfPhotoBatch(batch);
         });
     };
 

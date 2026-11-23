@@ -2863,11 +2863,91 @@ def _call_gemini_fast(
             time.sleep(1.0)
             continue
 
+    secondary_res = _try_secondary_vision_providers(prompt, media_b64, mime_type)
+    if isinstance(secondary_res, dict) and ("items" in secondary_res or "supplier" in secondary_res):
+        return secondary_res
+
     if saw_overload:
-        raise RuntimeError("Servidores de IA da Google temporariamente congestionados (503). Aguarde 5 segundos e toque em Processar novamente.")
+        raise RuntimeError("Servidores de IA temporariamente congestionados (503). Suas fotos foram preservadas — tente novamente ou siga em Conferência Cega.")
     if last_err:
         raise last_err
     raise RuntimeError("Não foi possível obter resposta da API Gemini.")
+
+
+
+def _call_openai_compatible_vision(
+    provider_name: str,
+    endpoint_url: str,
+    api_key: str,
+    model_name: str,
+    prompt: str,
+    media_b64: str,
+    mime_type: str,
+) -> dict:
+    payload = {
+        "model": model_name,
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "response_format": {"type": "json_object"},
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{media_b64}"}},
+            ],
+        }],
+    }
+    req = urllib.request.Request(
+        endpoint_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=24) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    texto = result["choices"][0]["message"]["content"].strip()
+    if texto.startswith("```"):
+        texto = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto, flags=re.IGNORECASE).strip()
+    return json.loads(texto)
+
+
+def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str):
+    if mime_type == "application/pdf":
+        return None
+    groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if groq_key:
+        for g_model in ("meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-90b-vision-preview"):
+            try:
+                return _call_openai_compatible_vision(
+                    "Groq",
+                    "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)",
+                    groq_key,
+                    g_model,
+                    prompt,
+                    media_b64,
+                    mime_type,
+                )
+            except Exception:
+                continue
+
+    mistral_key = (os.getenv("MISTRAL_API_KEY") or "").strip()
+    if mistral_key:
+        try:
+            return _call_openai_compatible_vision(
+                "Mistral",
+                "[https://api.mistral.ai/v1/chat/completions](https://api.mistral.ai/v1/chat/completions)",
+                mistral_key,
+                "pixtral-12b-2409",
+                prompt,
+                media_b64,
+                mime_type,
+            )
+        except Exception:
+            pass
+    return None
 
 
 def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
