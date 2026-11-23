@@ -4312,6 +4312,186 @@ def save_catalog_alias():
     return jsonify({'ok': True, 'sku': sku, 'pack_factor': pack_factor}), 200
 
 
+
+@app.route('/api/catalog/batch-match', methods=['POST'])
+def catalog_batch_match():
+    data = request.json or {}
+    items = data.get('items') or []
+    supplier = (data.get('supplier') or '').strip()
+    if not items or not isinstance(items, list):
+        return jsonify({'matches': []})
+
+    sup_norm = _norm_catalog_text(supplier)
+    conn = _get_kippe_db()
+    historical_skus = set()
+    alias_rows = []
+    sku_defaults = {}
+    try:
+        if sup_norm:
+            for r in conn.execute(
+                "SELECT DISTINCT sku FROM conference_audit_log WHERE supplier_norm = ?",
+                (sup_norm,)
+            ).fetchall():
+                historical_skus.add(str(r['sku']))
+            for r in conn.execute(
+                "SELECT DISTINCT sku FROM sku_aliases WHERE supplier_norm = ?",
+                (sup_norm,)
+            ).fetchall():
+                historical_skus.add(str(r['sku']))
+
+        alias_rows = conn.execute(
+            "SELECT alias_norm, supplier_norm, sku, ean, catalog_name, pack_factor FROM sku_aliases"
+        ).fetchall()
+        sku_defaults = {
+            str(r['sku']): int(r['pack_factor'] or 1)
+            for r in conn.execute("SELECT sku, pack_factor FROM sku_pack_defaults").fetchall()
+        }
+    finally:
+        conn.close()
+
+    # Carrega o catálogo uma única vez na memória para cruzar todos os itens da NF sem N+1 queries
+    all_native_prods = []
+    try:
+        res_all = container.product_suggestion_use_case.execute(query="")
+        raw_all = res_all.value if hasattr(res_all, 'value') else res_all
+        for p in (raw_all or []):
+            d = _extract_domain_product(p)
+            if d:
+                all_native_prods.append({
+                    **d,
+                    '_haystack': _norm_catalog_text(f"{d['sku']} {d.get('ean', '')} {d.get('name', '')} {d.get('brand', '')}"),
+                    '_measures': set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|M)\b', (d.get('name', '')).upper().replace(',', '.'))),
+                    '_sup_norm': _norm_catalog_text(d.get('last_supplier', '')),
+                })
+    except Exception:
+        all_native_prods = []
+
+    matches = []
+    for raw_q in items:
+        q = str(raw_q or '').strip()
+        if not q:
+            matches.append(None)
+            continue
+
+        q_norm = _norm_catalog_text(q)
+        q_tokens = [t for t in q_norm.split() if len(t) >= 2] or [q_norm]
+        q_measures = set(re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|M)\b', q.upper().replace(',', '.')))
+        results_by_sku = {}
+
+        for ar in alias_rows:
+            a_norm = ar['alias_norm'] or ''
+            if not a_norm:
+                continue
+            is_exact_alias = (a_norm == q_norm)
+            matched_toks = sum(1 for t in q_tokens if t in a_norm)
+            if is_exact_alias or matched_toks == len(q_tokens):
+                sku = str(ar['sku'])
+                sup_bonus = 0.25 if (sup_norm and ar['supplier_norm'] == sup_norm) else 0.0
+                score = (2.0 if is_exact_alias else 1.2) + sup_bonus
+                if sku not in results_by_sku or score > results_by_sku[sku]['score']:
+                    results_by_sku[sku] = {
+                        'id': sku,
+                        'sku': sku,
+                        'ean': str(ar['ean'] or ''),
+                        'name': str(ar['catalog_name'] or sku),
+                        'pack_factor': int(ar['pack_factor'] or 1),
+                        'alias_match': is_exact_alias,
+                        'score': round(score, 3),
+                    }
+
+        for prod in all_native_prods:
+            sku = prod['sku']
+            haystack = prod['_haystack']
+            matched = sum(1 for t in q_tokens if t in haystack)
+            if matched > 0 or q.upper() in sku.upper() or (prod.get('ean') and q in prod['ean']):
+                base_score = matched / max(1, len(q_tokens))
+                p_measures = prod['_measures']
+                if q_measures and p_measures and not (q_measures & p_measures):
+                    base_score -= 0.45
+                sup_match = (sku in historical_skus) or (bool(sup_norm) and sup_norm in prod['_sup_norm'])
+                score = base_score + (0.35 if sup_match else 0.0)
+                if sku not in results_by_sku:
+                    results_by_sku[sku] = {
+                        'id': sku,
+                        'sku': sku,
+                        'ean': prod.get('ean', ''),
+                        'name': prod.get('name', sku),
+                        'pack_factor': 1,
+                        'alias_match': False,
+                        'score': round(score, 3),
+                    }
+
+        if not results_by_sku:
+            matches.append(None)
+            continue
+
+        for item in results_by_sku.values():
+            s_key = item['sku']
+            if int(item.get('pack_factor') or 1) <= 1 and sku_defaults.get(s_key, 1) > 1:
+                item['pack_factor'] = sku_defaults[s_key]
+
+        best = sorted(results_by_sku.values(), key=lambda x: (-x['score'], x['name']))[0]
+        matches.append(best)
+
+    return jsonify({'matches': matches})
+
+
+@app.route('/api/receiving/requests/product/batch', methods=['POST'])
+def create_product_registration_requests_batch():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    op_id, op_name, _ = _get_active_operator_context()
+    data = request.json or {}
+    req_items = data.get('items') or []
+    if not req_items or not isinstance(req_items, list):
+        return jsonify({'ok': True, 'created': 0}), 200
+
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    conn = _get_kippe_db()
+    created_count = 0
+    try:
+        for item in req_items:
+            raw_desc = str(item.get('raw_description') or item.get('description') or '').strip().upper()
+            if not raw_desc:
+                continue
+            suggested_ean = str(item.get('suggested_ean') or item.get('ean') or '').strip()
+            supplier = str(item.get('supplier') or '').strip().upper()
+            invoice_number = str(item.get('invoice_number') or '').strip()
+            nf_qty = max(1, int(float(item.get('nf_qty') or 1)))
+            pack_factor = max(1, int(float(item.get('pack_factor') or 1)))
+            batch_code = str(item.get('batch_code') or '').strip().upper()
+            expiration_date = str(item.get('expiration_date') or '').strip()
+
+            existing = conn.execute(
+                "SELECT id FROM product_registration_requests WHERE status = 'PENDENTE' AND raw_description = ? AND supplier = ? AND invoice_number = ? LIMIT 1",
+                (raw_desc, supplier, invoice_number),
+            ).fetchone()
+            if existing:
+                continue
+
+            conn.execute(
+                """
+                INSERT INTO product_registration_requests (
+                    raw_description, suggested_ean, supplier, invoice_number,
+                    nf_qty, pack_factor, batch_code, expiration_date,
+                    requested_by_id, requested_by_name, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', ?)
+                """,
+                (
+                    raw_desc, suggested_ean, supplier, invoice_number,
+                    nf_qty, pack_factor, batch_code, expiration_date,
+                    op_id or 'SYSTEM', op_name or 'Conferente', now_iso,
+                ),
+            )
+            created_count += 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({'ok': True, 'created': created_count}), 201
+
+
 @app.route('/api/catalog/search', methods=['GET'])
 def catalog_search():
     q = (request.args.get('q') or '').strip()

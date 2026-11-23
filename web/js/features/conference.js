@@ -1211,15 +1211,14 @@ ${missingExp[0].name}`,
       }
     }
 
-    if (unlinkedItems.length > 0) {
-      for (const uItem of unlinkedItems) {
-        if (uItem.pending_registration) continue;
-        try {
-          await fetch('/api/receiving/requests/product', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
+    const pendingToQueue = unlinkedItems.filter(u => !u.pending_registration);
+    const batchReqPromise = pendingToQueue.length > 0
+      ? fetch('/api/receiving/requests/product/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            items: pendingToQueue.map(uItem => ({
               raw_description: uItem.raw_ocr_name || uItem.name,
               suggested_ean: '',
               supplier: state.supplier || '',
@@ -1228,20 +1227,23 @@ ${missingExp[0].name}`,
               pack_factor: uItem.pack_factor || 1,
               batch_code: uItem.batch_code || '',
               expiration_date: uItem.expiration_date || ''
-            })
-          });
-          uItem.pending_registration = true;
-        } catch (_) {}
-      }
-      save();
-    }
+            }))
+          })
+        }).then(r => {
+          if (r.ok) {
+            pendingToQueue.forEach(u => { u.pending_registration = true; });
+            save();
+          }
+        }).catch(() => {})
+      : Promise.resolve();
 
     const invoicesPayload = Array.isArray(state.invoices) && state.invoices.length > 0
       ? state.invoices
       : (state.invoice_number ? [state.invoice_number] : []);
 
     try {
-      const res = await fetch('/api/conference/finalize', {
+      const [res] = await Promise.all([
+        fetch('/api/conference/finalize', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -1253,7 +1255,9 @@ ${missingExp[0].name}`,
           divergences,
           force: forceDuplicate,
         }),
-      });
+      }),
+        batchReqPromise,
+      ]);
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 409 && data.duplicate) {
@@ -1544,24 +1548,43 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
         const rawItems = Array.isArray(data.items) ? data.items : [];
         const learnedMap = loadLearnedMap();
 
-        // Dispara todas as buscas de catálogo em paralelo (elimina cascata sequencial na nuvem)
-        const searchPromises = rawItems.map((item) => {
+        // Consulta o catálogo em lote único (elimina gargalo N+1 na nuvem)
+        const unlearnedIndices = [];
+        const unlearnedDescriptions = [];
+        rawItems.forEach((item, idx) => {
             const normKey = normalizeDesc(item.description);
             const learned = learnedMap[normKey];
-            if (learned && learned.sku) {
-                return Promise.resolve(null);
+            if (!(learned && learned.sku)) {
+                unlearnedIndices.push(idx);
+                unlearnedDescriptions.push(item.description);
             }
-            return fetch(
-                `/api/catalog/search?q=${encodeURIComponent(item.description)}&supplier=${encodeURIComponent(effectiveSupplier)}`,
-                { credentials: 'same-origin' }
-            )
-                .then(r => (r.ok ? r.json() : null))
-                .catch(() => null);
         });
+
+        const batchMatchPromise = unlearnedDescriptions.length > 0
+            ? fetch('/api/catalog/batch-match', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    supplier: effectiveSupplier,
+                    items: unlearnedDescriptions,
+                }),
+            })
+                .then(r => (r.ok ? r.json() : { matches: [] }))
+                .then(payload => {
+                    const arr = new Array(rawItems.length).fill(null);
+                    const matchedList = Array.isArray(payload.matches) ? payload.matches : [];
+                    unlearnedIndices.forEach((origIdx, mIdx) => {
+                        arr[origIdx] = matchedList[mIdx] ? [matchedList[mIdx]] : null;
+                    });
+                    return arr;
+                })
+                .catch(() => new Array(rawItems.length).fill(null))
+            : Promise.resolve(new Array(rawItems.length).fill(null));
 
         const [chkData, searchResults] = await Promise.all([
             dupPromise,
-            Promise.all(searchPromises),
+            batchMatchPromise,
         ]);
 
         if (incomingInvoice) {
@@ -1865,57 +1888,78 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
         }
 
         const count = nfPhotoQueue.length;
+        const svgCam = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>`;
+        const svgGal = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 15l-5-5L5 21"/></svg>`;
+        const svgScanDoc = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+
         const thumbsHtml = count > 0
             ? nfPhotoQueue.map((item, idx) => `
-                <div class="relative rounded-xl overflow-hidden border-2 border-blue-200 bg-gray-100 aspect-[3/4] shadow-sm">
+                <div class="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[3/4] shadow-sm">
                     <img src="${item.previewUrl}" alt="Página ${idx + 1}" class="w-full h-full object-cover">
-                    <span class="absolute top-1.5 left-1.5 bg-[#124191] text-white text-[9px] font-black px-2 py-0.5 rounded shadow">
+                    <div class="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-slate-900/60 to-transparent"></div>
+                    <span class="absolute top-1.5 left-1.5 bg-[#124191] text-white text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md shadow-sm">
                         PÁG. ${idx + 1}
                     </span>
-                    <button type="button" data-remove-nf-page="${idx}"
-                        class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-600 text-white text-xs font-black flex items-center justify-center shadow active:scale-90">
-                        ✕
+                    <button type="button" data-remove-nf-page="${idx}" aria-label="Remover página ${idx + 1}"
+                        class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/95 text-[#D9232E] border border-red-200 flex items-center justify-center shadow-sm active:scale-90">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
             `).join('')
-            : `<div class="col-span-3 py-8 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                    <p class="text-xs font-black uppercase text-gray-500">Nenhuma página capturada</p>
-                    <p class="text-[10px] mt-1">Tire fotos em sequência ou selecione várias da galeria</p>
+            : `<div class="col-span-3 py-9 px-4 text-center bg-slate-50/70 border border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 text-[#124191] flex items-center justify-center mb-2 border border-blue-100">
+                        ${svgScanDoc}
+                    </div>
+                    <p class="text-[11px] font-black uppercase tracking-wide text-slate-700">Nenhuma página anexada</p>
+                    <p class="text-[10px] text-slate-500 mt-1 max-w-[230px] leading-relaxed">Capture cada folha da DANFE em sequência ou selecione múltiplas imagens da galeria.</p>
                </div>`;
 
         modal.innerHTML = `
-            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
-                <div class="bg-[#124191] text-white p-3.5 flex justify-between items-center">
-                    <div>
-                        <h3 class="text-sm font-black uppercase">Fotos da Nota Fiscal</h3>
-                        <p class="text-[10px] text-blue-200">${count} página(s) na fila · Suporta várias páginas</p>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden border border-slate-200">
+                <div class="bg-[#124191] text-white px-4 py-3.5 flex justify-between items-center border-b-2 border-[#D9232E]">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center text-white">
+                            ${svgScanDoc}
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-black uppercase tracking-wider leading-tight">Digitalização de Nota Fiscal</h3>
+                            <p class="text-[10px] text-blue-200 font-semibold mt-0.5">
+                                ${count === 0 ? 'Pronto para captura multi-página' : `${count} ${count === 1 ? 'página na fila' : 'páginas na fila'} · Ordenado por captura`}
+                            </p>
+                        </div>
                     </div>
-                    <button type="button" id="nf-tray-close" class="text-white font-black text-lg px-2">✕</button>
+                    <button type="button" id="nf-tray-close" aria-label="Fechar"
+                        class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center active:scale-90">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
                 </div>
 
-                <div class="p-3 grid grid-cols-2 gap-2 bg-slate-50 border-b border-gray-200">
+                <div class="p-3 grid grid-cols-2 gap-2.5 bg-slate-50 border-b border-slate-200">
                     <button type="button" id="nf-tray-cam-btn"
-                        class="bg-[#124191] text-white rounded-xl py-2.5 px-3 text-[10px] font-black uppercase shadow-sm active:scale-95 flex items-center justify-center gap-1.5">
-                        📸 ${count > 0 ? '+ PRÓXIMA PÁGINA' : 'TIRAR FOTO'}
+                        class="bg-[#124191] text-white rounded-xl py-2.5 px-3 text-[10px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                        ${svgCam}
+                        <span>${count > 0 ? 'NOVA PÁGINA' : 'CÂMERA'}</span>
                     </button>
                     <button type="button" id="nf-tray-gal-btn"
-                        class="bg-white border-2 border-[#124191] text-[#124191] rounded-xl py-2.5 px-3 text-[10px] font-black uppercase active:scale-95 flex items-center justify-center gap-1.5">
-                        🖼️ GALERIA (VÁRIAS)
+                        class="bg-white border border-slate-300 text-[#124191] rounded-xl py-2.5 px-3 text-[10px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                        ${svgGal}
+                        <span>GALERIA</span>
                     </button>
                 </div>
 
-                <div class="p-3 overflow-y-auto grid grid-cols-3 gap-2.5 flex-1">
+                <div class="p-3.5 overflow-y-auto grid grid-cols-3 gap-2.5 flex-1 bg-white">
                     ${thumbsHtml}
                 </div>
 
-                <div class="p-3 border-t border-gray-200 bg-white flex gap-2">
+                <div class="p-3.5 border-t border-slate-200 bg-slate-50 flex items-center gap-2.5">
                     <button type="button" id="nf-tray-cancel"
-                        class="px-3.5 py-3 rounded-xl border border-gray-300 text-gray-600 text-[10px] font-black uppercase active:scale-95">
+                        class="px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-600 text-[10px] font-black uppercase tracking-wider active:scale-95">
                         CANCELAR
                     </button>
                     <button type="button" id="nf-tray-submit" ${count === 0 ? 'disabled' : ''}
-                        class="flex-1 py-3 rounded-xl bg-green-600 disabled:bg-gray-300 text-white text-xs font-black uppercase shadow-md active:scale-95">
-                        🚀 LER ${count} PÁGINA(S) COM IA
+                        class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 disabled:bg-slate-300 disabled:text-slate-500 text-white text-[11px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                        ${svgScanDoc}
+                        <span>${count > 0 ? `PROCESSAR ${count} ${count === 1 ? 'PÁGINA' : 'PÁGINAS'}` : 'AGUARDANDO PÁGINAS'}</span>
                     </button>
                 </div>
             </div>
