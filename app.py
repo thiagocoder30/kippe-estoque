@@ -2963,19 +2963,17 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
 
 
 def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
-    """Prepara uma página da DANFE para envio à IA com orientação EXIF corrigida, alta nitidez e LGPD."""
+    """Prepara uma pagina da DANFE para envio a IA com orientacao EXIF corrigida, alta nitidez e LGPD."""
     from PIL import ImageEnhance
     image = ImageOps.exif_transpose(img).convert('L')
     width, height = image.size
 
-    # ─── 1. CORTE DO RODAPÉ (apenas em retrato para não cortar bordas laterais da tabela) ───
     if height >= width:
         cut_ratio = 0.90 if is_last_page else 0.97
         bottom_cut = int(height * cut_ratio)
         if bottom_cut > 200:
             image = image.crop((0, 0, width, bottom_cut))
 
-    # ─── 2. MASCARAMENTO DA CHAVE DE ACESSO (44 dígitos) ───
     draw = ImageDraw.Draw(image)
     w_now, h_now = image.size
     if h_now >= w_now:
@@ -2987,7 +2985,6 @@ def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
                 fill=0,
             )
 
-    # ─── 3. CONTRASTE, NITIDEZ E ALTA RESOLUÇÃO PARA TABELA DANFE ───
     image = ImageOps.autocontrast(image, cutoff=0.5)
     image = ImageEnhance.Sharpness(image).enhance(1.35)
     resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
