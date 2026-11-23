@@ -1888,77 +1888,87 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
         }
 
         const count = nfPhotoQueue.length;
-        const svgCam = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>`;
-        const svgGal = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 15l-5-5L5 21"/></svg>`;
-        const svgScanDoc = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+        const svgCam = `<svg style="width:16px;height:16px;min-width:16px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>`;
+        const svgGal = `<svg style="width:16px;height:16px;min-width:16px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 15l-5-5L5 21"/></svg>`;
+        const svgDoc = `<svg style="width:18px;height:18px;min-width:18px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+        const svgClose = `<svg style="width:15px;height:15px;min-width:15px;flex-shrink:0;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`;
 
-        const thumbsHtml = count > 0
-            ? nfPhotoQueue.map((item, idx) => `
-                <div class="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[3/4] shadow-sm">
-                    <img src="${item.previewUrl}" alt="Página ${idx + 1}" class="w-full h-full object-cover">
-                    <div class="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-slate-900/60 to-transparent"></div>
-                    <span class="absolute top-1.5 left-1.5 bg-[#124191] text-white text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md shadow-sm">
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9992;background:rgba(15,23,42,0.82);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;';
+
+        const bodyHtml = count > 0
+            ? `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">` +
+              nfPhotoQueue.map((item, idx) => `
+                <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid #CBD5E1;background:#F1F5F9;aspect-ratio:3/4;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <img src="${item.previewUrl}" alt="Página ${idx + 1}" style="width:100%;height:100%;object-fit:cover;display:block;">
+                    <div style="position:absolute;inset:0 0 auto 0;height:28px;background:linear-gradient(to bottom,rgba(15,23,42,0.65),transparent);"></div>
+                    <span style="position:absolute;top:6px;left:6px;background:#124191;color:#FFFFFF;font-size:9px;font-weight:900;letter-spacing:0.05em;padding:2px 7px;border-radius:6px;">
                         PÁG. ${idx + 1}
                     </span>
                     <button type="button" data-remove-nf-page="${idx}" aria-label="Remover página ${idx + 1}"
-                        class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/95 text-[#D9232E] border border-red-200 flex items-center justify-center shadow-sm active:scale-90">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        style="position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:9999px;background:rgba(255,255,255,0.95);color:#D9232E;border:1px solid #FECACA;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.12);">
+                        <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
-            `).join('')
-            : `<div class="col-span-3 py-9 px-4 text-center bg-slate-50/70 border border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center">
-                    <div class="w-10 h-10 rounded-full bg-blue-50 text-[#124191] flex items-center justify-center mb-2 border border-blue-100">
-                        ${svgScanDoc}
+              `).join('') + `</div>`
+            : `<div style="padding:28px 18px;text-align:center;background:#F8FAFC;border:1.5px dashed #CBD5E1;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                    <div style="width:42px;height:42px;border-radius:9999px;background:#EFF6FF;color:#124191;border:1px solid #DBEAFE;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
+                        ${svgDoc}
                     </div>
-                    <p class="text-[11px] font-black uppercase tracking-wide text-slate-700">Nenhuma página anexada</p>
-                    <p class="text-[10px] text-slate-500 mt-1 max-w-[230px] leading-relaxed">Capture cada folha da DANFE em sequência ou selecione múltiplas imagens da galeria.</p>
+                    <p style="margin:0;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.04em;color:#1E293B;">
+                        Nenhuma página anexada
+                    </p>
+                    <p style="margin:6px 0 0 0;font-size:10px;line-height:1.45;color:#64748B;max-width:250px;">
+                        Capture cada folha da DANFE em sequência ou selecione múltiplas imagens da galeria.
+                    </p>
                </div>`;
 
         modal.innerHTML = `
-            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden border border-slate-200">
-                <div class="bg-[#124191] text-white px-4 py-3.5 flex justify-between items-center border-b-2 border-[#D9232E]">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center text-white">
-                            ${svgScanDoc}
+            <div style="background:#FFFFFF;border-radius:18px;box-shadow:0 24px 48px rgba(15,23,42,0.35);width:100%;max-width:420px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E2E8F0;">
+                <div style="background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:3px solid #D9232E;">
+                    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                        <div style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            ${svgDoc}
                         </div>
-                        <div>
-                            <h3 class="text-xs font-black uppercase tracking-wider leading-tight">Digitalização de Nota Fiscal</h3>
-                            <p class="text-[10px] text-blue-200 font-semibold mt-0.5">
-                                ${count === 0 ? 'Pronto para captura multi-página' : `${count} ${count === 1 ? 'página na fila' : 'páginas na fila'} · Ordenado por captura`}
+                        <div style="min-width:0;">
+                            <h3 style="margin:0;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;line-height:1.25;">
+                                Digitalização de Nota Fiscal
+                            </h3>
+                            <p style="margin:3px 0 0 0;font-size:10px;color:#BFDBFE;font-weight:600;">
+                                ${count === 0 ? 'Captura multi-página com leitura por IA' : `${count} ${count === 1 ? 'página na fila' : 'páginas na fila'} · Ordenado por captura`}
                             </p>
                         </div>
                     </div>
                     <button type="button" id="nf-tray-close" aria-label="Fechar"
-                        class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center active:scale-90">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);color:#FFFFFF;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+                        ${svgClose}
                     </button>
                 </div>
 
-                <div class="p-3 grid grid-cols-2 gap-2.5 bg-slate-50 border-b border-slate-200">
+                <div style="padding:12px 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;">
                     <button type="button" id="nf-tray-cam-btn"
-                        class="bg-[#124191] text-white rounded-xl py-2.5 px-3 text-[10px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                        style="background:#124191;color:#FFFFFF;border:none;border-radius:12px;padding:11px 12px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;box-shadow:0 1px 2px rgba(18,65,145,0.25);">
                         ${svgCam}
                         <span>${count > 0 ? 'NOVA PÁGINA' : 'CÂMERA'}</span>
                     </button>
                     <button type="button" id="nf-tray-gal-btn"
-                        class="bg-white border border-slate-300 text-[#124191] rounded-xl py-2.5 px-3 text-[10px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                        style="background:#FFFFFF;color:#124191;border:1.5px solid #124191;border-radius:12px;padding:11px 12px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;">
                         ${svgGal}
                         <span>GALERIA</span>
                     </button>
                 </div>
 
-                <div class="p-3.5 overflow-y-auto grid grid-cols-3 gap-2.5 flex-1 bg-white">
-                    ${thumbsHtml}
+                <div style="padding:14px;overflow-y:auto;flex:1;background:#FFFFFF;">
+                    ${bodyHtml}
                 </div>
 
-                <div class="p-3.5 border-t border-slate-200 bg-slate-50 flex items-center gap-2.5">
+                <div style="padding:12px 14px;border-top:1px solid #E2E8F0;background:#F8FAFC;display:flex;align-items:center;gap:10px;">
                     <button type="button" id="nf-tray-cancel"
-                        class="px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-600 text-[10px] font-black uppercase tracking-wider active:scale-95">
+                        style="padding:12px 14px;border-radius:12px;background:#FFFFFF;border:1px solid #CBD5E1;color:#475569;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;flex-shrink:0;">
                         CANCELAR
                     </button>
                     <button type="button" id="nf-tray-submit" ${count === 0 ? 'disabled' : ''}
-                        class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 disabled:bg-slate-300 disabled:text-slate-500 text-white text-[11px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center gap-2">
-                        ${svgScanDoc}
+                        style="flex:1;padding:12px 14px;border-radius:12px;border:none;background:${count > 0 ? '#059669' : '#CBD5E1'};color:${count > 0 ? '#FFFFFF' : '#64748B'};font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;display:flex;align-items:center;justify-content:center;gap:7px;cursor:${count > 0 ? 'pointer' : 'not-allowed'};box-shadow:${count > 0 ? '0 2px 6px rgba(5,150,105,0.28)' : 'none'};">
+                        ${svgDoc}
                         <span>${count > 0 ? `PROCESSAR ${count} ${count === 1 ? 'PÁGINA' : 'PÁGINAS'}` : 'AGUARDANDO PÁGINAS'}</span>
                     </button>
                 </div>
