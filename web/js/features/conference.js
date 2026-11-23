@@ -248,9 +248,15 @@ const ConferenceFeature = (() => {
           ),
 
       // FAIXA 2: Bloco Unificado 2x2 (Conversão NF x Fator + Conferido + Lote + Validade)
-      el('div', { className: 'bg-gray-50 border border-gray-200 rounded-xl p-2.5 mt-2.5 space-y-2' }, [
+      el('div', {
+        className: 'bg-gray-50 border border-gray-200 rounded-xl p-2.5 mt-2.5 space-y-2',
+        style: 'margin-top:10px;padding:10px;border-radius:12px;'
+      }, [
         // Linha 1: Esperado (Qtd NF x Un/Cx = Total UN) + Conferido (UN)
-        el('div', { className: 'grid grid-cols-2 gap-2' }, [
+        el('div', {
+          className: 'grid grid-cols-2 gap-2',
+          style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;'
+        }, [
           el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2 flex flex-col justify-between' }, [
             el('div', { className: 'flex items-center justify-between gap-1' }, [
               el('span', { className: 'text-[8px] font-black text-gray-500 uppercase' }, 'QTD NF'),
@@ -317,7 +323,10 @@ const ConferenceFeature = (() => {
 
         // Linha 2: Lote + Validade (apenas para Estoquista / Gerente / Admin)
         ...(isConferenceOnlyRole() ? [] : [
-          el('div', { className: 'grid grid-cols-2 gap-2 pt-2 border-t border-gray-200' }, [
+          el('div', {
+            className: 'grid grid-cols-2 gap-2 pt-2 border-t border-gray-200',
+            style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px;padding-top:10px;'
+          }, [
             el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2' }, [
               el('label', { className: 'block text-[9px] font-black text-gray-500 uppercase mb-1' }, 'LOTE'),
               el('input', {
@@ -348,52 +357,67 @@ const ConferenceFeature = (() => {
       ]),
 
       // FAIXA 3: Ação Principal + Trocar SKU + Remover
-      el('div', { className: 'flex items-center gap-1.5 mt-2.5' }, unlinked ? [
-        el('button', {
-          type: 'button',
-          className: 'flex-1 bg-[#124191] text-white py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center',
-          onclick: () => promptManualLinkForItem(idx)
-        }, [linkIcon, 'VINCULAR EAN / PRODUTO']),
-        trashBtn
-      ] : [
-        el('button', {
-          type: 'button',
-          className: 'flex-1 bg-blue-50 border border-blue-200 text-[#124191] py-2 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider active:scale-95 flex items-center justify-center',
-          onclick: () => {
-            showDetailsModal(
-              { sku: item.sku, name: item.name, ean: item.ean },
-              (exp, batch, qty, unitsPerBox) => {
-                item.expiration_date = exp;
-                item.batch_code = batch;
-                item.scanned = qty;
-                if (unitsPerBox && unitsPerBox > 1) {
-                  item.pack_factor = unitsPerBox;
-                  item.expected = (item.nf_qty || 1) * unitsPerBox;
-                  if (item.raw_ocr_name) {
-                    saveLearnedLink(item.raw_ocr_name, { sku: item.sku, ean: item.ean, name: item.catalog_name || item.name }, unitsPerBox, true);
+      (() => {
+        if (trashBtn && trashBtn.style) {
+          trashBtn.style.cssText += ';width:36px;height:36px;min-width:36px;flex-shrink:0;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;padding:0;';
+        }
+        const swapIcon = document.createElement('span');
+        swapIcon.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;';
+        swapIcon.innerHTML = '<svg style="width:13px;height:13px;" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+
+        return el('div', {
+          className: 'flex items-center gap-1.5 mt-2.5',
+          style: 'display:flex;align-items:center;gap:8px;margin-top:12px;'
+        }, unlinked ? [
+          el('button', {
+            type: 'button',
+            className: 'flex-1 bg-[#124191] text-white py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm active:scale-95 flex items-center justify-center',
+            style: 'flex:1;height:36px;padding:0 12px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;',
+            onclick: () => promptManualLinkForItem(idx)
+          }, [linkIcon, 'VINCULAR EAN / PRODUTO']),
+          trashBtn
+        ] : [
+          el('button', {
+            type: 'button',
+            className: 'flex-1 bg-blue-50 border border-blue-200 text-[#124191] py-2 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider active:scale-95 flex items-center justify-center',
+            style: 'flex:1;min-width:0;height:36px;padding:0 8px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;font-size:9.5px;',
+            onclick: () => {
+              showDetailsModal(
+                { sku: item.sku, name: item.name, ean: item.ean },
+                (exp, batch, qty, unitsPerBox) => {
+                  item.expiration_date = exp;
+                  item.batch_code = batch;
+                  item.scanned = qty;
+                  if (unitsPerBox && unitsPerBox > 1) {
+                    item.pack_factor = unitsPerBox;
+                    item.expected = (item.nf_qty || 1) * unitsPerBox;
+                    if (item.raw_ocr_name) {
+                      saveLearnedLink(item.raw_ocr_name, { sku: item.sku, ean: item.ean, name: item.catalog_name || item.name }, unitsPerBox, true);
+                    }
                   }
+                  save();
+                  render();
+                },
+                {
+                  qty: item.scanned > 0 ? item.scanned : (item.expected || 1),
+                  exp: item.expiration_date,
+                  batch: item.batch_code,
+                  unitsPerBox: item.pack_factor,
+                  boxCount: item.nf_qty || 1
                 }
-                save();
-                render();
-              },
-              {
-                qty: item.scanned > 0 ? item.scanned : (item.expected || 1),
-                exp: item.expiration_date,
-                batch: item.batch_code,
-                unitsPerBox: item.pack_factor,
-                boxCount: item.nf_qty || 1
-              }
-            );
-          }
-        }, [boxIcon, 'CAIXA / LOTE']),
-        el('button', {
-          type: 'button',
-          title: 'Trocar produto vinculado',
-          className: 'bg-yellow-50 border border-yellow-300 text-yellow-800 py-2 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider active:scale-95 flex items-center justify-center',
-          onclick: () => promptManualLinkForItem(idx)
-        }, '🔄 TROCAR SKU'),
-        trashBtn
-      ]),
+              );
+            }
+          }, [boxIcon, 'CAIXA / LOTE']),
+          el('button', {
+            type: 'button',
+            title: 'Trocar produto vinculado',
+            className: 'bg-yellow-50 border border-yellow-300 text-yellow-800 py-2 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider active:scale-95 flex items-center justify-center',
+            style: 'flex:1;min-width:0;height:36px;padding:0 8px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;font-size:9.5px;',
+            onclick: () => promptManualLinkForItem(idx)
+          }, [swapIcon, 'TROCAR SKU']),
+          trashBtn
+        ]);
+      })(),
     ]);
   }
 
