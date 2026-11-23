@@ -761,20 +761,32 @@ class KippeApplication {
         `).join('') || '<p class="text-[11px] text-gray-400">Nenhum produto novo pendente.</p>';
 
         const confHtml = (data.conferences || []).map(cf => `
-            <div class="border border-blue-200 bg-blue-50/50 rounded-lg p-2.5 space-y-1.5">
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] font-black text-[#124191] uppercase">${cf.supplier} · NF ${cf.invoice_number || 'S/N'}</span>
-                    <span class="text-[9px] font-bold text-gray-500">Por ${cf.submitted_by_name}</span>
+            <div style="border:1px solid #BFDBFE;background:#EFF6FF;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                    <span style="font-size:10px;font-weight:900;color:#124191;text-transform:uppercase;line-height:1.3;flex:1;min-width:0;word-break:break-word;">
+                        ${cf.supplier} · NF ${cf.invoice_number || 'S/N'}
+                    </span>
+                    <span style="font-size:9px;font-weight:800;color:#475569;background:#FFFFFF;border:1px solid #CBD5E1;padding:2px 6px;border-radius:6px;white-space:nowrap;flex-shrink:0;">
+                        Por ${cf.submitted_by_name}
+                    </span>
                 </div>
-                <div class="space-y-1.5 pt-1">
+                <div style="display:flex;flex-direction:column;gap:8px;">
                     ${(cf.items || []).map((it, idx) => `
-                        <div class="bg-white border border-blue-100 rounded-lg p-2 space-y-1.5">
-                            <p class="text-[11px] font-black text-gray-800">• <strong>${it.quantity || it.scanned || 0} UN</strong> — ${it.name || it.sku}</p>
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <input type="text" data-cf-batch="${cf.id}:${idx}" value="${it.batch_code || ''}" placeholder="LOTE (OPC.)"
-                                    class="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-[10px] font-bold uppercase outline-none">
-                                <input type="date" data-cf-exp="${cf.id}:${idx}" value="${it.expiration_date || ''}"
-                                    class="w-full bg-gray-50 border border-gray-200 rounded px-1.5 py-1 text-[10px] font-bold outline-none">
+                        <div style="background:#FFFFFF;border:1px solid #DBEAFE;border-radius:10px;padding:9px;display:flex;flex-direction:column;gap:7px;">
+                            <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;">
+                                • <strong>${it.quantity || it.scanned || 0} UN</strong> — ${it.name || it.sku}
+                            </p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <div>
+                                    <label style="display:block;font-size:8.5px;font-weight:900;color:#64748B;text-transform:uppercase;margin-bottom:3px;">LOTE (OPC.)</label>
+                                    <input type="text" data-cf-batch="${cf.id}:${idx}" value="${it.batch_code || ''}" placeholder="EX: L123"
+                                        style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:6px;padding:6px 8px;font-size:10px;font-weight:800;text-transform:uppercase;color:#0F172A;outline:none;">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:8.5px;font-weight:900;color:#64748B;text-transform:uppercase;margin-bottom:3px;">VALIDADE</label>
+                                    <input type="date" data-cf-exp="${cf.id}:${idx}" value="${it.expiration_date || ''}"
+                                        style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:6px;padding:5px 6px;font-size:10px;font-weight:800;color:#0F172A;outline:none;">
+                                </div>
                             </div>
                         </div>
                     `).join('')}
@@ -7844,6 +7856,10 @@ class KippeApplication {
         const openAuditView = async () => {
             document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
             document.getElementById('receiving-audit-view')?.classList.remove('hidden');
+            const resetBtn = document.getElementById('btn-reset-receiving-audit');
+            if (resetBtn) {
+                resetBtn.classList.toggle('hidden', !this.isSystemAdmin());
+            }
             window.scrollTo(0, 0);
             await this.loadReceivingAudit();
         };
@@ -7866,14 +7882,36 @@ class KippeApplication {
             }
         });
 
+        document.getElementById('btn-reset-receiving-audit')?.addEventListener('click', async () => {
+            const ok = await window.kippeModalConfirm(
+                'Deseja apagar todos os registros antigos de recebimentos, divergências e solicitações de teste?\n\nSeus operadores e produtos cadastrados serão mantidos.',
+                'ZERAR HISTÓRICO DE TESTES',
+                'ZERAR AGORA'
+            );
+            if (!ok) return;
+            try {
+                const res = await fetch('/api/receiving/audit/reset', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                const out = await res.json();
+                if (!res.ok) throw new Error(out.error || 'Falha ao zerar histórico.');
+                await window.kippeModalAlert('✅ Histórico zerado com sucesso! A auditoria está limpa para começar do zero.', 'HISTÓRICO LIMPO');
+                this.refreshEstoquistaPendingQueue();
+                await this.loadReceivingAudit();
+            } catch (err) {
+                await window.kippeModalAlert('❌ ' + err.message, 'ERRO AO ZERAR');
+            }
+        });
+
         document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(btn => {
             btn.addEventListener('click', () => {
                 this._receivingAuditStatus = btn.getAttribute('data-audit-status') || 'ALL';
                 document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(b => {
                     const active = b === btn;
-                    b.className = active
-                        ? 'py-1.5 px-2 rounded-lg text-[9px] font-black uppercase bg-[#124191] text-white'
-                        : 'py-1.5 px-2 rounded-lg text-[9px] font-black uppercase bg-gray-100 text-gray-600';
+                    b.style.background = active ? '#124191' : '#F1F5F9';
+                    b.style.color = active ? '#FFFFFF' : '#475569';
                 });
                 this.loadReceivingAudit();
             });
@@ -7887,7 +7925,7 @@ class KippeApplication {
         const status = this._receivingAuditStatus || 'ALL';
 
         if (listEl) {
-            listEl.innerHTML = '<div class="bg-white rounded-xl p-6 text-center text-xs font-bold text-gray-400">Carregando registros de recebimento...</div>';
+            listEl.innerHTML = '<div style="background:#FFFFFF;border-radius:12px;padding:24px;text-align:center;font-size:12px;font-weight:800;color:#64748B;">Carregando registros de recebimento...</div>';
         }
 
         try {
@@ -7899,21 +7937,21 @@ class KippeApplication {
             const s = data.summary || { total: 0, pendente: 0, aprovado: 0, com_divergencia: 0 };
             if (summaryEl) {
                 summaryEl.innerHTML = `
-                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-2">
-                        <p class="text-sm font-black text-gray-800">${s.total}</p>
-                        <p class="text-[8px] font-black text-gray-500 uppercase">TOTAL</p>
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 4px;">
+                        <p style="font-size:14px;font-weight:900;color:#1E293B;margin:0;">${s.total}</p>
+                        <p style="font-size:8px;font-weight:900;color:#64748B;margin:2px 0 0;text-transform:uppercase;">TOTAL</p>
                     </div>
-                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-2">
-                        <p class="text-sm font-black text-amber-700">${s.pendente}</p>
-                        <p class="text-[8px] font-black text-amber-700 uppercase">PENDENTE</p>
+                    <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 4px;">
+                        <p style="font-size:14px;font-weight:900;color:#B45309;margin:0;">${s.pendente}</p>
+                        <p style="font-size:8px;font-weight:900;color:#B45309;margin:2px 0 0;text-transform:uppercase;">PENDENTE</p>
                     </div>
-                    <div class="bg-green-50 border border-green-200 rounded-lg p-2">
-                        <p class="text-sm font-black text-green-700">${s.aprovado}</p>
-                        <p class="text-[8px] font-black text-green-700 uppercase">APROVADO</p>
+                    <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:8px 4px;">
+                        <p style="font-size:14px;font-weight:900;color:#15803D;margin:0;">${s.aprovado}</p>
+                        <p style="font-size:8px;font-weight:900;color:#15803D;margin:2px 0 0;text-transform:uppercase;">APROVADO</p>
                     </div>
-                    <div class="bg-red-50 border border-red-200 rounded-lg p-2">
-                        <p class="text-sm font-black text-red-700">${s.com_divergencia}</p>
-                        <p class="text-[8px] font-black text-red-700 uppercase">DIVERG.</p>
+                    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:8px 4px;">
+                        <p style="font-size:14px;font-weight:900;color:#B91C1C;margin:0;">${s.com_divergencia}</p>
+                        <p style="font-size:8px;font-weight:900;color:#B91C1C;margin:2px 0 0;text-transform:uppercase;">DIVERG.</p>
                     </div>
                 `;
             }
@@ -7921,19 +7959,24 @@ class KippeApplication {
             const records = data.records || [];
             if (!listEl) return;
             if (records.length === 0) {
-                listEl.innerHTML = '<div class="bg-white rounded-xl p-6 text-center text-xs font-bold text-gray-400">Nenhum recebimento encontrado para este filtro.</div>';
+                listEl.innerHTML = '<div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;padding:24px;text-align:center;font-size:12px;font-weight:800;color:#64748B;">Nenhum recebimento encontrado para este filtro.</div>';
                 return;
             }
 
             const statusBadge = (st) => {
-                if (st === 'APROVADO') return '<span class="px-2 py-0.5 rounded bg-green-100 text-green-800 border border-green-300 text-[9px] font-black uppercase">✅ APROVADO</span>';
-                if (st === 'REJEITADO') return '<span class="px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-300 text-[9px] font-black uppercase">✕ REJEITADO</span>';
-                return '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase">⏳ AGUARDANDO ESTOQUISTA</span>';
+                if (st === 'APROVADO') {
+                    return '<span style="padding:3px 8px;border-radius:6px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-size:9px;font-weight:900;text-transform:uppercase;white-space:nowrap;">✅ APROVADO</span>';
+                }
+                if (st === 'REJEITADO') {
+                    return '<span style="padding:3px 8px;border-radius:6px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:9px;font-weight:900;text-transform:uppercase;white-space:nowrap;">✕ REJEITADO</span>';
+                }
+                return '<span style="padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:9px;font-weight:900;text-transform:uppercase;white-space:nowrap;">⏳ AGUARDANDO</span>';
             };
 
             const fmtDate = (iso) => (iso || '').replace('T', ' ').slice(0, 16) || '-';
 
             listEl.innerHTML = records.map(rec => {
+                const borderLeftColor = rec.status === 'APROVADO' ? '#16A34A' : rec.status === 'REJEITADO' ? '#DC2626' : '#D97706';
                 const itemsHtml = (rec.items || []).map(it => {
                     const meta = [
                         it.sku && !it.is_unlinked ? `SKU: ${it.sku}` : 'SEM CADASTRO PRÉVIO',
@@ -7941,12 +7984,12 @@ class KippeApplication {
                         it.expiration_date ? `Val: ${it.expiration_date}` : '',
                     ].filter(Boolean).join(' · ');
                     return `
-                        <div class="flex justify-between items-start gap-2 py-1.5 border-b border-gray-100 last:border-b-0">
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-black text-gray-800 leading-tight break-words">${it.name}</p>
-                                <p class="text-[9px] font-bold text-gray-500 mt-0.5">${meta}</p>
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #F1F5F9;">
+                            <div style="min-width:0;flex:1;">
+                                <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;word-break:break-word;">${it.name}</p>
+                                <p style="font-size:9px;font-weight:700;color:#64748B;margin:2px 0 0;">${meta}</p>
                             </div>
-                            <span class="shrink-0 bg-blue-50 text-[#124191] border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black">
+                            <span style="flex-shrink:0;background:#EFF6FF;color:#124191;border:1px solid #BFDBFE;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:900;">
                                 ${it.quantity} UN
                             </span>
                         </div>
@@ -7954,12 +7997,12 @@ class KippeApplication {
                 }).join('');
 
                 const divHtml = (rec.divergences || []).length > 0 ? `
-                    <div class="bg-red-50 border border-red-200 rounded-lg p-2.5 space-y-1">
-                        <p class="text-[9px] font-black text-red-800 uppercase">⚠️ Divergências Formalizadas (${rec.divergences.length})</p>
+                    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px;">
+                        <p style="font-size:9px;font-weight:900;color:#991B1B;margin:0;text-transform:uppercase;">⚠️ Divergências Formalizadas (${rec.divergences.length})</p>
                         ${rec.divergences.map(d => `
-                            <p class="text-[10px] text-red-900 font-bold">
+                            <p style="font-size:10px;color:#7F1D1D;font-weight:700;margin:0;">
                                 • ${d.product_name}: Esperado <strong>${d.expected_qty}</strong> / Conferido <strong>${d.counted_qty}</strong>
-                                (${d.divergence_qty > 0 ? '+' : ''}${d.divergence_qty}) — <span class="uppercase">${d.reason}</span>
+                                (${d.divergence_qty > 0 ? '+' : ''}${d.divergence_qty}) — <span style="text-transform:uppercase;">${d.reason}</span>
                                 ${d.notes ? `(${d.notes})` : ''}
                             </p>
                         `).join('')}
@@ -7967,41 +8010,41 @@ class KippeApplication {
                 ` : '';
 
                 const reqHtml = (rec.product_requests || []).length > 0 ? `
-                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1">
-                        <p class="text-[9px] font-black text-amber-900 uppercase">🚩 Solicitações de Cadastro (${rec.product_requests.length})</p>
+                    <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px;">
+                        <p style="font-size:9px;font-weight:900;color:#92400E;margin:0;text-transform:uppercase;">🚩 Solicitações de Cadastro (${rec.product_requests.length})</p>
                         ${rec.product_requests.map(pr => `
-                            <p class="text-[10px] text-amber-950 font-bold">
-                                • ${pr.raw_description} — <span class="uppercase">${pr.status}</span>${pr.created_sku ? ` (SKU: ${pr.created_sku})` : ''}
+                            <p style="font-size:10px;color:#78350F;font-weight:700;margin:0;">
+                                • ${pr.raw_description} — <span style="text-transform:uppercase;">${pr.status}</span>${pr.created_sku ? ` (SKU: ${pr.created_sku})` : ''}
                             </p>
                         `).join('')}
                     </div>
                 ` : '';
 
                 const validationLine = rec.status === 'PENDENTE'
-                    ? '<span class="text-amber-700 font-black">Aguardando cadastro e validação do Estoquista</span>'
-                    : `<span>Validado por <strong class="text-gray-800">${rec.resolved_by_name || rec.resolved_by_id}</strong> em ${fmtDate(rec.resolved_at)}</span>`;
+                    ? '<span style="color:#B45309;font-weight:900;">Aguardando cadastro e validação do Estoquista</span>'
+                    : `<span>Validado por <strong style="color:#1E293B;">${rec.resolved_by_name || rec.resolved_by_id}</strong> em ${fmtDate(rec.resolved_at)}</span>`;
 
                 return `
-                    <article class="bg-white rounded-xl p-4 shadow-sm border border-gray-200 border-l-4 ${rec.status === 'APROVADO' ? 'border-l-green-600' : rec.status === 'REJEITADO' ? 'border-l-red-600' : 'border-l-amber-500'} space-y-2.5">
-                        <div class="flex justify-between items-start gap-2">
-                            <div>
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span class="text-[9px] font-mono font-black bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">${rec.protocol}</span>
-                                    <span class="text-xs font-black text-[#124191] uppercase">NF ${rec.invoice_number}</span>
+                    <article style="background:#FFFFFF;border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(15,23,42,0.07);border:1px solid #E2E8F0;border-left:4px solid ${borderLeftColor};display:flex;flex-direction:column;gap:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                            <div style="min-width:0;flex:1;">
+                                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                    <span style="font-size:9px;font-family:monospace;font-weight:900;background:#F1F5F9;color:#334155;padding:2px 6px;border-radius:5px;">${rec.protocol}</span>
+                                    <span style="font-size:11px;font-weight:900;color:#124191;text-transform:uppercase;">NF ${rec.invoice_number}</span>
                                 </div>
-                                <h3 class="text-sm font-black text-gray-900 uppercase mt-1">${rec.supplier}</h3>
+                                <h3 style="font-size:13px;font-weight:900;color:#0F172A;margin:4px 0 0;text-transform:uppercase;line-height:1.25;">${rec.supplier}</h3>
                             </div>
                             ${statusBadge(rec.status)}
                         </div>
 
-                        <div class="bg-gray-50 rounded-lg p-2.5 text-[10px] text-gray-600 space-y-1 border border-gray-100">
-                            <p>Conferido por <strong class="text-gray-800">${rec.submitted_by_name}</strong> (${rec.submitted_by_id}) em <strong>${fmtDate(rec.created_at)}</strong></p>
-                            <p>${validationLine}</p>
-                            <p>Totais: <strong>${rec.total_items} item(ns)</strong> · <strong>${rec.total_units} unidade(s)</strong></p>
+                        <div style="background:#F8FAFC;border-radius:8px;padding:9px;font-size:10px;color:#475569;display:flex;flex-direction:column;gap:3px;border:1px solid #F1F5F9;">
+                            <p style="margin:0;">Conferido por <strong style="color:#1E293B;">${rec.submitted_by_name}</strong> (${rec.submitted_by_id}) em <strong>${fmtDate(rec.created_at)}</strong></p>
+                            <p style="margin:0;">${validationLine}</p>
+                            <p style="margin:0;">Totais: <strong>${rec.total_items} item(ns)</strong> · <strong>${rec.total_units} unidade(s)</strong></p>
                         </div>
 
-                        <div class="pt-1">
-                            <p class="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Itens Conferidos</p>
+                        <div>
+                            <p style="font-size:9px;font-weight:900;color:#94A3B8;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 4px;">Itens Conferidos</p>
                             <div>${itemsHtml}</div>
                         </div>
 
@@ -8012,31 +8055,8 @@ class KippeApplication {
             }).join('');
         } catch (err) {
             if (listEl) {
-                listEl.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700">❌ ${err.message}</div>`;
+                listEl.innerHTML = `<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px;font-size:12px;font-weight:800;color:#B91C1C;">❌ ${err.message}</div>`;
             }
         }
     }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    const app = new KippeApplication();
-    app.bootstrap();
-});
-
-// ═══════════════════════════════════════════════════════════
-// Validade — Tela operacional (feature isolada)
-// ═══════════════════════════════════════════════════════════
-document.getElementById('btn-module-validity')?.addEventListener('click', () => {
-  document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
-  document.getElementById('validity-view')?.classList.remove('hidden');
-  window.scrollTo(0, 0);
-  window.ValidityFeature?.mount();
-});
-
-document.getElementById('btn-back-validity')?.addEventListener('click', () => {
-  document.getElementById('validity-view')?.classList.add('hidden');
-  document.getElementById('home-module-view')?.classList.remove('hidden');
-});
-
-// Wire da feature Conference (navegação + listeners)
-

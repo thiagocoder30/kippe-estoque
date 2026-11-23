@@ -4187,6 +4187,45 @@ def search_receiving_audit():
     }), 200
 
 
+@app.route('/api/receiving/audit/reset', methods=['POST'])
+def reset_receiving_audit_history():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    op_id, op_name, op_role = _get_active_operator_context()
+    if str(op_role or '').strip().upper() != 'ADMIN_SISTEMA':
+        return jsonify({'error': 'Autorização negada: apenas o Administrador do Sistema pode zerar o histórico.'}), 403
+
+    conn = _get_kippe_db()
+    deleted_counts = {}
+    try:
+        for tbl in (
+            'receiving_pending_queue',
+            'product_registration_requests',
+            'receiving_divergences',
+            'conference_audit_log',
+        ):
+            cnt = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+            deleted_counts[tbl] = int(cnt or 0)
+            conn.execute(f"DELETE FROM {tbl}")
+            conn.execute("DELETE FROM sqlite_sequence WHERE name = ?", (tbl,))
+
+        conn.execute(
+            "DELETE FROM institutional_audit_log WHERE category IN ('RECEBIMENTO', 'CONFERENCIA', 'ESTOQUE')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _record_audit_event(
+        "AUDIT_HISTORY_RESET",
+        "GOVERNANCA",
+        f"Histórico de recebimentos e auditoria zerado por {op_name or op_id} para início da operação",
+        target_ref="RECEIVING-AUDIT",
+    )
+    return jsonify({'ok': True, 'deleted': deleted_counts}), 200
+
+
 @app.route('/api/receiving/pending/<int:queue_id>/reject', methods=['POST'])
 def reject_pending_conference(queue_id: int):
     if not _has_valid_session():
