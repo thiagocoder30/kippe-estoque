@@ -2568,8 +2568,12 @@ def conference_finalize():
 
     expanded_items = _expand_multinf_allocations(items, ctx_invoice)
     combined_invoice_label = ", ".join(invoice_list) if invoice_list else ctx_invoice
+    has_unlinked = any(
+        not str(it.get('sku') or '').strip() or str(it.get('sku') or '').strip().startswith('TEMP-')
+        for it in expanded_items
+    )
 
-    if AccessControl.is_conference_only(op_role):
+    if AccessControl.is_conference_only(op_role) or has_unlinked:
         div_saved = _persist_receiving_divergences(
             supplier=ctx_supplier,
             default_invoice=combined_invoice_label,

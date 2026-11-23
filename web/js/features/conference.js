@@ -1162,15 +1162,10 @@ const ConferenceFeature = (() => {
   async function finalize(forceDuplicate = false, precomputedDivergences = null) {
     const isConfRole = isConferenceOnlyRole();
     const unlinkedItems = state.items.filter(it => it.scanned > 0 && isUnlinkedItem(it));
-    if (!isConfRole && unlinkedItems.length > 0) {
-      await window.kippeModalAlert(
-        `⚠️ Existem ${unlinkedItems.length} item(ns) conferido(s) sem EAN/SKU vinculado. Bipe o produto físico ou toque em "Vincular EAN" antes de finalizar.`,
-        'VÍNCULO PENDENTE'
-      );
-      return;
-    }
+    const hasUnlinked = unlinkedItems.length > 0;
+    const routeToQueue = isConfRole || hasUnlinked;
 
-    const missingExp = isConfRole ? [] : state.items.filter(it => it.scanned > 0 && !it.expiration_date);
+    const missingExp = routeToQueue ? [] : state.items.filter(it => it.scanned > 0 && !it.expiration_date);
     if (missingExp.length > 0) {
       await window.kippeModalAlert(
         `⚠️ Informe a DATA DE VALIDADE para:
@@ -1206,17 +1201,17 @@ ${missingExp[0].name}`,
         divergences = await promptDivergenceFormalization(divergentItems);
         if (!divergences) return;
       } else {
-        const confirmTitle = isConfRole ? 'ENVIAR AO ESTOQUISTA' : 'FINALIZAR CONFERÊNCIA';
-        const confirmMsg = isConfRole
-          ? `Concluir a conferência de ${items.length} item(ns) e enviar ao Estoquista para cadastro/validação?`
+        const confirmTitle = routeToQueue ? 'ENVIAR AO ESTOQUISTA' : 'FINALIZAR CONFERÊNCIA';
+        const confirmMsg = routeToQueue
+          ? `Concluir a conferência de ${items.length} item(ns)${hasUnlinked ? ` (${unlinkedItems.length} sem vínculo)` : ''} e enviar para a fila do Estoquista?`
           : 'Finalizar conferência e dar entrada no estoque?';
-        const confirmBtn = isConfRole ? 'ENVIAR AGORA' : 'FINALIZAR';
+        const confirmBtn = routeToQueue ? 'ENVIAR AGORA' : 'FINALIZAR';
         if (!(await window.kippeModalConfirm(confirmMsg, confirmTitle, confirmBtn))) return;
         divergences = [];
       }
     }
 
-    if (isConfRole && unlinkedItems.length > 0) {
+    if (unlinkedItems.length > 0) {
       for (const uItem of unlinkedItems) {
         if (uItem.pending_registration) continue;
         try {
