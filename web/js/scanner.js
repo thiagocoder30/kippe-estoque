@@ -433,7 +433,12 @@ export class ScannerManager {
                     this.stop();
                     callback(value);
                 },
-                () => {}
+                () => {
+                    /*
+                     * Falhas de enquadramento são normais
+                     * durante o loop óptico.
+                     */
+                }
             );
 
             if (this.status !== 'STARTING') {
