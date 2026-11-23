@@ -8060,3 +8060,26 @@ class KippeApplication {
         }
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new KippeApplication();
+    app.bootstrap();
+});
+
+// ═══════════════════════════════════════════════════════════
+// Validade — Tela operacional (feature isolada)
+// ═══════════════════════════════════════════════════════════
+document.getElementById('btn-module-validity')?.addEventListener('click', () => {
+  document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
+  document.getElementById('validity-view')?.classList.remove('hidden');
+  window.scrollTo(0, 0);
+  window.ValidityFeature?.mount();
+});
+
+document.getElementById('btn-back-validity')?.addEventListener('click', () => {
+  document.getElementById('validity-view')?.classList.add('hidden');
+  document.getElementById('home-module-view')?.classList.remove('hidden');
+});
+
+// Wire da feature Conference (navegação + listeners)
+
