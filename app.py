@@ -2808,9 +2808,6 @@ def _call_gemini_fast(
     attempts = [
         ("gemini-flash-lite-latest", {"thinkingBudget": 0}),
         ("gemini-2.5-flash", {"thinkingBudget": 0}),
-        ("gemini-2.0-flash", None),
-        ("gemini-flash-lite-latest", None),
-        ("gemini-2.5-flash", None),
     ]
 
     last_err = None
@@ -2863,12 +2860,13 @@ def _call_gemini_fast(
             time.sleep(1.0)
             continue
 
-    secondary_res = _try_secondary_vision_providers(prompt, media_b64, mime_type)
+    secondary_res, secondary_diag = _try_secondary_vision_providers(prompt, media_b64, mime_type)
     if isinstance(secondary_res, dict) and ("items" in secondary_res or "supplier" in secondary_res):
         return secondary_res
 
     if saw_overload:
-        raise RuntimeError("Servidores de IA temporariamente congestionados (503). Suas fotos foram preservadas — tente novamente ou siga em Conferência Cega.")
+        extra = f" ({secondary_diag})" if secondary_diag else ""
+        raise RuntimeError(f"Gemini congestionado (503){extra}. Suas fotos foram preservadas — tente novamente ou siga em Conferência Cega.")
     if last_err:
         raise last_err
     raise RuntimeError("Não foi possível obter resposta da API Gemini.")
@@ -2903,11 +2901,16 @@ def _call_openai_compatible_vision(
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            "User-Agent": "KippeWMS/1.0",
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=24) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=22) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as he:
+        body = he.read().decode("utf-8", errors="ignore")[:180]
+        raise RuntimeError(f"{provider_name} HTTP {he.code}: {body}")
     texto = result["choices"][0]["message"]["content"].strip()
     if texto.startswith("```"):
         texto = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto, flags=re.IGNORECASE).strip()
@@ -2916,38 +2919,46 @@ def _call_openai_compatible_vision(
 
 def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str):
     if mime_type == "application/pdf":
-        return None
+        return None, "PDF nativo suportado apenas no provedor principal"
+
+    diag_notes = []
     groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
     if groq_key:
-        for g_model in ("meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-90b-vision-preview"):
+        for g_model in ("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"):
             try:
-                return _call_openai_compatible_vision(
+                res = _call_openai_compatible_vision(
                     "Groq",
-                    "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)",
+                    "https://api.groq.com/openai/v1/chat/completions",
                     groq_key,
                     g_model,
                     prompt,
                     media_b64,
                     mime_type,
                 )
-            except Exception:
+                return res, None
+            except Exception as exc:
+                diag_notes.append(str(exc))
                 continue
+    else:
+        diag_notes.append("GROQ_API_KEY não detectada no servidor")
 
     mistral_key = (os.getenv("MISTRAL_API_KEY") or "").strip()
     if mistral_key:
         try:
-            return _call_openai_compatible_vision(
+            res = _call_openai_compatible_vision(
                 "Mistral",
-                "[https://api.mistral.ai/v1/chat/completions](https://api.mistral.ai/v1/chat/completions)",
+                "https://api.mistral.ai/v1/chat/completions",
                 mistral_key,
                 "pixtral-12b-2409",
                 prompt,
                 media_b64,
                 mime_type,
             )
-        except Exception:
-            pass
-    return None
+            return res, None
+        except Exception as exc:
+            diag_notes.append(str(exc))
+
+    return None, " | ".join(diag_notes)
 
 
 def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
