@@ -2808,13 +2808,15 @@ def _call_gemini_fast(
     attempts = [
         ("gemini-flash-lite-latest", {"thinkingBudget": 0}),
         ("gemini-2.5-flash", {"thinkingBudget": 0}),
+        ("gemini-2.0-flash", None),
         ("gemini-flash-lite-latest", None),
-        ("gemini-3-flash-preview", {"thinkingLevel": "minimal"}),
+        ("gemini-2.5-flash", None),
     ]
 
     last_err = None
+    saw_overload = False
 
-    for model_name, t_cfg in attempts:
+    for attempt_idx, (model_name, t_cfg) in enumerate(attempts):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         gen_cfg = {
             "responseMimeType": "application/json",
@@ -2842,20 +2844,27 @@ def _call_gemini_fast(
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=22) as resp:
+            with urllib.request.urlopen(req, timeout=24) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
             texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return json.loads(texto)
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="ignore")
             last_err = RuntimeError(f"Erro API Google ({e.code}): {err_body}")
-            if e.code in (400, 404, 429, 503):
+            if e.code in (429, 503):
+                saw_overload = True
+                time.sleep(min(4.0, 1.2 * (attempt_idx + 1)))
+                continue
+            if e.code in (400, 404):
                 continue
             raise last_err
         except (TimeoutError, urllib.error.URLError) as e:
             last_err = RuntimeError(f"Timeout/Rede em {model_name}: {e}")
+            time.sleep(1.0)
             continue
 
+    if saw_overload:
+        raise RuntimeError("Servidores de IA da Google temporariamente congestionados (503). Aguarde 5 segundos e toque em Processar novamente.")
     if last_err:
         raise last_err
     raise RuntimeError("Não foi possível obter resposta da API Gemini.")
