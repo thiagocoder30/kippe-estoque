@@ -876,45 +876,103 @@ class KippeApplication {
 
             const overlay = document.createElement('div');
             overlay.id = 'kippe-link-existing-modal';
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.72);backdrop-filter:blur(2px);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.style.cssText = [
+                'position:fixed;inset:0;background:rgba(15,23,42,0.72);',
+                'backdrop-filter:blur(2px);z-index:10050;display:flex;',
+                'align-items:center;justify-content:center;padding:16px;'
+            ].join('');
+
+            const cardStyle = [
+                'width:100%;max-width:420px;background:#FFFFFF;border-radius:18px;',
+                'overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.35);',
+                'border:1px solid #E2E8F0;display:flex;flex-direction:column;',
+                'max-height:85vh;text-transform:uppercase;'
+            ].join('');
+
+            const hdrStyle = [
+                'background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;',
+                'align-items:center;justify-content:space-between;gap:10px;'
+            ].join('');
+
+            const closeBtnStyle = [
+                'width:32px;height:32px;border-radius:8px;',
+                'border:1px solid rgba(255,255,255,0.25);',
+                'background:rgba(255,255,255,0.12);color:#FFFFFF;',
+                'font-size:15px;font-weight:900;display:flex;',
+                'align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;'
+            ].join('');
+
+            const bodyStyle = [
+                'padding:14px;display:flex;flex-direction:column;gap:12px;',
+                'overflow-y:auto;-webkit-overflow-scrolling:touch;'
+            ].join('');
+
+            const inpStyle = [
+                'width:100%;box-sizing:border-box;background:#F8FAFC;',
+                'border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;',
+                'font-size:13px;font-weight:900;color:#0F172A;',
+                'text-transform:uppercase;outline:none;'
+            ].join('');
+
+            const cancelBtnStyle = [
+                'height:40px;background:#F1F5F9;color:#475569;',
+                'border:1px solid #CBD5E1;border-radius:10px;',
+                'font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;'
+            ].join('');
+
+            const confirmBtnStyle = [
+                'height:40px;background:#059669;color:#FFFFFF;border:none;',
+                'border-radius:10px;font-size:11px;font-weight:900;',
+                'text-transform:uppercase;letter-spacing:0.03em;',
+                'box-shadow:0 2px 6px rgba(5,150,105,0.25);cursor:pointer;'
+            ].join('');
+
+            const initVal = escHtml(String(sugEan || '').toUpperCase());
+            const itemTitle = escHtml(String(rawDesc || '').toUpperCase());
 
             overlay.innerHTML = `
-                <div style="width:100%;max-width:420px;background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.35);border:1px solid #E2E8F0;display:flex;flex-direction:column;max-height:85vh;text-transform:uppercase;">
-                    <div style="background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                <div style="${cardStyle}">
+                    <div style="${hdrStyle}">
                         <div style="min-width:0;">
-                            <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:0.03em;">Vincular Produto Existente</h3>
-                            <p style="font-size:10px;color:#BFDBFE;margin:2px 0 0;">De-Para no cat\u00e1logo sem duplicar SKU</p>
+                            <h3 style="font-size:13px;font-weight:900;margin:0;letter-spacing:0.03em;">
+                                VINCULAR PRODUTO EXISTENTE
+                            </h3>
+                            <p style="font-size:10px;color:#BFDBFE;margin:2px 0 0;">
+                                DE-PARA NO CAT\u00c1LOGO SEM DUPLICAR SKU
+                            </p>
                         </div>
-                        <button type="button" id="close-link-existing-modal"
-                            style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#FFFFFF;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;">
+                        <button type="button" id="close-link-existing-modal" style="${closeBtnStyle}">
                             \u2715
                         </button>
                     </div>
 
-                    <div style="padding:14px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+                    <div style="${bodyStyle}">
                         <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;">
-                            <span style="display:inline-block;background:#F59E0B;color:#FFFFFF;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:0.04em;">
-                                Item Solicitado na NF
+                            <span style="display:inline-block;background:#F59E0B;color:#FFFFFF;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;">
+                                ITEM SOLICITADO NA NF
                             </span>
                             <p style="font-size:12px;font-weight:900;color:#1E293B;margin:5px 0 0;line-height:1.3;">
-                                ${escHtml(rawDesc)}
+                                ${itemTitle}
                             </p>
                         </div>
 
                         <div>
-                            <label for="kippe-link-existing-input" style="display:block;font-size:10px;font-weight:900;color:#475569;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px;">
-                                Buscar por SKU, EAN ou Nome no Cat\u00e1logo
+                            <label for="kippe-link-existing-input"
+                                style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px;">
+                                BUSCAR POR SKU, EAN OU NOME NO CAT\u00c1LOGO
                             </label>
                             <input type="text" id="kippe-link-existing-input"
-                                value="${escHtml(String(sugEan || '').toUpperCase())}"
+                                value="${initVal}"
                                 placeholder="EX: SKU000041, EAN OU NOME DO PRODUTO..."
                                 autocomplete="off"
-                                style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:900;color:#0F172A;text-transform:uppercase;outline:none;" />
+                                style="${inpStyle}" />
                         </div>
 
                         <div id="kippe-link-existing-suggestions"
                             style="display:flex;flex-direction:column;gap:6px;max-height:190px;overflow-y:auto;">
-                            <div style="font-size:11px;font-weight:800;color:#64748B;text-align:center;padding:10px;">CARREGANDO CAT\u00c1LOGO...</div>
+                            <div style="font-size:11px;font-weight:800;color:#64748B;text-align:center;padding:10px;">
+                                CARREGANDO CAT\u00c1LOGO...
+                            </div>
                         </div>
 
                         <div id="kippe-link-existing-error"
@@ -922,13 +980,11 @@ class KippeApplication {
                         </div>
 
                         <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-top:2px;">
-                            <button type="button" id="cancel-link-existing-modal"
-                                style="height:40px;background:#F1F5F9;color:#475569;border:1px solid #CBD5E1;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">
-                                Cancelar
+                            <button type="button" id="cancel-link-existing-modal" style="${cancelBtnStyle}">
+                                CANCELAR
                             </button>
-                            <button type="button" id="confirm-link-existing-modal"
-                                style="height:40px;background:#059669;color:#FFFFFF;border:none;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.03em;box-shadow:0 2px 6px rgba(5,150,105,0.25);cursor:pointer;">
-                                Confirmar V\u00ednculo
+                            <button type="button" id="confirm-link-existing-modal" style="${confirmBtnStyle}">
+                                CONFIRMAR V\u00cdNCULO
                             </button>
                         </div>
                     </div>
@@ -947,7 +1003,7 @@ class KippeApplication {
 
             const showModalError = (msg) => {
                 if (!errBox) return;
-                errBox.textContent = msg;
+                errBox.textContent = String(msg || '').toUpperCase();
                 errBox.style.display = 'block';
             };
             const clearModalError = () => {
@@ -974,7 +1030,9 @@ class KippeApplication {
                         String(p.name || '').toUpperCase().includes(q)
                     );
                 } else {
-                    const tokens = String(rawDesc || '').toUpperCase().split(/[^A-Z0-9]+/).filter(t => t.length >= 3);
+                    const tokens = String(rawDesc || '').toUpperCase()
+                        .split(/[^A-Z0-9]+/)
+                        .filter(t => t.length >= 3);
                     if (tokens.length) {
                         const byTokens = catalogCache.filter(p => {
                             const nm = String(p.name || '').toUpperCase();
@@ -986,19 +1044,28 @@ class KippeApplication {
 
                 const slice = matches.slice(0, 12);
                 if (!slice.length) {
-                    sugBox.innerHTML = '<div style="font-size:11px;color:#64748B;text-align:center;padding:10px;background:#F8FAFC;border-radius:10px;border:1px dashed #CBD5E1;">NENHUM PRODUTO ENCONTRADO PARA O FILTRO INFORMADO.</div>';
+                    sugBox.innerHTML = [
+                        '<div style="font-size:11px;font-weight:800;color:#64748B;text-align:center;',
+                        'padding:10px;background:#F8FAFC;border-radius:10px;border:1px dashed #CBD5E1;">',
+                        'NENHUM PRODUTO ENCONTRADO PARA O FILTRO INFORMADO.</div>'
+                    ].join('');
                     return;
                 }
 
                 sugBox.innerHTML = slice.map(p => {
                     const isSel = selectedProduct && String(selectedProduct.id) === String(p.id);
+                    const bColor = isSel ? '#124191' : '#E2E8F0';
+                    const bgColor = isSel ? '#EFF6FF' : '#F8FAFC';
+                    const pName = escHtml(String(p.name || '').toUpperCase());
+                    const pSku = escHtml(String(p.id || '').toUpperCase());
+                    const pEan = p.ean ? `<span>EAN: ${escHtml(p.ean)}</span>` : '';
                     return `
-                        <button type="button" data-pick-sku="${escHtml(p.id)}"
-                            style="text-align:left;width:100%;padding:9px 11px;border-radius:10px;border:1.5px solid ${isSel ? '#124191' : '#E2E8F0'};background:${isSel ? '#EFF6FF' : '#F8FAFC'};cursor:pointer;display:flex;flex-direction:column;gap:3px;">
-                            <div style="font-size:11px;font-weight:900;color:#0F172A;line-height:1.25;text-transform:uppercase;">${escHtml(String(p.name || '').toUpperCase())}</div>
+                        <button type="button" data-pick-sku="${pSku}"
+                            style="text-align:left;width:100%;padding:9px 11px;border-radius:10px;border:1.5px solid ${bColor};background:${bgColor};cursor:pointer;display:flex;flex-direction:column;gap:3px;text-transform:uppercase;">
+                            <div style="font-size:11px;font-weight:900;color:#0F172A;line-height:1.25;">${pName}</div>
                             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;font-weight:800;color:#475569;">
-                                <span style="background:#DBEAFE;color:#124191;padding:1px 6px;border-radius:4px;font-weight:900;">${escHtml(p.id)}</span>
-                                ${p.ean ? `<span>EAN: ${escHtml(p.ean)}</span>` : ''}
+                                <span style="background:#DBEAFE;color:#124191;padding:1px 6px;border-radius:4px;font-weight:900;">${pSku}</span>
+                                ${pEan}
                                 <span>\u2022 SALDO: ${Number(p.quantity || 0)} UN</span>
                             </div>
                         </button>
@@ -1011,7 +1078,7 @@ class KippeApplication {
                         const found = catalogCache.find(item => String(item.id) === String(pickedId));
                         if (found) {
                             selectedProduct = found;
-                            if (inputEl) inputEl.value = found.id;
+                            if (inputEl) inputEl.value = String(found.id || '').toUpperCase();
                             clearModalError();
                             renderSuggestions(found.id);
                         }
@@ -1042,7 +1109,9 @@ class KippeApplication {
                 }
 
                 if (!prod) {
-                    const rDirect = await fetch('/api/produto/' + encodeURIComponent(q), { credentials: 'same-origin' }).catch(() => null);
+                    const rDirect = await fetch('/api/produto/' + encodeURIComponent(q), {
+                        credentials: 'same-origin'
+                    }).catch(() => null);
                     if (rDirect && rDirect.ok) {
                         const d = await rDirect.json();
                         prod = d.product || d;
@@ -1050,7 +1119,7 @@ class KippeApplication {
                 }
 
                 if (!prod || !prod.id) {
-                    showModalError('PRODUTO N\u00c3O ENCONTRADO NO CAT\u00c1LOGO PARA: ' + rawVal.toUpperCase());
+                    showModalError('PRODUTO N\u00c3O ENCONTRADO NO CAT\u00c1LOGO PARA: ' + q);
                     return;
                 }
 
@@ -1073,7 +1142,7 @@ class KippeApplication {
                     });
                     if (!rRes.ok) {
                         const errOut = await rRes.json().catch(() => ({}));
-                        showModalError(String(errOut.error || 'FALHA AO VINCULAR PRODUTO EXISTENTE.').toUpperCase());
+                        showModalError(errOut.error || 'FALHA AO VINCULAR PRODUTO EXISTENTE.');
                         if (confirmBtn) {
                             confirmBtn.disabled = false;
                             confirmBtn.textContent = 'CONFIRMAR V\u00cdNCULO';
@@ -1085,7 +1154,7 @@ class KippeApplication {
                     await this.refreshEstoquistaPendingQueue();
                     document.getElementById('btn-open-estoquista-queue')?.click();
                 } catch (e) {
-                    showModalError(('ERRO DE REDE AO VINCULAR: ' + (e.message || e)).toUpperCase());
+                    showModalError('ERRO DE REDE AO VINCULAR: ' + (e.message || e));
                     if (confirmBtn) {
                         confirmBtn.disabled = false;
                         confirmBtn.textContent = 'CONFIRMAR V\u00cdNCULO';
