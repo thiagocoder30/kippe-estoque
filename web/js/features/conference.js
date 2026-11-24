@@ -378,13 +378,13 @@ const ConferenceFeature = (() => {
             (item.scanned < item.expected && !item.no_show)
               ? el('button', {
                   type: 'button',
-                  className: 'flex-1 bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-xs font-black uppercase active:scale-95',
+                  className: 'flex-1 bg-white border border-red-300 text-red-700 px-2 py-2 rounded-lg text-[10px] font-black uppercase active:scale-95 whitespace-nowrap',
                   onclick: () => { item.no_show = true; save(); render(); }
                 }, '✕ FALTA')
               : (item.no_show
                   ? el('button', {
                       type: 'button',
-                      className: 'flex-1 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-xs font-black uppercase active:scale-95',
+                      className: 'flex-1 bg-white border border-gray-300 text-gray-700 px-2 py-2 rounded-lg text-[10px] font-black uppercase active:scale-95 whitespace-nowrap',
                       onclick: () => { item.no_show = false; save(); render(); }
                     }, '↶ DESFAZER FALTA')
                   : null)
