@@ -83,6 +83,7 @@ const ConferenceFeature = (() => {
   }
 
   function itemStatus(item) {
+    if (item.no_show) return 'div';
     if (item.scanned === item.expected) return 'ok';
     if (item.scanned > item.expected) return 'div';
     return 'pending';
@@ -373,7 +374,20 @@ const ConferenceFeature = (() => {
                 save();
                 render();
               }
-            }, `✓ BATER ${formatQtyBr(item.expected)} ${isKg ? 'KG' : 'UN'}`)
+            }, `✓ BATER ${formatQtyBr(item.expected)} ${isKg ? 'KG' : 'UN'}`),
+            (item.scanned < item.expected && !item.no_show)
+              ? el('button', {
+                  type: 'button',
+                  className: 'flex-1 bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-xs font-black uppercase active:scale-95',
+                  onclick: () => { item.no_show = true; save(); render(); }
+                }, '✕ FALTA')
+              : (item.no_show
+                  ? el('button', {
+                      type: 'button',
+                      className: 'flex-1 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-xs font-black uppercase active:scale-95',
+                      onclick: () => { item.no_show = false; save(); render(); }
+                    }, '↶ DESFAZER FALTA')
+                  : null)
           ])
         ]),
 
@@ -1239,7 +1253,110 @@ const ConferenceFeature = (() => {
     document.body.appendChild(modal);
   }
 
-  async function finalize(forceDuplicate = false, precomputedDivergences = null) {
+  function promptDivergenceFormalization(divergentItems) {
+  return new Promise((resolve) => {
+    document.getElementById('kippe-divergence-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'kippe-divergence-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,0.85);display:flex;align-items:center;justify-content:center;padding:12px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:16px;width:100%;max-width:440px;max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.4);';
+    card.innerHTML = `
+      <div style="background:#DC2626;color:#fff;padding:14px 16px;">
+        <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;">Divergencia Identificada</h3>
+        <p style="font-size:10px;color:#FEE2E2;margin:2px 0 0;">${divergentItems.length} item(ns) com quantidade diferente</p>
+      </div>
+      <div id="kippe-div-list" style="padding:14px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;"></div>
+      <div style="padding:12px 14px;background:#F8FAFC;border-top:1px solid #E2E8F0;display:flex;gap:8px;">
+        <button type="button" id="kippe-div-cancel" style="flex:1;height:40px;background:#fff;color:#475569;border:1px solid #CBD5E1;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">Cancelar</button>
+        <button type="button" id="kippe-div-confirm" style="flex:2;height:40px;background:#DC2626;color:#fff;border:none;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">Confirmar Divergencias</button>
+      </div>
+    `;
+    modal.appendChild(card);
+    document.body.appendChild(modal);
+
+    const reasons = divergentItems.map(it => ({
+      sku: it.sku,
+      name: it.name || it.sku,
+      expected_qty: it.expected || 0,
+      counted_qty: it.scanned || 0,
+      reason: 'FALTA',
+      notes: '',
+      canhoto_retido: true,
+    }));
+
+    const list = document.getElementById('kippe-div-list');
+    divergentItems.forEach((it, idx) => {
+      const diff = (it.scanned || 0) - (it.expected || 0);
+      const diffLabel = diff > 0 ? '+' + diff + ' sobrando' : Math.abs(diff) + ' faltando';
+      const diffColor = diff > 0 ? '#D97706' : '#DC2626';
+      const itemDiv = document.createElement('div');
+      itemDiv.style.cssText = 'background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:10px;';
+      itemDiv.innerHTML = `
+        <p style="font-size:11px;font-weight:900;color:#7F1D1D;margin:0 0 4px;text-transform:uppercase;">${it.name || it.sku}</p>
+        <p style="font-size:10px;color:#991B1B;margin:0 0 8px;">
+          Esperado: <strong>${it.expected || 0}</strong> | Conferido: <strong>${it.scanned || 0}</strong> | <span style="color:${diffColor};font-weight:900;">${diffLabel}</span>
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+          ${['FALTA', 'AVARIA', 'PRECO', 'OUTRO'].map(r => `
+            <button type="button" data-reason="${r}" data-idx="${idx}"
+              style="padding:5px 8px;font-size:9px;font-weight:900;text-transform:uppercase;border-radius:6px;cursor:pointer;border:1px solid #FCA5A5;background:${r === 'FALTA' ? '#DC2626' : '#fff'};color:${r === 'FALTA' ? '#fff' : '#991B1B'};">${r}</button>
+          `).join('')}
+        </div>
+        <input type="text" data-notes="${idx}" placeholder="Observacoes (opcional)" style="width:100%;box-sizing:border-box;padding:7px 9px;background:#fff;border:1px solid #FCA5A5;border-radius:6px;font-size:11px;outline:none;">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;padding:8px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;cursor:pointer;">
+          <input type="checkbox" data-canhoto="${idx}" checked style="width:16px;height:16px;">
+          <span style="font-size:10px;font-weight:800;color:#92400E;text-transform:uppercase;">Reter canhoto (aguardando fornecedor)</span>
+        </label>
+      `;
+      list.appendChild(itemDiv);
+    });
+
+    list.querySelectorAll('[data-reason]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
+        const reason = btn.getAttribute('data-reason');
+        reasons[idx].reason = reason;
+        const parent = btn.parentElement;
+        parent.querySelectorAll('button').forEach(b => {
+          b.style.background = '#fff';
+          b.style.color = '#991B1B';
+        });
+        btn.style.background = '#DC2626';
+        btn.style.color = '#fff';
+      });
+    });
+
+    list.querySelectorAll('[data-notes]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        reasons[parseInt(inp.getAttribute('data-notes'), 10)].notes = inp.value;
+      });
+    });
+
+    list.querySelectorAll('[data-canhoto]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const idx = parseInt(cb.getAttribute('data-canhoto'), 10);
+        reasons[idx].canhoto_retido = cb.checked;
+        const label = cb.parentElement;
+        label.style.background = cb.checked ? '#FEF3C7' : '#F8FAFC';
+        label.style.borderColor = cb.checked ? '#FCD34D' : '#E2E8F0';
+        const span = label.querySelector('span');
+        span.style.color = cb.checked ? '#92400E' : '#64748B';
+      });
+    });
+
+    document.getElementById('kippe-div-cancel').addEventListener('click', () => {
+      modal.remove();
+      resolve(null);
+    });
+    document.getElementById('kippe-div-confirm').addEventListener('click', () => {
+      modal.remove();
+      resolve(reasons);
+    });
+  });
+}
+
+async function finalize(forceDuplicate = false, precomputedDivergences = null) {
     const isConfRole = isConferenceOnlyRole();
     const unlinkedItems = state.items.filter(it => it.scanned > 0 && isUnlinkedItem(it));
     const hasUnlinked = unlinkedItems.length > 0;
@@ -1276,7 +1393,22 @@ ${missingExp[0].name}`,
 
     let divergences = precomputedDivergences;
     if (!divergences) {
-      const divergentItems = state.items.filter(it => (it.expected || 0) > 0 && (it.scanned || 0) !== (it.expected || 0));
+      // Fix C: se há pendentes, oferece marcar como FALTA
+      const pendentes = state.items.filter(it => itemStatus(it) === 'pending');
+      if (pendentes.length > 0) {
+        const msg = `${pendentes.length} item(ns) não conferido(s): ${pendentes.map(it => it.name || it.sku).join(', ')}.\n\nConsiderar todos como FALTA?`;
+        const confirmado = await window.kippeModalConfirm(
+          msg, 'CONFERÊNCIA INCOMPLETA', 'SIM, MARCAR COMO FALTA'
+        );
+        if (!confirmado) return;
+        pendentes.forEach(it => { it.no_show = true; });
+        save();
+        render();
+      }
+
+      const divergentItems = state.items.filter(it =>
+        it.no_show || ((it.expected || 0) > 0 && (it.scanned || 0) !== (it.expected || 0))
+      );
       if (divergentItems.length > 0) {
         divergences = await promptDivergenceFormalization(divergentItems);
         if (!divergences) return;
