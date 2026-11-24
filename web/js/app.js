@@ -690,10 +690,19 @@ class KippeApplication {
     async refreshEstoquistaPendingQueue() {
         if (!this.canManageCatalog()) return;
         try {
-            const res = await fetch('/api/receiving/pending', { credentials: 'same-origin' });
+            const [res, divRes] = await Promise.all([
+                fetch('/api/receiving/pending', { credentials: 'same-origin' }),
+                fetch('/api/receiving/divergences/pending', { credentials: 'same-origin' }).catch(() => null),
+            ]);
             if (!res.ok) return;
             const data = await res.json();
-            const totalPending = (data.pending_conferences_count || 0) + (data.pending_products_count || 0);
+            const divData = (divRes && divRes.ok) ? await divRes.json().catch(() => ({})) : {};
+            const canhotoGroups = Array.isArray(divData.pending) ? divData.pending : [];
+            const pendingCanhotosCount = Number(divData.total_nfs || canhotoGroups.length || 0);
+            data.canhotos_retidos = canhotoGroups;
+            data.pending_canhotos_count = pendingCanhotosCount;
+
+            const totalPending = (data.pending_conferences_count || 0) + (data.pending_products_count || 0) + pendingCanhotosCount;
 
             let card = document.getElementById('estoquista-pending-card');
             const homeView = document.getElementById('home-module-view');
@@ -711,15 +720,16 @@ class KippeApplication {
                 homeView.insertBefore(card, homeView.children[1] || null);
             }
 
+            const canhotoTag = pendingCanhotosCount > 0 ? ` · ${pendingCanhotosCount} canhoto(s) retido(s)` : '';
             card.innerHTML = `
                 <div>
                     <span class="inline-block bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
                         PENDÊNCIAS DO ESTOQUISTA
                     </span>
                     <p class="text-xs font-black text-gray-800 mt-1">
-                        ${data.pending_conferences_count || 0} conferência(s) · ${data.pending_products_count || 0} produto(s) novo(s)
+                        ${data.pending_conferences_count || 0} conferência(s) · ${data.pending_products_count || 0} produto(s) novo(s)${canhotoTag}
                     </p>
-                    <p class="text-[10px] text-gray-600">Aguardando cadastro/armazenagem no estoque</p>
+                    <p class="text-[10px] text-gray-600">Aguardando cadastro, armazenagem ou complemento</p>
                 </div>
                 <button type="button" id="btn-open-estoquista-queue"
                     class="bg-[#124191] text-white text-[10px] font-black uppercase px-3 py-2.5 rounded-lg shadow active:scale-95 shrink-0">
@@ -741,6 +751,57 @@ class KippeApplication {
 
         const reqList = data.product_requests || [];
         const confList = data.conferences || [];
+        const canhotoList = data.canhotos_retidos || [];
+
+        const escSafe = (s) => String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        const canhotoHtml = canhotoList.map(grp => `
+            <div style="border:1.5px solid #FDBA74;background:#FFF7ED;border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding-bottom:6px;border-bottom:1px solid #FED7AA;">
+                    <div style="min-width:0;flex:1;">
+                        <span style="display:inline-block;background:#EA580C;color:#FFFFFF;font-size:8.5px;font-weight:900;padding:2px 7px;border-radius:5px;text-transform:uppercase;">
+                            CANHOTO RETIDO · NF ${escSafe(grp.invoice_number || 'S/N')}
+                        </span>
+                        <p style="font-size:11px;font-weight:900;color:#0F172A;text-transform:uppercase;margin:4px 0 0;line-height:1.3;word-break:break-word;">
+                            ${escSafe(grp.supplier || 'FORNECEDOR')}
+                        </p>
+                    </div>
+                    <span style="font-size:9px;font-weight:900;color:#9A3412;background:#FFEDD5;border:1px solid #FDBA74;padding:3px 7px;border-radius:6px;white-space:nowrap;flex-shrink:0;">
+                        FALTA: ${Number(grp.total_pending || 0)}
+                    </span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    ${(grp.items || []).map(it => `
+                        <div style="background:#FFFFFF;border:1px solid #FED7AA;border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+                                <div style="min-width:0;flex:1;">
+                                    <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.25;text-transform:uppercase;word-break:break-word;">
+                                        ${escSafe(it.product_name || it.sku)}
+                                    </p>
+                                    <p style="font-size:9.5px;font-weight:700;color:#64748B;margin:2px 0 0;">
+                                        SKU: <strong>${escSafe(it.sku)}</strong> · NF: ${Number(it.expected_qty || 0)} · Rec: ${Number(it.counted_qty || 0)} · <span style="color:#C2410C;font-weight:900;">Falta: ${Number(it.pending_qty || 0)}</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <button type="button"
+                                data-comp-open="${it.divergence_id}"
+                                data-comp-sku="${escSafe(it.sku)}"
+                                data-comp-name="${escSafe(it.product_name || it.sku)}"
+                                data-comp-nf="${escSafe(grp.invoice_number || 'S/N')}"
+                                data-comp-supplier="${escSafe(grp.supplier || '')}"
+                                data-comp-pending="${Number(it.pending_qty || 0)}"
+                                style="width:100%;background:#EA580C;color:#FFFFFF;border:none;border-radius:8px;padding:9px 10px;font-size:10px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                📦 RECEBER COMPLEMENTO (SALDO: ${Number(it.pending_qty || 0)})
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('') || '<div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:10px;padding:12px;text-align:center;font-size:11px;font-weight:700;color:#64748B;">Nenhum canhoto retido pendente.</div>';
 
         const prodHtml = reqList.map(pr => `
             <div style="border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:8px;">
@@ -877,6 +938,15 @@ class KippeApplication {
                             </h4>
                         </div>
                         <div style="display:flex;flex-direction:column;gap:10px;">${confHtml}</div>
+                    </div>
+
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <h4 style="font-size:10px;font-weight:900;text-transform:uppercase;color:#9A3412;margin:0;letter-spacing:0.04em;">
+                                3. Canhotos Retidos / Complementos (${canhotoList.length})
+                            </h4>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:10px;">${canhotoHtml}</div>
                     </div>
                 </div>
             </div>
@@ -1361,6 +1431,128 @@ class KippeApplication {
                 });
                 modal.remove();
                 this.refreshEstoquistaPendingQueue();
+            });
+        });
+
+        modal.querySelectorAll('[data-comp-open]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const divId = btn.getAttribute('data-comp-open');
+                const sku = btn.getAttribute('data-comp-sku') || '';
+                const prodName = btn.getAttribute('data-comp-name') || sku;
+                const nfNum = btn.getAttribute('data-comp-nf') || 'S/N';
+                const supplier = btn.getAttribute('data-comp-supplier') || '';
+                const pendingMax = Number(btn.getAttribute('data-comp-pending') || 0);
+
+                document.getElementById('kippe-complement-modal')?.remove();
+                const compOverlay = document.createElement('div');
+                compOverlay.id = 'kippe-complement-modal';
+                compOverlay.style.cssText = 'position:fixed;inset:0;z-index:10060;background:rgba(15,23,42,0.78);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+                const defExp = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+                compOverlay.innerHTML = `
+                    <div style="background:#FFFFFF;border-radius:16px;width:100%;max-width:390px;overflow:hidden;box-shadow:0 24px 48px rgba(15,23,42,0.45);border:1px solid #E2E8F0;">
+                        <div style="background:#EA580C;color:#FFFFFF;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <div style="font-size:9px;font-weight:900;text-transform:uppercase;color:#FFEDD5;">CANHOTO RETIDO · NF ${escSafe(nfNum)}</div>
+                                <h3 style="font-size:13px;font-weight:900;margin:2px 0 0;text-transform:uppercase;">RECEBER COMPLEMENTO</h3>
+                            </div>
+                            <button type="button" id="close-comp-modal" style="background:rgba(255,255,255,0.2);border:none;color:#FFFFFF;width:30px;height:30px;border-radius:8px;font-weight:900;cursor:pointer;">✕</button>
+                        </div>
+                        <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
+                            <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:10px;">
+                                <p style="font-size:11px;font-weight:900;color:#0F172A;margin:0;text-transform:uppercase;">${escSafe(prodName)}</p>
+                                <p style="font-size:10px;font-weight:700;color:#64748B;margin:3px 0 0;">SKU: <strong>${escSafe(sku)}</strong> · ${escSafe(supplier)}</p>
+                                <p style="font-size:10px;font-weight:900;color:#C2410C;margin:4px 0 0;">SALDO PENDENTE DO CANHOTO: ${pendingMax}</p>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9.5px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Quantidade Recebida Agora</label>
+                                <input type="number" id="comp-qty-input" value="${pendingMax}" min="0.001" max="${pendingMax}" step="any"
+                                    style="width:100%;height:38px;border:1.5px solid #CBD5E1;border-radius:9px;padding:0 10px;font-size:14px;font-weight:900;color:#0F172A;box-sizing:border-box;">
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <div>
+                                    <label style="display:block;font-size:9px;font-weight:900;color:#475569;text-transform:uppercase;margin-bottom:4px;">Lote (Opcional)</label>
+                                    <input type="text" id="comp-batch-input" placeholder="AUTO"
+                                        style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:11px;font-weight:800;text-transform:uppercase;box-sizing:border-box;">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:9px;font-weight:900;color:#475569;text-transform:uppercase;margin-bottom:4px;">Validade</label>
+                                    <input type="date" id="comp-exp-input" value="${defExp}"
+                                        style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:11px;font-weight:800;box-sizing:border-box;">
+                                </div>
+                            </div>
+                            <div id="comp-err-box" style="display:none;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:10px;font-weight:800;padding:8px;border-radius:8px;"></div>
+                            <button type="button" id="confirm-comp-submit"
+                                style="width:100%;background:#16A34A;color:#FFFFFF;border:none;border-radius:10px;padding:12px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;margin-top:2px;">
+                                ✅ CONFIRMAR ENTRADA & ABATER SALDO
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(compOverlay);
+
+                const closeComp = () => compOverlay.remove();
+                document.getElementById('close-comp-modal')?.addEventListener('click', closeComp);
+                compOverlay.addEventListener('click', (e) => { if (e.target === compOverlay) closeComp(); });
+
+                document.getElementById('confirm-comp-submit')?.addEventListener('click', async (ev) => {
+                    const submitBtn = ev.currentTarget;
+                    const errBox = document.getElementById('comp-err-box');
+                    const qtyVal = Number(document.getElementById('comp-qty-input')?.value || 0);
+                    const batchVal = (document.getElementById('comp-batch-input')?.value || '').trim().toUpperCase();
+                    const expVal = (document.getElementById('comp-exp-input')?.value || '').trim();
+
+                    if (qtyVal <= 0 || qtyVal > pendingMax) {
+                        if (errBox) {
+                            errBox.textContent = `Informe uma quantidade entre 1 e ${pendingMax}.`;
+                            errBox.style.display = 'block';
+                        }
+                        return;
+                    }
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'PROCESSANDO...';
+                    try {
+                        const r = await fetch(`/api/receiving/divergences/${divId}/complement`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                sku,
+                                quantity: qtyVal,
+                                batch_code: batchVal,
+                                expiration_date: expVal,
+                            }),
+                        });
+                        const out = await r.json().catch(() => ({}));
+                        if (!r.ok) {
+                            if (errBox) {
+                                errBox.textContent = out.error || 'Falha ao registrar complemento.';
+                                errBox.style.display = 'block';
+                            }
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = '✅ CONFIRMAR ENTRADA & ABATER SALDO';
+                            return;
+                        }
+                        closeComp();
+                        modal.remove();
+                        const statusMsg = out.canhoto_liberado
+                            ? `✅ Canhoto liberado! Saldo pendente da NF ${nfNum} zerado e +${qtyVal} lançado no estoque.`
+                            : `✅ Complemento de +${qtyVal} lançado! Saldo restante no canhoto: ${out.pending_after}.`;
+                        if (window.kippeModalAlert) {
+                            await window.kippeModalAlert(statusMsg, 'COMPLEMENTO RECEBIDO');
+                        } else {
+                            alert(statusMsg);
+                        }
+                        await this.refreshEstoquistaPendingQueue();
+                    } catch (err) {
+                        if (errBox) {
+                            errBox.textContent = 'Erro de rede: ' + (err.message || err);
+                            errBox.style.display = 'block';
+                        }
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '✅ CONFIRMAR ENTRADA & ABATER SALDO';
+                    }
+                });
             });
         });
     }

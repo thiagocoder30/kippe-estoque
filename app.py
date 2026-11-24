@@ -3827,6 +3827,19 @@ def _get_kippe_db():
             if 'duplicate' not in msg and 'already exists' not in msg:
                 raise
 
+    if is_postgres_enabled():
+        for _rls_tbl in (
+            'categories', 'products', 'batches', 'operators', 'transactions',
+            'operational_audit_events', 'sku_sequences', 'sku_aliases',
+            'sku_pack_defaults', 'receiving_pending_queue',
+            'product_registration_requests', 'institutional_audit_log',
+            'receiving_divergences', 'conference_audit_log',
+        ):
+            try:
+                conn.execute(f'ALTER TABLE public.{_rls_tbl} ENABLE ROW LEVEL SECURITY')
+            except Exception:
+                pass
+
     conn.execute('''
         CREATE TABLE IF NOT EXISTS conference_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4226,6 +4239,7 @@ def approve_pending_conference(queue_id: int):
         if not resolved_items:
             return jsonify({'error': 'Nenhum item válido com quantidade > 0 para aprovar.'}), 400
 
+        all_products_cache = container.product_repository.get_all()
         committed = []
         for idx_pos, (sku, qty, it) in enumerate(resolved_items):
             ov = item_overrides.get(str(idx_pos)) or {}
@@ -4242,6 +4256,7 @@ def approve_pending_conference(queue_id: int):
                 manufacturing_date=manufacturing_date,
                 origin_document=item_inv if item_inv else 'CONFERENCE',
                 operator_id=op_id or 'SYSTEM',
+                products_cache=all_products_cache,
             )
             if not res.is_success:
                 return jsonify({'error': f"Falha ao dar entrada no SKU {sku}: {res.error}"}), 400
@@ -5136,17 +5151,19 @@ def list_pending_divergences():
 
 @app.route('/api/receiving/divergences/<int:div_id>/complement', methods=['POST'])
 def receive_complement(div_id: int):
-    """Recebe complemento de uma divergência com canhoto retido."""
+    """Recebe complemento de uma divergência com canhoto retido e lança no estoque."""
     if not _has_valid_session():
         return jsonify({'error': 'Operador não autenticado.'}), 401
 
     data = request.json or {}
-    qty = int(data.get('quantity') or 0)
+    raw_qty = float(data.get('quantity') or 0)
+    qty = int(raw_qty) if raw_qty.is_integer() else round(raw_qty, 3)
     if qty <= 0:
         return jsonify({'error': 'Quantidade deve ser maior que zero.'}), 400
 
     op_id, op_name, _ = _get_active_operator_context()
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    dt_mod = __import__('datetime')
+    now_iso = dt_mod.datetime.now().isoformat(timespec='seconds')
 
     conn = _get_kippe_db()
     try:
@@ -5160,6 +5177,31 @@ def receive_complement(div_id: int):
         pending_before = int(row['pending_qty'])
         if qty > pending_before:
             return jsonify({'error': f'Qtd recebida ({qty}) maior que saldo ({pending_before}).'}), 400
+
+        sku = str(data.get('sku') or row['sku'] or '').strip()
+        if sku and not sku.startswith('TEMP-'):
+            prod = container.product_repository.get_by_id(sku)
+            if prod:
+                batch_code = str(data.get('batch_code') or '').strip().upper() or f"COMP-{row['invoice_number'] or div_id}-{dt_mod.date.today().strftime('%Y%m%d')}"
+                expiration_date = str(data.get('expiration_date') or '').strip() or (dt_mod.date.today() + dt_mod.timedelta(days=365)).isoformat()
+                rec_res = container.receive_use_case.execute(
+                    identifier=sku,
+                    quantity=qty,
+                    batch_code=batch_code,
+                    expiration_date=expiration_date,
+                    supplier=row['supplier'] or 'PADRAO',
+                    origin_document=row['invoice_number'] or 'COMPLEMENTO',
+                    operator_id=op_id or 'SYSTEM',
+                )
+                if not rec_res.is_success:
+                    return jsonify({'error': f'Falha ao dar entrada no estoque ({sku}): {rec_res.error}'}), 400
+                try:
+                    conn.execute(
+                        "INSERT INTO conference_audit_log (supplier_norm, invoice_number, sku, quantity, batch_code, expiration_date, operator_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (row['supplier_norm'] or _norm_catalog_text(row['supplier'] or ''), row['invoice_number'] or '', sku, qty, batch_code, expiration_date, op_id or 'SYSTEM', now_iso),
+                    )
+                except Exception:
+                    pass
 
         pending_after = pending_before - qty
         new_status = 'RESOLVIDA' if pending_after == 0 else 'CANHOTO_RETIDO'
