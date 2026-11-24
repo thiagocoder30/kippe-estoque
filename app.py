@@ -2422,6 +2422,30 @@ def _check_invoice_duplicate_records(supplier: str, invoice_number: str) -> dict
                     'queue_id': int(pr['id']),
                     'message': f"A NF {inv} já está aguardando armazenagem na fila (#{pr['id']}) enviada por {pr['submitted_by_name']}.",
                 }
+        # ─── Sprint 5: Canhoto Retido libera a NF para complemento ───
+        canhoto_rows = conn.execute(
+            'SELECT id, sku, product_name, pending_qty, expected_qty, counted_qty '
+            'FROM receiving_divergences '
+            "WHERE invoice_number = ? AND status = 'CANHOTO_RETIDO' AND pending_qty > 0",
+            (inv,),
+        ).fetchall()
+        if canhoto_rows:
+            return {
+                'duplicate': False,
+                'complement_available': True,
+                'invoice_number': inv,
+                'pending_items': [
+                    {
+                        'divergence_id': int(r['id']),
+                        'sku': r['sku'],
+                        'product_name': r['product_name'],
+                        'pending_qty': int(r['pending_qty']),
+                    }
+                    for r in canhoto_rows
+                ],
+                'message': f"NF {inv} tem canhoto retido com {len(canhoto_rows)} item(ns) pendente(s).",
+            }
+
     finally:
         conn.close()
 
@@ -2434,6 +2458,7 @@ def _persist_receiving_divergences(
     divergences: list,
     op_id: str,
     op_name: str,
+    default_canhoto_retido: bool = False,
 ) -> int:
     if not divergences or not isinstance(divergences, list):
         return 0
@@ -2459,21 +2484,26 @@ def _persist_receiving_divergences(
             reason = str(d.get('reason') or 'DIVERGENCIA_NAO_ESPECIFICADA').strip().upper()
             notes = str(d.get('notes') or '').strip()
 
+            canhoto_retido = bool(d.get('canhoto_retido', default_canhoto_retido))
+            status_val = 'CANHOTO_RETIDO' if canhoto_retido else 'REGISTRADA'
+            pending_qty_val = max(0, exp_q - cnt_q) if canhoto_retido else 0
+
             conn.execute(
-                '''
-                INSERT INTO receiving_divergences (
-                    supplier, supplier_norm, invoice_number, sku, product_name,
-                    expected_qty, counted_qty, divergence_qty, reason, notes,
-                    operator_id, operator_name, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
+                'INSERT INTO receiving_divergences ('
+                'supplier, supplier_norm, invoice_number, sku, product_name, '
+                'expected_qty, counted_qty, divergence_qty, reason, notes, '
+                'operator_id, operator_name, created_at, '
+                'status, pending_qty, parent_divergence_id, resolved_at'
+                ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)',
                 (
                     sup_clean, sup_norm, inv_num, sku, pname,
                     exp_q, cnt_q, diff_q, reason, notes,
                     op_id or 'SYSTEM', op_name or op_id or 'SYSTEM', now_iso,
+                    status_val, pending_qty_val,
                 ),
             )
             saved_count += 1
+
         conn.commit()
     finally:
         conn.close()
@@ -3776,6 +3806,22 @@ def _get_kippe_db():
             created_at TEXT NOT NULL
         )
     ''')
+    # ─── Migração Sprint 5: Canhoto Retido e Entrega Complementar ───
+    for col_name, col_type, col_default in [
+        ('status', 'TEXT', "'REGISTRADA'"),
+        ('pending_qty', 'INTEGER', '0'),
+        ('parent_divergence_id', 'INTEGER', 'NULL'),
+        ('resolved_at', 'TEXT', 'NULL'),
+    ]:
+        try:
+            conn.execute(
+                f'ALTER TABLE receiving_divergences ADD COLUMN {col_name} {col_type} DEFAULT {col_default}'
+            )
+        except Exception as exc:
+            msg = str(exc).lower()
+            if 'duplicate' not in msg and 'already exists' not in msg:
+                raise
+
     conn.execute('''
         CREATE TABLE IF NOT EXISTS conference_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5028,6 +5074,134 @@ def invoices_shared(token):
 
     file_path = matches[0]
     return _ocr_response(file_path.read_bytes(), file_path.name, cleanup_path=file_path)
+
+
+# ═══════════════════════════════════════════════════════════
+# SPRINT 5: Canhoto Retido e Entrega Complementar
+# ═══════════════════════════════════════════════════════════
+
+@app.route('/api/receiving/divergences/pending', methods=['GET'])
+def list_pending_divergences():
+    """Lista divergências com canhoto retido (saldo pendente por NF)."""
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    conn = _get_kippe_db()
+    try:
+        rows = conn.execute(
+            'SELECT id, supplier, invoice_number, sku, product_name, '
+            'expected_qty, counted_qty, pending_qty, reason, '
+            'operator_name, created_at '
+            'FROM receiving_divergences '
+            "WHERE status = 'CANHOTO_RETIDO' AND pending_qty > 0 "
+            'ORDER BY created_at DESC'
+        ).fetchall()
+
+        grouped = {}
+        for r in rows:
+            key = (r['supplier'], r['invoice_number'])
+            if key not in grouped:
+                grouped[key] = {
+                    'supplier': r['supplier'],
+                    'invoice_number': r['invoice_number'],
+                    'created_at': r['created_at'],
+                    'operator_name': r['operator_name'],
+                    'total_pending': 0,
+                    'items': [],
+                }
+            grouped[key]['total_pending'] += int(r['pending_qty'])
+            grouped[key]['items'].append({
+                'divergence_id': int(r['id']),
+                'sku': r['sku'],
+                'product_name': r['product_name'],
+                'expected_qty': int(r['expected_qty']),
+                'counted_qty': int(r['counted_qty']),
+                'pending_qty': int(r['pending_qty']),
+                'reason': r['reason'],
+            })
+
+        return jsonify({
+            'pending': list(grouped.values()),
+            'total_nfs': len(grouped),
+            'total_items': len(rows),
+        }), 200
+    finally:
+        conn.close()
+
+
+@app.route('/api/receiving/divergences/<int:div_id>/complement', methods=['POST'])
+def receive_complement(div_id: int):
+    """Recebe complemento de uma divergência com canhoto retido."""
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+    qty = int(data.get('quantity') or 0)
+    if qty <= 0:
+        return jsonify({'error': 'Quantidade deve ser maior que zero.'}), 400
+
+    op_id, op_name, _ = _get_active_operator_context()
+    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+
+    conn = _get_kippe_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM receiving_divergences WHERE id = ? AND status = 'CANHOTO_RETIDO'",
+            (div_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Divergencia nao encontrada ou nao esta em canhoto retido.'}), 404
+
+        pending_before = int(row['pending_qty'])
+        if qty > pending_before:
+            return jsonify({'error': f'Qtd recebida ({qty}) maior que saldo ({pending_before}).'}), 400
+
+        pending_after = pending_before - qty
+        new_status = 'RESOLVIDA' if pending_after == 0 else 'CANHOTO_RETIDO'
+        resolved_at = now_iso if pending_after == 0 else None
+
+        conn.execute(
+            'UPDATE receiving_divergences SET pending_qty = ?, status = ?, resolved_at = ? WHERE id = ?',
+            (pending_after, new_status, resolved_at, div_id),
+        )
+
+        conn.execute(
+            'INSERT INTO receiving_divergences ('
+            'supplier, supplier_norm, invoice_number, sku, product_name, '
+            'expected_qty, counted_qty, divergence_qty, reason, notes, '
+            'operator_id, operator_name, created_at, '
+            'status, pending_qty, parent_divergence_id, resolved_at'
+            ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (
+                row['supplier'], row['supplier_norm'], row['invoice_number'],
+                row['sku'], row['product_name'],
+                0, qty, qty, 'COMPLEMENTO_RECEBIDO',
+                f'Complemento da divergencia #{div_id}',
+                op_id, op_name, now_iso,
+                'RESOLVIDA', 0, div_id, now_iso,
+            ),
+        )
+        conn.commit()
+
+        _record_audit_event(
+            'COMPLEMENT_RECEIVED', 'RECEBIMENTO',
+            f"Complemento: {row['supplier']} · NF {row['invoice_number']} · "
+            f"{row['product_name']} · +{qty} un (saldo: {pending_after})",
+            target_ref=f"NF-{row['invoice_number']}",
+        )
+
+        return jsonify({
+            'success': True,
+            'divergence_id': div_id,
+            'quantity_received': qty,
+            'pending_before': pending_before,
+            'pending_after': pending_after,
+            'status': new_status,
+            'canhoto_liberado': pending_after == 0,
+        }), 200
+    finally:
+        conn.close()
+
 
 if __name__ == '__main__':
     is_dev = (
