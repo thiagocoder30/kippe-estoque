@@ -123,6 +123,25 @@ const ConferenceFeature = (() => {
     }
   }
 
+  function isWeighableKgItem(item) {
+    if (!item) return false;
+    const u = String(item.unit || item.unit_of_measure || '').trim().toUpperCase();
+    return u === 'KG' || Number(item.weight_kg || 0) > 0;
+  }
+
+  function normalizeQtyValue(val, isKg = false) {
+    const n = Number(String(val ?? '').replace(',', '.')) || 0;
+    if (n <= 0) return 0;
+    return isKg ? Math.round(n * 1000) / 1000 : Math.round(n);
+  }
+
+  function formatQtyBr(val) {
+    const n = Number(val || 0);
+    return Number.isInteger(n)
+      ? String(n)
+      : n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+  }
+
   function saveLearnedLink(ocrDescription, productInfo, packFactor = 1, explicitFactor = false) {
     const key = normalizeDesc(ocrDescription);
     if (!key || !productInfo || !productInfo.sku) return;
@@ -161,11 +180,25 @@ const ConferenceFeature = (() => {
   }
 
   function renderItem(item, idx) {
-    const factor = Math.max(1, parseInt(item.pack_factor, 10) || 1);
-    const nfQty = Math.max(0, parseInt(item.nf_qty ?? item.expected, 10) || 0);
-    item.pack_factor = factor;
-    item.nf_qty = nfQty;
-    item.expected = nfQty * factor;
+    const isKg = isWeighableKgItem(item);
+    let nfQty = normalizeQtyValue(item.nf_qty ?? item.expected, isKg);
+    if (isKg) {
+      const wKg = normalizeQtyValue(item.weight_kg, true);
+      if (wKg > 0 && nfQty <= 1 && wKg > 1) {
+        nfQty = wKg;
+      }
+      item.unit = 'KG';
+      item.weight_kg = nfQty;
+      item.pack_factor = 1;
+      item.nf_qty = nfQty;
+      item.expected = nfQty;
+    } else {
+      const factor = Math.max(1, parseInt(item.pack_factor, 10) || 1);
+      item.pack_factor = factor;
+      item.nf_qty = nfQty;
+      item.expected = nfQty * factor;
+    }
+    const factor = item.pack_factor;
 
     const st = itemStatus(item);
     const unlinked = isUnlinkedItem(item);
@@ -202,9 +235,17 @@ const ConferenceFeature = (() => {
     trashBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
     const updateConversion = (newNfQty, newFactor) => {
-      item.nf_qty = Math.max(0, parseInt(newNfQty, 10) || 0);
-      item.pack_factor = Math.max(1, parseInt(newFactor, 10) || 1);
-      item.expected = item.nf_qty * item.pack_factor;
+      if (isKg) {
+        const kgVal = normalizeQtyValue(newNfQty, true);
+        item.nf_qty = kgVal;
+        item.weight_kg = kgVal;
+        item.pack_factor = 1;
+        item.expected = kgVal;
+      } else {
+        item.nf_qty = Math.max(0, parseInt(newNfQty, 10) || 0);
+        item.pack_factor = Math.max(1, parseInt(newFactor, 10) || 1);
+        item.expected = item.nf_qty * item.pack_factor;
+      }
       if (item.raw_ocr_name && !isUnlinkedItem(item)) {
         saveLearnedLink(item.raw_ocr_name, { sku: item.sku, ean: item.ean, name: item.catalog_name || item.name }, item.pack_factor, true);
       }
@@ -223,12 +264,12 @@ const ConferenceFeature = (() => {
         }, badgeLabel[st]),
       ]),
 
-      // Etiqueta de item pesável (KG -> Caixas/Volumes)
-      ...((String(item.unit || '').toUpperCase() === 'KG' || Number(item.weight_kg) > 0) ? [
+      // Etiqueta de item pesável (KG -> Peso real + Volumes auxiliares)
+      ...(isKg ? [
         el('div', { className: 'mt-1.5' }, [
           el('span', {
             className: 'inline-block px-2 py-0.5 rounded bg-purple-50 border border-purple-300 text-purple-900 text-[9px] font-black uppercase'
-          }, `⚖️ PESÁVEL (KG) · NF: ${Number(item.weight_kg || 0).toLocaleString('pt-BR')} KG (${item.nf_qty} CX/VOL)`)
+          }, `⚖️ PESÁVEL (KG) · NF: ${formatQtyBr(item.nf_qty)} KG${item.aux_boxes ? ` (${item.aux_boxes} VOL)` : ''}`)
         ])
       ] : []),
 
@@ -259,52 +300,67 @@ const ConferenceFeature = (() => {
         }, [
           el('div', { className: 'bg-white border border-gray-200 rounded-lg p-2 flex flex-col justify-between' }, [
             el('div', { className: 'flex items-center justify-between gap-1' }, [
-              el('span', { className: 'text-[8px] font-black text-gray-500 uppercase' }, 'QTD NF'),
-              el('span', { className: 'text-[8px] font-black text-[#124191] uppercase' }, 'UN / CX')
+              el('span', { className: 'text-[8px] font-black text-gray-500 uppercase' }, isKg ? 'PESO NF (KG)' : 'QTD NF'),
+              el('span', { className: 'text-[8px] font-black text-[#124191] uppercase' }, isKg ? 'FATOR 1:1' : 'UN / CX')
             ]),
-            el('div', { className: 'flex items-center gap-1 mt-1' }, [
-              el('input', {
-                type: 'number',
-                value: item.nf_qty,
-                min: '0',
-                ariaLabel: 'Quantidade na NF',
-                className: 'w-full h-8 text-center font-black text-xs rounded-lg border border-gray-300 bg-gray-50 text-gray-800 outline-none focus:bg-white focus:border-blue-300',
-                onchange: (e) => updateConversion(e.target.value, item.pack_factor)
-              }),
-              el('span', { className: 'text-[10px] font-black text-gray-400' }, '×'),
-              el('input', {
-                type: 'number',
-                value: item.pack_factor,
-                min: '1',
-                ariaLabel: 'Unidades por caixa',
-                className: 'w-full h-8 text-center font-black text-xs rounded-lg border border-blue-200 bg-blue-50 text-[#124191] outline-none focus:bg-white focus:border-blue-400',
-                onchange: (e) => updateConversion(item.nf_qty, e.target.value)
-              })
-            ]),
+            isKg
+              ? el('div', { className: 'flex items-center gap-1 mt-1' }, [
+                  el('input', {
+                    type: 'number',
+                    step: '0.001',
+                    inputMode: 'decimal',
+                    value: item.nf_qty,
+                    min: '0',
+                    ariaLabel: 'Peso na NF em KG',
+                    className: 'w-full h-8 text-center font-black text-xs rounded-lg border border-purple-200 bg-purple-50 text-purple-900 outline-none focus:bg-white focus:border-purple-400',
+                    onchange: (e) => updateConversion(e.target.value, 1)
+                  })
+                ])
+              : el('div', { className: 'flex items-center gap-1 mt-1' }, [
+                  el('input', {
+                    type: 'number',
+                    value: item.nf_qty,
+                    min: '0',
+                    ariaLabel: 'Quantidade na NF',
+                    className: 'w-full h-8 text-center font-black text-xs rounded-lg border border-gray-300 bg-gray-50 text-gray-800 outline-none focus:bg-white focus:border-blue-300',
+                    onchange: (e) => updateConversion(e.target.value, item.pack_factor)
+                  }),
+                  el('span', { className: 'text-[10px] font-black text-gray-400' }, '×'),
+                  el('input', {
+                    type: 'number',
+                    value: item.pack_factor,
+                    min: '1',
+                    ariaLabel: 'Unidades por caixa',
+                    className: 'w-full h-8 text-center font-black text-xs rounded-lg border border-blue-200 bg-blue-50 text-[#124191] outline-none focus:bg-white focus:border-blue-400',
+                    onchange: (e) => updateConversion(item.nf_qty, e.target.value)
+                  })
+                ]),
             el('div', { className: 'mt-1.5 pt-1 border-t border-gray-100 text-center text-[9px] font-black text-gray-700 uppercase' },
-              `ESPERADO: ${item.expected} UN`
+              `ESPERADO: ${formatQtyBr(item.expected)} ${isKg ? 'KG' : 'UN'}`
             )
           ]),
 
           el('div', {
             className: `border rounded-lg p-2 flex flex-col justify-between ${
-              item.scanned === item.expected && item.expected > 0
+              Math.abs(Number(item.scanned || 0) - Number(item.expected || 0)) < 0.001 && Number(item.expected || 0) > 0
                 ? 'bg-green-50 border-green-300'
                 : 'bg-red-50 border-red-200'
             }`
           }, [
-            el('label', { className: 'text-[9px] font-black text-gray-500 uppercase text-center' }, 'CONFERIDO (UN)'),
+            el('label', { className: 'text-[9px] font-black text-gray-500 uppercase text-center' }, isKg ? 'CONFERIDO (KG)' : 'CONFERIDO (UN)'),
             el('input', {
               type: 'number',
+              step: isKg ? '0.001' : '1',
+              inputMode: isKg ? 'decimal' : 'numeric',
               value: item.scanned,
               min: '0',
               className: `w-full mt-1 h-8 text-center font-black text-sm rounded-lg border bg-white outline-none ${
-                item.scanned === item.expected && item.expected > 0
+                Math.abs(Number(item.scanned || 0) - Number(item.expected || 0)) < 0.001 && Number(item.expected || 0) > 0
                   ? 'border-green-300 text-green-800'
                   : 'border-red-300 text-red-800'
               }`,
               onchange: (e) => {
-                item.scanned = parseInt(e.target.value, 10) || 0;
+                item.scanned = normalizeQtyValue(e.target.value, isKg);
                 save();
                 render();
               }
@@ -317,7 +373,7 @@ const ConferenceFeature = (() => {
                 save();
                 render();
               }
-            }, `✓ BATER ${item.expected} UN`)
+            }, `✓ BATER ${formatQtyBr(item.expected)} ${isKg ? 'KG' : 'UN'}`)
           ])
         ]),
 
@@ -1631,11 +1687,16 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
             rawItems.forEach((item, idx) => {
                 const normKey = normalizeDesc(item.description);
                 const learned = learnedMap[normKey];
-                const aiFactor = Math.max(1, parseInt(item.pack_factor, 10) || 1);
-                const nfQty = Math.max(1, parseInt(item.quantity, 10) || 1);
+                const isKg = String(item.unit || '').trim().toUpperCase() === 'KG' || Number(item.weight_kg || 0) > 0;
+                const aiFactor = isKg ? 1 : Math.max(1, parseInt(item.pack_factor, 10) || 1);
+                const rawQtyVal = isKg
+                    ? normalizeQtyValue(Number(item.weight_kg) > 0 ? item.weight_kg : item.quantity, true)
+                    : Math.max(1, parseInt(item.quantity, 10) || 1);
+                const nfQty = rawQtyVal > 0 ? rawQtyVal : 1;
+                const auxBoxes = isKg ? Math.max(1, parseInt(item.aux_boxes || 1, 10) || 1) : 0;
 
                 if (learned && learned.sku) {
-                    const factor = resolveEffectivePackFactor(aiFactor, learned.pack_factor, item.description);
+                    const factor = isKg ? 1 : resolveEffectivePackFactor(aiFactor, learned.pack_factor, item.description);
                     autoLinkedCount++;
                     mergeOrPushConsolidatedItem({
                         sku: learned.sku,
@@ -1643,11 +1704,12 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
                         name: `${learned.name} (NF: ${item.description})`,
                         catalog_name: learned.name,
                         raw_ocr_name: item.description,
-                        unit: item.unit || 'UN',
-                        weight_kg: Number(item.weight_kg) || 0,
+                        unit: isKg ? 'KG' : (item.unit || 'UN'),
+                        weight_kg: isKg ? nfQty : 0,
+                        aux_boxes: auxBoxes,
                         nf_qty: nfQty,
                         pack_factor: factor,
-                        expected: nfQty * factor,
+                        expected: isKg ? nfQty : (nfQty * factor),
                         scanned: 0,
                         expiration_date: '',
                         batch_code: ''
@@ -1668,7 +1730,8 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
 
                     if (matchedCatalog) {
                         const mSku = matchedCatalog.sku || matchedCatalog.id;
-                        const effectiveFactor = resolveEffectivePackFactor(aiFactor, matchedCatalog.pack_factor, item.description);
+                        const catIsKg = isKg || String(matchedCatalog.unit_of_measure || '').trim().toUpperCase() === 'KG';
+                        const effectiveFactor = catIsKg ? 1 : resolveEffectivePackFactor(aiFactor, matchedCatalog.pack_factor, item.description);
                         saveLearnedLink(item.description, { sku: mSku, ean: matchedCatalog.ean || mSku, name: matchedCatalog.name }, effectiveFactor);
                         autoLinkedCount++;
                         mergeOrPushConsolidatedItem({
@@ -1677,27 +1740,29 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
                             name: `${matchedCatalog.name} (NF: ${item.description})`,
                             catalog_name: matchedCatalog.name,
                             raw_ocr_name: item.description,
-                            unit: item.unit || 'UN',
-                            weight_kg: Number(item.weight_kg) || 0,
+                            unit: catIsKg ? 'KG' : (item.unit || 'UN'),
+                            weight_kg: catIsKg ? nfQty : 0,
+                            aux_boxes: auxBoxes,
                             nf_qty: nfQty,
                             pack_factor: effectiveFactor,
-                            expected: nfQty * effectiveFactor,
+                            expected: catIsKg ? nfQty : (nfQty * effectiveFactor),
                             scanned: 0,
                             expiration_date: '',
                             batch_code: ''
                         }, incomingInvoice);
                     } else {
-                        const factor = resolveEffectivePackFactor(aiFactor, 1, item.description);
+                        const factor = isKg ? 1 : resolveEffectivePackFactor(aiFactor, 1, item.description);
                         mergeOrPushConsolidatedItem({
                             sku: 'TEMP-' + Math.random().toString(36).slice(2, 7).toUpperCase(),
                             ean: '',
                             name: item.description,
                             raw_ocr_name: item.description,
-                            unit: item.unit || 'UN',
-                            weight_kg: Number(item.weight_kg) || 0,
+                            unit: isKg ? 'KG' : (item.unit || 'UN'),
+                            weight_kg: isKg ? nfQty : 0,
+                            aux_boxes: auxBoxes,
                             nf_qty: nfQty,
                             pack_factor: factor,
-                            expected: nfQty * factor,
+                            expected: isKg ? nfQty : (nfQty * factor),
                             scanned: 0,
                             expiration_date: '',
                             batch_code: ''

@@ -2818,7 +2818,9 @@ def _call_gemini_fast(
         "- 'description': Copie a descrição INTEIRA da coluna DESCRIÇÃO desde a PRIMEIRA letra até a última (NUNCA corte o início como 'IOGURTE', 'IOG.', 'LEITE', 'QUEIJO'), MANTENDO OBRIGATORIAMENTE gramatura, volume e multiplicador de caixa "
         "(ex: 'MILHO CONSERVA 24X170G LATA STELLA DORO', 'BACON PALETA COM PELE FREE CARNE APX.11KG COD.251').\n"
         "- 'unit': Sigla exata da coluna UN / UNID daquela linha (ex: 'KG', 'CX', 'FD', 'UN', 'PCT', 'LT').\n"
-        "- 'quantity': Número exato da coluna QUANT. / QTD daquela linha (mantenha decimais se houver, ex: 11.0 ou 11.45).\n"
+        "- ORIENTAÇÃO DA IMAGEM: A foto pode estar em retrato ou paisagem (rotacionada 90°/180°/270°). Leia seguindo o alinhamento real das colunas da tabela.\n"
+        "- 'quantity': Número exato da coluna principal QUANT. / QUANTIDADE daquela linha (mantenha decimais se houver, ex: 20.000 ou 11.45). NUNCA use a coluna 'QUANT. AUX', 'QTD. VOL' ou 'VOLUMES' como quantidade.\n"
+        "- 'aux_volumes': Se existir uma coluna 'QUANT. AUX' ou 'VOLUMES' na linha, extraia esse número inteiro (caso contrário, 0).\n"
         "- 'pack_factor': Número inteiro de unidades dentro da caixa/fardo indicado na própria descrição da linha "
         "(ex: '24X170G' -> 24, '16X1.01KG' -> 16, 'CX C/ 12' -> 12). "
         "ATENÇÃO A PRODUTOS NO KG (AÇOUGUE / FRIOS / CONGELADOS): Se a coluna UN for 'KG' ou a descrição indicar peso aproximado por peça/caixa "
@@ -2827,7 +2829,7 @@ def _call_gemini_fast(
         "- 'supplier': Nome do FORNECEDOR / EMITENTE no topo da nota.\n"
         "- 'invoice_number': Número da NF-e / DANFE próximo a 'Nº' e 'SÉRIE' (apenas dígitos, sem CEP/telefone/página).\n\n"
         "Retorne SOMENTE JSON válido: "
-        '{"supplier": "NOME DO FORNECEDOR", "invoice_number": "123456", "items": [{"description": "DESCRICAO COMPLETA", "unit": "UN", "quantity": 1, "pack_factor": 1}]}'
+        '{"supplier": "NOME DO FORNECEDOR", "invoice_number": "123456", "items": [{"description": "DESCRICAO COMPLETA", "unit": "UN", "quantity": 1, "aux_volumes": 0, "pack_factor": 1}]}'
     )
 
     attempts = [
@@ -3437,7 +3439,11 @@ def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = "")
 
             if is_kg:
                 weight_kg = round(raw_qty, 3)
-                if m_apx_kg:
+                kg_qty = int(weight_kg) if float(weight_kg).is_integer() else weight_kg
+                raw_aux = int(round(float(it.get("aux_volumes") or 0)))
+                if raw_aux > 0:
+                    box_qty = raw_aux
+                elif m_apx_kg:
                     apx_box_kg = float(m_apx_kg.group(1).replace(',', '.'))
                     box_qty = max(1, int(round(weight_kg / apx_box_kg))) if apx_box_kg > 0 else 1
                 else:
@@ -3446,7 +3452,8 @@ def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = "")
                     "description": desc,
                     "unit": "KG",
                     "weight_kg": weight_kg,
-                    "quantity": box_qty,
+                    "quantity": kg_qty,
+                    "aux_boxes": box_qty,
                     "pack_factor": 1,
                 })
             else:
@@ -3551,9 +3558,11 @@ def _iter_invoice_ocr_multi(file_items: list):
             )
             if is_kg:
                 weight_kg = round(raw_qty, 3)
+                kg_qty = int(weight_kg) if float(weight_kg).is_integer() else weight_kg
+                raw_aux = int(round(float(it.get("aux_volumes") or 0)))
                 apx_box_kg = float(m_apx_kg.group(1).replace(',', '.')) if m_apx_kg else 0
-                box_qty = max(1, int(round(weight_kg / apx_box_kg))) if apx_box_kg > 0 else 1
-                clean_items.append({"description": desc, "unit": "KG", "weight_kg": weight_kg, "quantity": box_qty, "pack_factor": 1})
+                box_qty = raw_aux if raw_aux > 0 else (max(1, int(round(weight_kg / apx_box_kg))) if apx_box_kg > 0 else 1)
+                clean_items.append({"description": desc, "unit": "KG", "weight_kg": weight_kg, "quantity": kg_qty, "aux_boxes": box_qty, "pack_factor": 1})
             else:
                 qty = max(1, int(round(raw_qty)))
                 if pf == 1:
@@ -4150,7 +4159,8 @@ def approve_pending_conference(queue_id: int):
         resolved_items = []
         for idx, it in enumerate(items):
             sku = str(sku_overrides.get(str(idx)) or it.get('sku') or '').strip()
-            qty = int(it.get('quantity') or it.get('scanned') or 0)
+            raw_q_val = float(it.get('quantity') or it.get('scanned') or 0)
+            qty = int(raw_q_val) if raw_q_val.is_integer() else round(raw_q_val, 3)
             if qty <= 0:
                 continue
             if not sku or sku.startswith('TEMP-'):
