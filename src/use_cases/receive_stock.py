@@ -18,9 +18,11 @@ class ReceivingUseCase:
         invoice_id: str = "",
         origin_document: str = "MANUAL",
         operator_id: str = "SYSTEM",
+        products_cache: list = None,
     ) -> Result[dict, str]:
 
-        products = self.repository.get_all()
+        # Otimização: reusa cache quando chamado em batch (evita get_all() por item)
+        products = products_cache if products_cache is not None else self.repository.get_all()
 
         quantity_before_by_product = {
             product.id: product.quantity

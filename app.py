@@ -2713,6 +2713,10 @@ def conference_finalize():
     results = []
     errors = []
     
+    # ─── Otimização: carrega todos os produtos UMA VEZ (evita get_all() por item) ───
+    all_products_cache = container.product_repository.get_all()
+    product_by_id = {p.id: p for p in all_products_cache}
+
     for item in expanded_items:
         sku = str(item.get('sku') or '').strip()
         quantity = item.get('quantity', 0)
@@ -2732,8 +2736,8 @@ def conference_finalize():
             errors.append({'sku': sku, 'error': 'Data de validade obrigatória'})
             continue
         
-        # Busca produto
-        product = container.product_repository.get_by_id(sku)
+        # Busca produto no cache (sem query)
+        product = product_by_id.get(sku)
         if not product:
             errors.append({'sku': sku, 'error': 'Produto não cadastrado'})
             continue
@@ -2749,6 +2753,7 @@ def conference_finalize():
                 manufacturing_date=manufacturing_date,
                 origin_document=item_invoice if item_invoice else 'CONFERENCE',
                 operator_id=op_id,
+                products_cache=all_products_cache,
             )
             if result.is_success:
                 results.append({'sku': sku, 'quantity': quantity, 'batch_code': batch_code})

@@ -1026,6 +1026,7 @@ class SQLiteProductRepository:
         self,
     ) -> List[Product]:
         with self._get_connection() as conn:
+            # ─── 1ª query: produtos ───
             rows = conn.execute(
                 """
                 SELECT *
@@ -1034,114 +1035,55 @@ class SQLiteProductRepository:
                 """
             ).fetchall()
 
+            if not rows:
+                return []
+
+            # ─── 2ª query: TODOS os batches de uma vez (IN, não N+1) ───
+            product_ids = [row["id"] for row in rows]
+            placeholders = ",".join(["?"] * len(product_ids))
+            batch_rows_all = conn.execute(
+                f"SELECT * FROM batches WHERE product_id IN ({placeholders}) ORDER BY expiration_date",
+                product_ids,
+            ).fetchall()
+
+            # ─── Agrupa batches em memória (zero queries extras) ───
+            batches_by_product = {}
+            for batch_row in batch_rows_all:
+                batch_data = dict(batch_row)
+                pid = batch_data["product_id"]
+                if pid not in batches_by_product:
+                    batches_by_product[pid] = {}
+                batches_by_product[pid][batch_data["batch_code"]] = Batch(
+                    code=batch_data["batch_code"],
+                    product_id=pid,
+                    quantity=batch_data["quantity"],
+                    expiration_date=batch_data["expiration_date"],
+                    warehouse_id=batch_data.get("warehouse_id", "WH-PADRAO"),
+                    location_id=batch_data.get("location_id", ""),
+                    manufacturing_date=batch_data["manufacturing_date"],
+                    supplier=batch_data["supplier"],
+                    status=batch_data["status"],
+                    traceability_id=batch_data["traceability_id"],
+                    cost_per_unit=float(batch_data.get("cost_per_unit", 0.0)),
+                )
+
+            # ─── Monta Products usando batches pré-carregados ───
             products = []
-
             for row in rows:
-                batch_rows = conn.execute(
-                    """
-                    SELECT *
-                    FROM batches
-                    WHERE product_id = ?
-                    ORDER BY expiration_date
-                    """,
-                    (
-                        row["id"],
-                    ),
-                ).fetchall()
-
-                batches_dict = {}
-
-                for batch_row in batch_rows:
-                    batch_data = dict(
-                        batch_row
-                    )
-
-                    batches_dict[
-                        batch_data[
-                            "batch_code"
-                        ]
-                    ] = Batch(
-                        code=batch_data[
-                            "batch_code"
-                        ],
-                        product_id=batch_data[
-                            "product_id"
-                        ],
-                        quantity=batch_data[
-                            "quantity"
-                        ],
-                        expiration_date=batch_data[
-                            "expiration_date"
-                        ],
-                        warehouse_id=batch_data.get(
-                            "warehouse_id",
-                            "WH-PADRAO",
-                        ),
-                        location_id=batch_data.get(
-                            "location_id",
-                            "",
-                        ),
-                        manufacturing_date=batch_data[
-                            "manufacturing_date"
-                        ],
-                        supplier=batch_data[
-                            "supplier"
-                        ],
-                        status=batch_data[
-                            "status"
-                        ],
-                        traceability_id=batch_data[
-                            "traceability_id"
-                        ],
-                        cost_per_unit=float(
-                            batch_data.get(
-                                "cost_per_unit",
-                                0.0,
-                            )
-                        ),
-                    )
-
+                rd = dict(row)
                 product = Product(
-                    id=row["id"],
-                    name=row["name"],
-                    ean=dict(
-                        row
-                    ).get(
-                        "ean",
-                        "",
-                    ),
-                    quantity=row[
-                        "quantity"
-                    ],
-                    batches=batches_dict,
-                    unit_of_measure=row[
-                        "unit_of_measure"
-                    ],
-                    status=row[
-                        "status"
-                    ],
-                    category_id=row[
-                        "category_id"
-                    ],
-                    allow_negative_stock=bool(
-                        dict(
-                            row
-                        ).get(
-                            "allow_negative_stock",
-                            0,
-                        )
-                    ),
+                    id=rd["id"],
+                    name=rd["name"],
+                    ean=rd.get("ean", ""),
+                    quantity=rd["quantity"],
+                    batches=batches_by_product.get(rd["id"], {}),
+                    unit_of_measure=rd["unit_of_measure"],
+                    status=rd["status"],
+                    category_id=rd["category_id"],
+                    allow_negative_stock=bool(rd.get("allow_negative_stock", 0)),
                 )
-
-                product.reserved_quantity = (
-                    row[
-                        "reserved_quantity"
-                    ]
-                )
-
-                products.append(
-                    product
-                )
+                product.reserved_quantity = rd["reserved_quantity"]
+                products.append(product)
 
             return products
 
