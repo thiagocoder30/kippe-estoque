@@ -2831,7 +2831,7 @@ def _call_gemini_fast(
     )
 
     attempts = [
-        ("gemini-3.8-flash", None),
+        ("gemini-3.8-flash", {"thinkingLevel": "low"}),
         ("gemini-3-flash-preview", {"thinkingLevel": "low"}),
         ("gemini-flash-lite-latest", None),
     ]
@@ -2867,7 +2867,7 @@ def _call_gemini_fast(
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=24) as resp:
+            with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
             texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return _normalize_ocr_json_payload(json.loads(texto))
@@ -3481,6 +3481,95 @@ def _iter_invoice_ocr_multi(file_items: list):
     if len(file_items) == 1:
         f_bytes, f_name, f_mime = file_items[0]
         yield from _iter_invoice_ocr(f_bytes, f_name, f_mime)
+        return
+
+    api_key = os.getenv('GEMINI_API_KEY')
+    all_images = all(
+        (f_bytes[:3] == b'\xff\xd8\xff' or f_bytes[:8] == b'\x89PNG\r\n\x1a\n' or (f_bytes[:4] == b'RIFF' and f_bytes[8:12] == b'WEBP'))
+        for f_bytes, _, _ in file_items if f_bytes
+    )
+    if api_key and api_key != 'SuaChaveAquiDoGoogle' and all_images:
+        from concurrent.futures import ThreadPoolExecutor
+        total_pages = len(file_items)
+        yield {"progress": 20, "stage": f"Preparando {total_pages} fotos da NF..."}
+        page_payloads = []
+        for idx, (f_bytes, _, _) in enumerate(file_items, start=1):
+            with Image.open(io.BytesIO(f_bytes)) as im:
+                page_payloads.append((idx, total_pages, _prepare_page_b64(im, is_last_page=(idx == total_pages)), "image/jpeg"))
+
+        yield {"progress": 40, "stage": f"IA lendo {total_pages} fotos em paralelo..."}
+
+        def _run_photo(payload_tuple):
+            p_idx, p_tot, b64_data, mt = payload_tuple
+            return p_idx, (_call_gemini_fast(api_key, b64_data, page_num=p_idx, total_pages=p_tot, mime_type=mt) or {})
+
+        with ThreadPoolExecutor(max_workers=min(4, total_pages)) as pool:
+            fut = pool.submit(lambda: list(pool.map(_run_photo, page_payloads)))
+            pct = 40
+            while not fut.done():
+                time.sleep(1.2)
+                if not fut.done() and pct < 88:
+                    pct += 4
+                    yield {"progress": pct, "stage": f"IA lendo {total_pages} fotos em paralelo..."}
+            try:
+                page_results = sorted(fut.result(), key=lambda x: x[0])
+            except Exception as exc:
+                yield {"error": f"Erro na IA: {exc}"}
+                return
+
+        merged_supplier = ""
+        merged_invoice = ""
+        all_raw_items = []
+        for _, raw_p_data in page_results:
+            p_data = _normalize_ocr_json_payload(raw_p_data)
+            if not merged_supplier and p_data.get("supplier"):
+                merged_supplier = str(p_data.get("supplier")).strip().upper()
+            if not merged_invoice and p_data.get("invoice_number"):
+                cand_nf = re.sub(r'\D', '', str(p_data.get("invoice_number") or ""))
+                cand_nf = cand_nf.lstrip('0') or cand_nf
+                if cand_nf:
+                    merged_invoice = cand_nf
+            if isinstance(p_data.get("items"), list):
+                all_raw_items.extend(p_data["items"])
+
+        yield {"progress": 94, "stage": f"Consolidando {len(all_raw_items)} itens..."}
+        clean_items = []
+        for it in all_raw_items:
+            if not isinstance(it, dict):
+                continue
+            desc = str(it.get("description") or "").strip().upper()
+            if not desc:
+                continue
+            raw_unit = str(it.get("unit") or "UN").strip().upper()
+            if raw_unit in ("KGS", "QUILO", "QUILOS", "QUILOGRAMA", "QUILOGRAMAS"):
+                raw_unit = "KG"
+            raw_qty = max(0.001, float(it.get("quantity") or 1))
+            pf = max(1, int(float(it.get("pack_factor") or 1)))
+            m_apx_kg = re.search(r'\bAPX\.?\s*(\d+(?:[.,]\d+)?)\s*KG\b', desc)
+            is_kg = (raw_unit == "KG") or (
+                bool(m_apx_kg) and pf == 1 and abs(raw_qty - float(m_apx_kg.group(1).replace(',', '.'))) <= 1.5
+            )
+            if is_kg:
+                weight_kg = round(raw_qty, 3)
+                apx_box_kg = float(m_apx_kg.group(1).replace(',', '.')) if m_apx_kg else 0
+                box_qty = max(1, int(round(weight_kg / apx_box_kg))) if apx_box_kg > 0 else 1
+                clean_items.append({"description": desc, "unit": "KG", "weight_kg": weight_kg, "quantity": box_qty, "pack_factor": 1})
+            else:
+                qty = max(1, int(round(raw_qty)))
+                if pf == 1:
+                    m_pack = re.search(r'\b(\d{1,3})\s*[Xx]\s*\d+(?:[.,]\d+)?\s*(?:G|GR|KG|ML|L|UN|M)\b', desc)
+                    if m_pack:
+                        pf = max(1, int(m_pack.group(1)))
+                clean_items.append({"description": desc, "unit": raw_unit or "UN", "weight_kg": 0, "quantity": qty, "pack_factor": pf})
+
+        yield {
+            "progress": 100,
+            "done": True,
+            "supplier": merged_supplier,
+            "invoice_number": merged_invoice,
+            "pages_processed": total_pages,
+            "items": clean_items,
+        }
         return
 
     total_pages = len(file_items)

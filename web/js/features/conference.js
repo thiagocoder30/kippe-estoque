@@ -1778,6 +1778,63 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
         nfPhotoQueue = [];
     };
 
+    const compressInvoicePhotoBlob = async (fileObj) => {
+        const mime = String(fileObj?.type || '').toLowerCase();
+        if (!mime.startsWith('image/') || mime === 'image/svg+xml') {
+            return null;
+        }
+        const objUrl = URL.createObjectURL(fileObj);
+        try {
+            const img = await new Promise((resolve, reject) => {
+                const el = new Image();
+                el.onload = () => resolve(el);
+                el.onerror = reject;
+                el.src = objUrl;
+            });
+            const origW = img.naturalWidth || img.width || 0;
+            const origH = img.naturalHeight || img.height || 0;
+            if (!origW || !origH) return null;
+
+            const MAX_SIDE = 1700;
+            const scale = Math.max(origW, origH) > MAX_SIDE
+                ? (MAX_SIDE / Math.max(origW, origH))
+                : 1;
+            const targetW = Math.max(1, Math.round(origW * scale));
+            const targetH = Math.max(1, Math.round(origH * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetW;
+            canvas.height = targetH;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) return null;
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, targetW, targetH);
+            ctx.drawImage(img, 0, 0, targetW, targetH);
+
+            // Tons de cinza + leve reforco de contraste preservando 100% da nitidez de digitos
+            const imgData = ctx.getImageData(0, 0, targetW, targetH);
+            const d = imgData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                const adj = Math.min(255, Math.max(0, (lum - 128) * 1.08 + 128));
+                d[i] = adj;
+                d[i + 1] = adj;
+                d[i + 2] = adj;
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            const jpegBlob = await new Promise((resolve) =>
+                canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82)
+            );
+            return (jpegBlob && jpegBlob.size > 0) ? jpegBlob : null;
+        } catch {
+            return null;
+        } finally {
+            URL.revokeObjectURL(objUrl);
+        }
+    };
+
     const addFilesToNfQueue = async (fileList) => {
         const arr = Array.from(fileList || []).filter(f => f && f.size > 0);
         for (const f of arr) {
@@ -1785,16 +1842,21 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
                 alert('⚠️ Limite máximo de 12 páginas por nota fiscal.');
                 break;
             }
-            let safeBlob;
-            try {
-                const buf = await f.arrayBuffer();
-                safeBlob = new Blob([buf], { type: f.type || 'image/jpeg' });
-            } catch {
-                safeBlob = f;
+            let safeBlob = await compressInvoicePhotoBlob(f);
+            let outName = f.name || `pagina_${nfPhotoQueue.length + 1}.jpg`;
+            if (safeBlob) {
+                outName = outName.replace(/\.[a-z0-9]+$/i, '') + '.jpg';
+            } else {
+                try {
+                    const buf = await f.arrayBuffer();
+                    safeBlob = new Blob([buf], { type: f.type || 'image/jpeg' });
+                } catch {
+                    safeBlob = f;
+                }
             }
             nfPhotoQueue.push({
                 blob: safeBlob,
-                name: f.name || `pagina_${nfPhotoQueue.length + 1}.jpg`,
+                name: outName,
                 previewUrl: URL.createObjectURL(safeBlob),
             });
         }
