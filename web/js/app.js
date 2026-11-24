@@ -1257,7 +1257,19 @@ class KippeApplication {
                 const reqId = btn.getAttribute('data-pr-register');
                 const ean = btn.getAttribute('data-pr-ean') || '';
                 const desc = btn.getAttribute('data-pr-desc') || '';
-                this._pendingProductRequest = { reqId, desc };
+                const prObj = reqList.find(x => String(x.id) === String(reqId)) || {};
+                const ctx = {
+                    reqId,
+                    desc,
+                    supplier: prObj.supplier || '',
+                    invoice_number: prObj.invoice_number || '',
+                    nf_qty: Number(prObj.nf_qty || 1),
+                    pack_factor: Number(prObj.pack_factor || 1),
+                    batch_code: prObj.batch_code || '',
+                    expiration_date: prObj.expiration_date || '',
+                };
+                this._pendingProductRequest = ctx;
+                this._lastReceivingContext = { ...ctx };
                 modal.remove();
                 await this.openNewProductRegistration(ean);
                 const nameInput = document.getElementById('new-product-name');
@@ -2872,59 +2884,68 @@ class KippeApplication {
             obs.observe(errorPanel, { childList: true, subtree: true, characterData: true });
         }
 
+        if (!this._pendingProductRequest) {
+            const prevSup = document.getElementById('rec-supplier')?.value.trim() || '';
+            const prevInv = document.getElementById('rec-invoice')?.value.trim() || '';
+            if (prevSup || prevInv) {
+                this._lastReceivingContext = {
+                    supplier: prevSup,
+                    invoice_number: prevInv,
+                    nf_qty: 1,
+                    pack_factor: 1,
+                    batch_code: '',
+                    expiration_date: '',
+                };
+            } else {
+                this._lastReceivingContext = null;
+            }
+        }
+
         const successCard = successPanel?.firstElementChild || successPanel;
-        if (successCard && !successCard.querySelector('#btn-new-prod-direct-receive')) {
-            const btnStyle = [
-                'margin-top:12px;width:100%;background:#059669;color:#FFFFFF;',
-                'padding:13px 14px;border-radius:12px;font-size:12px;font-weight:900;',
-                'text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;',
-                'display:block;border:none;box-shadow:0 2px 6px rgba(5,150,105,0.25);'
-            ].join('');
+        if (successCard) {
+            successCard.querySelector('#btn-new-prod-direct-receive')?.remove();
 
-            const closeStyle = [
-                'margin-top:8px;width:100%;background:#FFFFFF;color:#475569;',
-                'padding:11px 14px;border-radius:12px;font-size:11px;font-weight:900;',
-                'text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;',
-                'display:block;border:1.5px solid #CBD5E1;'
-            ].join('');
-
-            const directRecBtn = document.createElement('button');
-            directRecBtn.type = 'button';
-            directRecBtn.id = 'btn-new-prod-direct-receive';
-            directRecBtn.style.cssText = btnStyle;
-            directRecBtn.textContent = 'DAR ENTRADA NESTE PRODUTO AGORA';
-            directRecBtn.addEventListener('click', async () => {
-                const m = (successCard.textContent || '').match(/\b(SKU[0-9A-Z-]+)\b/i);
-                const createdSku = m ? m[1].toUpperCase() : '';
-                const queueTrigger = document.getElementById('btn-open-estoquista-queue');
-                if (queueTrigger) {
+            if (!successCard.querySelector('#btn-new-prod-back-queue')) {
+                const queueBtnStyle = [
+                    'margin-top:12px;width:100%;background:#059669;color:#FFFFFF;',
+                    'padding:12px 14px;border-radius:12px;font-size:11px;font-weight:900;',
+                    'text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;',
+                    'display:block;border:none;box-shadow:0 2px 6px rgba(5,150,105,0.25);'
+                ].join('');
+                const backQueueBtn = document.createElement('button');
+                backQueueBtn.type = 'button';
+                backQueueBtn.id = 'btn-new-prod-back-queue';
+                backQueueBtn.style.cssText = queueBtnStyle;
+                backQueueBtn.textContent = 'VOLTAR PARA FILA DA NF';
+                backQueueBtn.addEventListener('click', async () => {
                     modal?.classList.add('hidden');
                     await this.refreshEstoquistaPendingQueue();
                     document.getElementById('btn-open-estoquista-queue')?.click();
-                    return;
-                }
-                if (createdSku) {
-                    await goToStockEntryForSku(
-                        createdSku,
-                        eanInput?.value.trim() || '',
-                        nameInput?.value.trim() || ''
-                    );
-                } else {
+                });
+                successCard.appendChild(backQueueBtn);
+            }
+            const backQueueEl = successCard.querySelector('#btn-new-prod-back-queue');
+            if (backQueueEl) {
+                backQueueEl.style.display = this._lastReceivingContext?.reqId ? 'block' : 'none';
+            }
+
+            if (!successCard.querySelector('#btn-new-prod-success-close')) {
+                const closeStyle = [
+                    'margin-top:8px;width:100%;background:#FFFFFF;color:#475569;',
+                    'padding:11px 14px;border-radius:12px;font-size:11px;font-weight:900;',
+                    'text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;',
+                    'display:block;border:1.5px solid #CBD5E1;'
+                ].join('');
+                const closeSuccessBtn = document.createElement('button');
+                closeSuccessBtn.type = 'button';
+                closeSuccessBtn.id = 'btn-new-prod-success-close';
+                closeSuccessBtn.style.cssText = closeStyle;
+                closeSuccessBtn.textContent = 'FECHAR';
+                closeSuccessBtn.addEventListener('click', () => {
                     modal?.classList.add('hidden');
-                }
-            });
-
-            const closeSuccessBtn = document.createElement('button');
-            closeSuccessBtn.type = 'button';
-            closeSuccessBtn.id = 'btn-new-prod-success-close';
-            closeSuccessBtn.style.cssText = closeStyle;
-            closeSuccessBtn.textContent = 'FECHAR';
-            closeSuccessBtn.addEventListener('click', () => {
-                modal?.classList.add('hidden');
-            });
-
-            successCard.appendChild(directRecBtn);
-            successCard.appendChild(closeSuccessBtn);
+                });
+                successCard.appendChild(closeSuccessBtn);
+            }
         }
 
         form?.classList.remove(
@@ -5116,6 +5137,37 @@ class KippeApplication {
                 await this.loadReceivingProduct(
                     ean
                 );
+
+                const ctx = this._lastReceivingContext;
+                if (ctx) {
+                    const supEl = document.getElementById('rec-supplier');
+                    const invEl = document.getElementById('rec-invoice');
+                    const origEl = document.getElementById('rec-origin');
+                    if (supEl && ctx.supplier) supEl.value = String(ctx.supplier).toUpperCase();
+                    if (invEl && ctx.invoice_number) invEl.value = String(ctx.invoice_number).toUpperCase();
+                    if (origEl && ctx.invoice_number) {
+                        const hasNfOpt = Array.from(origEl.options).some(o => o.value === 'NF');
+                        if (!hasNfOpt) {
+                            const opt = document.createElement('option');
+                            opt.value = 'NF';
+                            opt.textContent = 'NF';
+                            origEl.appendChild(opt);
+                        }
+                        origEl.value = 'NF';
+                    }
+
+                    const traceSec = document.getElementById('receive-traceability-section');
+                    const batchEl = document.getElementById('rec-batch') || traceSec?.querySelector('input[type="text"]');
+                    const expEl = document.getElementById('rec-expiration') || traceSec?.querySelector('input[type="date"]');
+                    if (batchEl && ctx.batch_code) batchEl.value = String(ctx.batch_code).toUpperCase();
+                    if (expEl && ctx.expiration_date) expEl.value = ctx.expiration_date;
+
+                    const totalUnits = Math.max(1, Number(ctx.nf_qty || 1) * Number(ctx.pack_factor || 1));
+                    const qtyEl = document.getElementById('rec-qty')
+                        || document.getElementById('rec-quantity')
+                        || modalReceive?.querySelector('input[type="number"]');
+                    if (qtyEl && totalUnits > 0) qtyEl.value = String(totalUnits);
+                }
 
                 this.updateReceivingSummary();
             }
