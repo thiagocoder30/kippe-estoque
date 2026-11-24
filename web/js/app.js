@@ -785,15 +785,37 @@ class KippeApplication {
                 </div>
 
                 <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${(cf.items || []).map((it, idx) => `
+                    ${(cf.items || []).map((it, idx) => {
+                        const curSku = String(it.sku || '').trim().toUpperCase();
+                        const hasValidSku = Boolean(curSku && !curSku.startsWith('TEMP-'));
+                        const safeDescAttr = String(it.name || it.sku || '').replace(/"/g, '&quot;');
+                        const safeEanAttr = String(it.ean || '').replace(/"/g, '&quot;');
+                        const badgeBg = hasValidSku ? '#DCFCE7' : '#FEF3C7';
+                        const badgeColor = hasValidSku ? '#166534' : '#92400E';
+                        const badgeBorder = hasValidSku ? '#86EFAC' : '#FCD34D';
+                        const badgeText = hasValidSku ? ('\u2713 SKU: ' + curSku) : '\u26a0 SEM V\u00cdNCULO NO CAT\u00c1LOGO';
+                        const linkBtnBg = hasValidSku ? '#F1F5F9' : '#059669';
+                        const linkBtnColor = hasValidSku ? '#334155' : '#FFFFFF';
+                        const linkBtnBorder = hasValidSku ? '1px solid #CBD5E1' : 'none';
+                        const linkBtnLabel = hasValidSku ? 'TROCAR SKU' : 'VINCULAR PRODUTO';
+                        return `
                         <div style="background:#FFFFFF;border:1px solid #DBEAFE;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;">
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                                <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;flex:1;min-width:0;word-break:break-word;">
+                                <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;flex:1;min-width:0;word-break:break-word;text-transform:uppercase;">
                                     ${it.name || it.sku}
                                 </p>
                                 <span style="flex-shrink:0;background:#DBEAFE;color:#124191;font-size:10px;font-weight:900;padding:2px 7px;border-radius:6px;white-space:nowrap;">
                                     ${it.quantity || it.scanned || 0} UN
                                 </span>
+                            </div>
+                            <div data-cf-sku-bar="${cf.id}:${idx}" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                                <span data-cf-sku-badge style="display:inline-block;background:${badgeBg};color:${badgeColor};border:1px solid ${badgeBorder};font-size:9px;font-weight:900;padding:3px 7px;border-radius:6px;text-transform:uppercase;line-height:1.25;">
+                                    ${badgeText}
+                                </span>
+                                <button type="button" data-cf-link-sku="${cf.id}:${idx}" data-cf-item-desc="${safeDescAttr}" data-cf-item-ean="${safeEanAttr}"
+                                    style="background:${linkBtnBg};color:${linkBtnColor};border:${linkBtnBorder};border-radius:6px;padding:4px 8px;font-size:9px;font-weight:900;text-transform:uppercase;cursor:pointer;white-space:nowrap;">
+                                    ${linkBtnLabel}
+                                </button>
                             </div>
                             <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;">
                                 <div style="min-width:0;">
@@ -808,7 +830,8 @@ class KippeApplication {
                                 </div>
                             </div>
                         </div>
-                    `).join('')}
+                    `;
+                    }).join('')}
                 </div>
 
                 <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding-top:2px;">
@@ -865,7 +888,7 @@ class KippeApplication {
             if (e.target === modal) modal.remove();
         });
 
-        const openLinkExistingModal = (reqId, sugEan, rawDesc) => {
+        const openLinkExistingModal = (reqId, sugEan, rawDesc, onPickedCallback = null) => {
             document.getElementById('kippe-link-existing-modal')?.remove();
 
             const escHtml = (str) => String(str || '')
@@ -1129,6 +1152,11 @@ class KippeApplication {
                 }
 
                 try {
+                    if (typeof onPickedCallback === 'function') {
+                        await onPickedCallback(prod);
+                        closeOverlay();
+                        return;
+                    }
                     const rRes = await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1251,10 +1279,37 @@ class KippeApplication {
             });
         });
 
+        const skuOverridesByConf = {};
+        modal.querySelectorAll('[data-cf-link-sku]').forEach(linkBtn => {
+            linkBtn.addEventListener('click', () => {
+                const pair = linkBtn.getAttribute('data-cf-link-sku') || '';
+                const [cfId, idxStr] = pair.split(':');
+                const itemDesc = linkBtn.getAttribute('data-cf-item-desc') || '';
+                const itemEan = linkBtn.getAttribute('data-cf-item-ean') || '';
+                openLinkExistingModal(null, itemEan, itemDesc, async (prod) => {
+                    skuOverridesByConf[cfId] = skuOverridesByConf[cfId] || {};
+                    skuOverridesByConf[cfId][String(idxStr)] = prod.id;
+                    const bar = modal.querySelector(`[data-cf-sku-bar="${cfId}:${idxStr}"]`);
+                    const badge = bar?.querySelector('[data-cf-sku-badge]');
+                    if (badge) {
+                        badge.style.background = '#DCFCE7';
+                        badge.style.color = '#166534';
+                        badge.style.borderColor = '#86EFAC';
+                        badge.textContent = '\u2713 VINCULADO: ' + prod.id + ' - ' + String(prod.name || '').toUpperCase();
+                    }
+                    linkBtn.style.background = '#F1F5F9';
+                    linkBtn.style.color = '#334155';
+                    linkBtn.style.border = '1px solid #CBD5E1';
+                    linkBtn.textContent = 'TROCAR SKU';
+                });
+            });
+        });
+
         modal.querySelectorAll('[data-cf-approve]').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const cfId = btn.getAttribute('data-cf-approve');
                 const itemOverrides = {};
+                const skuOverrides = skuOverridesByConf[cfId] || {};
                 modal.querySelectorAll(`[data-cf-batch^="${cfId}:"]`).forEach(inp => {
                     const idx = inp.getAttribute('data-cf-batch').split(':')[1];
                     itemOverrides[idx] = itemOverrides[idx] || {};
@@ -1270,7 +1325,7 @@ class KippeApplication {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ item_overrides: itemOverrides })
+                    body: JSON.stringify({ item_overrides: itemOverrides, sku_overrides: skuOverrides })
                 });
                 const out = await res.json();
                 if (!res.ok) {

@@ -3999,6 +3999,29 @@ def resolve_pending_product_request(req_id: int):
                     ''',
                     (created_sku, pf, now_iso),
                 )
+
+            pending_confs = conn.execute(
+                "SELECT id, items_json FROM receiving_pending_queue WHERE status = 'PENDENTE'"
+            ).fetchall()
+            for p_cf in pending_confs:
+                try:
+                    cf_items = json.loads(p_cf['items_json'] or '[]')
+                except Exception:
+                    continue
+                changed = False
+                for it in cf_items:
+                    cur_sku = str(it.get('sku') or '').strip()
+                    it_norm = _norm_catalog_text(it.get('name') or '')
+                    if (not cur_sku or cur_sku.startswith('TEMP-')) and it_norm == alias_norm:
+                        it['sku'] = created_sku
+                        if catalog_name:
+                            it['catalog_name'] = catalog_name
+                        changed = True
+                if changed:
+                    conn.execute(
+                        "UPDATE receiving_pending_queue SET items_json = ? WHERE id = ?",
+                        (json.dumps(cf_items, ensure_ascii=False), p_cf['id']),
+                    )
         conn.commit()
     finally:
         conn.close()
