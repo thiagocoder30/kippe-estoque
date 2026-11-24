@@ -2817,22 +2817,59 @@ class KippeApplication {
             obs.observe(errorPanel, { childList: true, subtree: true, characterData: true });
         }
 
-        if (successPanel && !successPanel.querySelector('#btn-new-prod-direct-receive')) {
+        const successCard = successPanel?.firstElementChild || successPanel;
+        if (successCard && !successCard.querySelector('#btn-new-prod-direct-receive')) {
+            const btnStyle = [
+                'margin-top:12px;width:100%;background:#059669;color:#FFFFFF;',
+                'padding:13px 14px;border-radius:12px;font-size:12px;font-weight:900;',
+                'text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;',
+                'display:block;border:none;box-shadow:0 2px 6px rgba(5,150,105,0.25);'
+            ].join('');
+
+            const closeStyle = [
+                'margin-top:8px;width:100%;background:#FFFFFF;color:#475569;',
+                'padding:11px 14px;border-radius:12px;font-size:11px;font-weight:900;',
+                'text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;',
+                'display:block;border:1.5px solid #CBD5E1;'
+            ].join('');
+
             const directRecBtn = document.createElement('button');
             directRecBtn.type = 'button';
             directRecBtn.id = 'btn-new-prod-direct-receive';
-            directRecBtn.style.cssText = 'margin-top:10px;width:100%;background:#059669;color:#FFFFFF;padding:11px 12px;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;display:block;';
+            directRecBtn.style.cssText = btnStyle;
             directRecBtn.textContent = 'DAR ENTRADA NESTE PRODUTO AGORA';
             directRecBtn.addEventListener('click', async () => {
-                const m = (successPanel.textContent || '').match(/\b(SKU[0-9A-Z-]+)\b/i);
+                const m = (successCard.textContent || '').match(/\b(SKU[0-9A-Z-]+)\b/i);
                 const createdSku = m ? m[1].toUpperCase() : '';
+                const queueTrigger = document.getElementById('btn-open-estoquista-queue');
+                if (queueTrigger) {
+                    modal?.classList.add('hidden');
+                    await this.refreshEstoquistaPendingQueue();
+                    document.getElementById('btn-open-estoquista-queue')?.click();
+                    return;
+                }
                 if (createdSku) {
-                    await goToStockEntryForSku(createdSku, eanInput?.value.trim() || '', nameInput?.value.trim() || '');
+                    await goToStockEntryForSku(
+                        createdSku,
+                        eanInput?.value.trim() || '',
+                        nameInput?.value.trim() || ''
+                    );
                 } else {
                     modal?.classList.add('hidden');
                 }
             });
-            successPanel.appendChild(directRecBtn);
+
+            const closeSuccessBtn = document.createElement('button');
+            closeSuccessBtn.type = 'button';
+            closeSuccessBtn.id = 'btn-new-prod-success-close';
+            closeSuccessBtn.style.cssText = closeStyle;
+            closeSuccessBtn.textContent = 'FECHAR';
+            closeSuccessBtn.addEventListener('click', () => {
+                modal?.classList.add('hidden');
+            });
+
+            successCard.appendChild(directRecBtn);
+            successCard.appendChild(closeSuccessBtn);
         }
 
         form?.classList.remove(
