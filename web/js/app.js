@@ -879,7 +879,7 @@ class KippeApplication {
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.72);backdrop-filter:blur(2px);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;';
 
             overlay.innerHTML = `
-                <div style="width:100%;max-width:420px;background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.35);border:1px solid #E2E8F0;display:flex;flex-direction:column;max-height:85vh;">
+                <div style="width:100%;max-width:420px;background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.35);border:1px solid #E2E8F0;display:flex;flex-direction:column;max-height:85vh;text-transform:uppercase;">
                     <div style="background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
                         <div style="min-width:0;">
                             <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:0.03em;">Vincular Produto Existente</h3>
@@ -906,15 +906,15 @@ class KippeApplication {
                                 Buscar por SKU, EAN ou Nome no Cat\u00e1logo
                             </label>
                             <input type="text" id="kippe-link-existing-input"
-                                value="${escHtml(sugEan)}"
-                                placeholder="Ex: SKU000041, EAN ou nome do produto..."
+                                value="${escHtml(String(sugEan || '').toUpperCase())}"
+                                placeholder="EX: SKU000041, EAN OU NOME DO PRODUTO..."
                                 autocomplete="off"
-                                style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:800;color:#0F172A;outline:none;" />
+                                style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:900;color:#0F172A;text-transform:uppercase;outline:none;" />
                         </div>
 
                         <div id="kippe-link-existing-suggestions"
                             style="display:flex;flex-direction:column;gap:6px;max-height:190px;overflow-y:auto;">
-                            <div style="font-size:11px;color:#64748B;text-align:center;padding:10px;">Carregando cat\u00e1logo...</div>
+                            <div style="font-size:11px;font-weight:800;color:#64748B;text-align:center;padding:10px;">CARREGANDO CAT\u00c1LOGO...</div>
                         </div>
 
                         <div id="kippe-link-existing-error"
@@ -986,7 +986,7 @@ class KippeApplication {
 
                 const slice = matches.slice(0, 12);
                 if (!slice.length) {
-                    sugBox.innerHTML = '<div style="font-size:11px;color:#64748B;text-align:center;padding:10px;background:#F8FAFC;border-radius:10px;border:1px dashed #CBD5E1;">Nenhum produto encontrado para o filtro informado.</div>';
+                    sugBox.innerHTML = '<div style="font-size:11px;color:#64748B;text-align:center;padding:10px;background:#F8FAFC;border-radius:10px;border:1px dashed #CBD5E1;">NENHUM PRODUTO ENCONTRADO PARA O FILTRO INFORMADO.</div>';
                     return;
                 }
 
@@ -995,11 +995,11 @@ class KippeApplication {
                     return `
                         <button type="button" data-pick-sku="${escHtml(p.id)}"
                             style="text-align:left;width:100%;padding:9px 11px;border-radius:10px;border:1.5px solid ${isSel ? '#124191' : '#E2E8F0'};background:${isSel ? '#EFF6FF' : '#F8FAFC'};cursor:pointer;display:flex;flex-direction:column;gap:3px;">
-                            <div style="font-size:11px;font-weight:900;color:#0F172A;line-height:1.25;">${escHtml(p.name)}</div>
+                            <div style="font-size:11px;font-weight:900;color:#0F172A;line-height:1.25;text-transform:uppercase;">${escHtml(String(p.name || '').toUpperCase())}</div>
                             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;font-weight:800;color:#475569;">
                                 <span style="background:#DBEAFE;color:#124191;padding:1px 6px;border-radius:4px;font-weight:900;">${escHtml(p.id)}</span>
                                 ${p.ean ? `<span>EAN: ${escHtml(p.ean)}</span>` : ''}
-                                <span>\u2022 Saldo: ${Number(p.quantity || 0)} UN</span>
+                                <span>\u2022 SALDO: ${Number(p.quantity || 0)} UN</span>
                             </div>
                         </button>
                     `;
@@ -1024,7 +1024,7 @@ class KippeApplication {
                 const rawVal = (inputEl?.value || '').trim();
                 const q = rawVal.toUpperCase();
                 if (!q && !selectedProduct) {
-                    showModalError('Informe o SKU, EAN ou selecione um produto da lista.');
+                    showModalError('INFORME O SKU, EAN OU SELECIONE UM PRODUTO DA LISTA.');
                     inputEl?.focus();
                     return;
                 }
@@ -1050,7 +1050,7 @@ class KippeApplication {
                 }
 
                 if (!prod || !prod.id) {
-                    showModalError('Produto n\u00e3o encontrado no cat\u00e1logo para: ' + rawVal);
+                    showModalError('PRODUTO N\u00c3O ENCONTRADO NO CAT\u00c1LOGO PARA: ' + rawVal.toUpperCase());
                     return;
                 }
 
@@ -1073,7 +1073,7 @@ class KippeApplication {
                     });
                     if (!rRes.ok) {
                         const errOut = await rRes.json().catch(() => ({}));
-                        showModalError(errOut.error || 'Falha ao vincular produto existente.');
+                        showModalError(String(errOut.error || 'FALHA AO VINCULAR PRODUTO EXISTENTE.').toUpperCase());
                         if (confirmBtn) {
                             confirmBtn.disabled = false;
                             confirmBtn.textContent = 'CONFIRMAR V\u00cdNCULO';
@@ -1085,7 +1085,7 @@ class KippeApplication {
                     await this.refreshEstoquistaPendingQueue();
                     document.getElementById('btn-open-estoquista-queue')?.click();
                 } catch (e) {
-                    showModalError('Erro de rede ao vincular: ' + (e.message || e));
+                    showModalError(('ERRO DE REDE AO VINCULAR: ' + (e.message || e)).toUpperCase());
                     if (confirmBtn) {
                         confirmBtn.disabled = false;
                         confirmBtn.textContent = 'CONFIRMAR V\u00cdNCULO';
@@ -1095,6 +1095,12 @@ class KippeApplication {
 
             confirmBtn?.addEventListener('click', submitLink);
             inputEl?.addEventListener('input', () => {
+                const start = inputEl.selectionStart;
+                const end = inputEl.selectionEnd;
+                inputEl.value = inputEl.value.toUpperCase();
+                if (typeof start === 'number' && typeof end === 'number') {
+                    inputEl.setSelectionRange(start, end);
+                }
                 clearModalError();
                 selectedProduct = null;
                 renderSuggestions(inputEl.value);
