@@ -865,71 +865,287 @@ class KippeApplication {
             if (e.target === modal) modal.remove();
         });
 
+        const openLinkExistingModal = (reqId, sugEan, rawDesc) => {
+            document.getElementById('kippe-link-existing-modal')?.remove();
+
+            const escHtml = (str) => String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+
+            const overlay = document.createElement('div');
+            overlay.id = 'kippe-link-existing-modal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.72);backdrop-filter:blur(2px);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+            overlay.innerHTML = `
+                <div style="width:100%;max-width:420px;background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,0.35);border:1px solid #E2E8F0;display:flex;flex-direction:column;max-height:85vh;">
+                    <div style="background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                        <div style="min-width:0;">
+                            <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:0.03em;">Vincular Produto Existente</h3>
+                            <p style="font-size:10px;color:#BFDBFE;margin:2px 0 0;">De-Para no cat\u00e1logo sem duplicar SKU</p>
+                        </div>
+                        <button type="button" id="close-link-existing-modal"
+                            style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#FFFFFF;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;">
+                            \u2715
+                        </button>
+                    </div>
+
+                    <div style="padding:14px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+                        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;">
+                            <span style="display:inline-block;background:#F59E0B;color:#FFFFFF;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:0.04em;">
+                                Item Solicitado na NF
+                            </span>
+                            <p style="font-size:12px;font-weight:900;color:#1E293B;margin:5px 0 0;line-height:1.3;">
+                                ${escHtml(rawDesc)}
+                            </p>
+                        </div>
+
+                        <div>
+                            <label for="kippe-link-existing-input" style="display:block;font-size:10px;font-weight:900;color:#475569;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px;">
+                                Buscar por SKU, EAN ou Nome no Cat\u00e1logo
+                            </label>
+                            <input type="text" id="kippe-link-existing-input"
+                                value="${escHtml(sugEan)}"
+                                placeholder="Ex: SKU000041, EAN ou nome do produto..."
+                                autocomplete="off"
+                                style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:800;color:#0F172A;outline:none;" />
+                        </div>
+
+                        <div id="kippe-link-existing-suggestions"
+                            style="display:flex;flex-direction:column;gap:6px;max-height:190px;overflow-y:auto;">
+                            <div style="font-size:11px;color:#64748B;text-align:center;padding:10px;">Carregando cat\u00e1logo...</div>
+                        </div>
+
+                        <div id="kippe-link-existing-error"
+                            style="display:none;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:10px;padding:9px 11px;font-size:11px;font-weight:800;">
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-top:2px;">
+                            <button type="button" id="cancel-link-existing-modal"
+                                style="height:40px;background:#F1F5F9;color:#475569;border:1px solid #CBD5E1;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                Cancelar
+                            </button>
+                            <button type="button" id="confirm-link-existing-modal"
+                                style="height:40px;background:#059669;color:#FFFFFF;border:none;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.03em;box-shadow:0 2px 6px rgba(5,150,105,0.25);cursor:pointer;">
+                                Confirmar V\u00ednculo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            const inputEl = document.getElementById('kippe-link-existing-input');
+            const sugBox = document.getElementById('kippe-link-existing-suggestions');
+            const errBox = document.getElementById('kippe-link-existing-error');
+            const confirmBtn = document.getElementById('confirm-link-existing-modal');
+
+            let catalogCache = [];
+            let selectedProduct = null;
+
+            const showModalError = (msg) => {
+                if (!errBox) return;
+                errBox.textContent = msg;
+                errBox.style.display = 'block';
+            };
+            const clearModalError = () => {
+                if (!errBox) return;
+                errBox.textContent = '';
+                errBox.style.display = 'none';
+            };
+
+            const closeOverlay = () => overlay.remove();
+            document.getElementById('close-link-existing-modal')?.addEventListener('click', closeOverlay);
+            document.getElementById('cancel-link-existing-modal')?.addEventListener('click', closeOverlay);
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) closeOverlay();
+            });
+
+            const renderSuggestions = (queryText) => {
+                if (!sugBox) return;
+                const q = String(queryText || '').trim().toUpperCase();
+                let matches = catalogCache;
+                if (q) {
+                    matches = catalogCache.filter(p =>
+                        String(p.id || '').toUpperCase().includes(q) ||
+                        String(p.ean || '').trim().includes(q) ||
+                        String(p.name || '').toUpperCase().includes(q)
+                    );
+                } else {
+                    const tokens = String(rawDesc || '').toUpperCase().split(/[^A-Z0-9]+/).filter(t => t.length >= 3);
+                    if (tokens.length) {
+                        const byTokens = catalogCache.filter(p => {
+                            const nm = String(p.name || '').toUpperCase();
+                            return tokens.some(tk => nm.includes(tk));
+                        });
+                        if (byTokens.length) matches = byTokens;
+                    }
+                }
+
+                const slice = matches.slice(0, 12);
+                if (!slice.length) {
+                    sugBox.innerHTML = '<div style="font-size:11px;color:#64748B;text-align:center;padding:10px;background:#F8FAFC;border-radius:10px;border:1px dashed #CBD5E1;">Nenhum produto encontrado para o filtro informado.</div>';
+                    return;
+                }
+
+                sugBox.innerHTML = slice.map(p => {
+                    const isSel = selectedProduct && String(selectedProduct.id) === String(p.id);
+                    return `
+                        <button type="button" data-pick-sku="${escHtml(p.id)}"
+                            style="text-align:left;width:100%;padding:9px 11px;border-radius:10px;border:1.5px solid ${isSel ? '#124191' : '#E2E8F0'};background:${isSel ? '#EFF6FF' : '#F8FAFC'};cursor:pointer;display:flex;flex-direction:column;gap:3px;">
+                            <div style="font-size:11px;font-weight:900;color:#0F172A;line-height:1.25;">${escHtml(p.name)}</div>
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;font-weight:800;color:#475569;">
+                                <span style="background:#DBEAFE;color:#124191;padding:1px 6px;border-radius:4px;font-weight:900;">${escHtml(p.id)}</span>
+                                ${p.ean ? `<span>EAN: ${escHtml(p.ean)}</span>` : ''}
+                                <span>\u2022 Saldo: ${Number(p.quantity || 0)} UN</span>
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+
+                sugBox.querySelectorAll('[data-pick-sku]').forEach(cardBtn => {
+                    cardBtn.addEventListener('click', () => {
+                        const pickedId = cardBtn.getAttribute('data-pick-sku');
+                        const found = catalogCache.find(item => String(item.id) === String(pickedId));
+                        if (found) {
+                            selectedProduct = found;
+                            if (inputEl) inputEl.value = found.id;
+                            clearModalError();
+                            renderSuggestions(found.id);
+                        }
+                    });
+                });
+            };
+
+            const submitLink = async () => {
+                clearModalError();
+                const rawVal = (inputEl?.value || '').trim();
+                const q = rawVal.toUpperCase();
+                if (!q && !selectedProduct) {
+                    showModalError('Informe o SKU, EAN ou selecione um produto da lista.');
+                    inputEl?.focus();
+                    return;
+                }
+
+                let prod = selectedProduct && (
+                    String(selectedProduct.id || '').toUpperCase() === q ||
+                    String(selectedProduct.ean || '').trim() === q
+                ) ? selectedProduct : null;
+
+                if (!prod && catalogCache.length) {
+                    prod = catalogCache.find(p =>
+                        String(p.id || '').toUpperCase() === q ||
+                        String(p.ean || '').trim() === q
+                    ) || null;
+                }
+
+                if (!prod) {
+                    const rDirect = await fetch('/api/produto/' + encodeURIComponent(q), { credentials: 'same-origin' }).catch(() => null);
+                    if (rDirect && rDirect.ok) {
+                        const d = await rDirect.json();
+                        prod = d.product || d;
+                    }
+                }
+
+                if (!prod || !prod.id) {
+                    showModalError('Produto n\u00e3o encontrado no cat\u00e1logo para: ' + rawVal);
+                    return;
+                }
+
+                if (confirmBtn) {
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'VINCULANDO...';
+                }
+
+                try {
+                    const rRes = await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            action: 'CADASTRADO',
+                            sku: prod.id,
+                            ean: prod.ean || sugEan,
+                            name: prod.name || rawDesc
+                        })
+                    });
+                    if (!rRes.ok) {
+                        const errOut = await rRes.json().catch(() => ({}));
+                        showModalError(errOut.error || 'Falha ao vincular produto existente.');
+                        if (confirmBtn) {
+                            confirmBtn.disabled = false;
+                            confirmBtn.textContent = 'CONFIRMAR V\u00cdNCULO';
+                        }
+                        return;
+                    }
+                    closeOverlay();
+                    modal.remove();
+                    await this.refreshEstoquistaPendingQueue();
+                    document.getElementById('btn-open-estoquista-queue')?.click();
+                } catch (e) {
+                    showModalError('Erro de rede ao vincular: ' + (e.message || e));
+                    if (confirmBtn) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = 'CONFIRMAR V\u00cdNCULO';
+                    }
+                }
+            };
+
+            confirmBtn?.addEventListener('click', submitLink);
+            inputEl?.addEventListener('input', () => {
+                clearModalError();
+                selectedProduct = null;
+                renderSuggestions(inputEl.value);
+            });
+            inputEl?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitLink();
+                } else if (e.key === 'Escape') {
+                    closeOverlay();
+                }
+            });
+
+            fetch('/api/produtos', { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : [])
+                .then(data => {
+                    catalogCache = Array.isArray(data) ? data : (data.products || []);
+                    renderSuggestions(inputEl?.value || '');
+                })
+                .catch(() => {
+                    if (sugBox) sugBox.innerHTML = '';
+                });
+
+            setTimeout(() => {
+                inputEl?.focus();
+                inputEl?.select();
+            }, 40);
+        };
+
         modal.querySelectorAll('[data-pr-register]').forEach(regBtn => {
             const reqId = regBtn.getAttribute('data-pr-register');
             const sugEan = regBtn.getAttribute('data-pr-ean') || '';
             const rawDesc = regBtn.getAttribute('data-pr-desc') || '';
             const parentRow = regBtn.parentElement;
             if (parentRow && !parentRow.querySelector('[data-pr-link-existing]')) {
+                parentRow.style.cssText += ';display:flex;flex-wrap:wrap;gap:8px;';
+                regBtn.style.cssText += ';flex:1 1 100%;height:38px;';
+
+                const discardBtn = parentRow.querySelector('[data-pr-discard]');
+                if (discardBtn) {
+                    discardBtn.style.cssText += ';flex:1 1 calc(50% - 4px);height:36px;display:inline-flex;align-items:center;justify-content:center;';
+                }
+
                 const linkBtn = document.createElement('button');
                 linkBtn.type = 'button';
                 linkBtn.setAttribute('data-pr-link-existing', reqId);
                 linkBtn.className = 'bg-emerald-600 text-white text-[10px] font-black uppercase py-2.5 px-2.5 rounded-lg shadow active:scale-95';
-                linkBtn.style.cssText = 'background:#059669;color:#FFFFFF;font-size:10px;font-weight:900;padding:10px 8px;border-radius:8px;white-space:nowrap;';
+                linkBtn.style.cssText = 'flex:1 1 calc(50% - 4px);height:36px;background:#059669;color:#FFFFFF;font-size:10px;font-weight:900;padding:0 8px;border-radius:8px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;';
                 linkBtn.textContent = 'VINCULAR EXISTENTE';
-                linkBtn.addEventListener('click', async () => {
-                    const term = window.prompt(
-                        'Digite o SKU (ex: SKU000041) ou EAN do produto j\u00e1 cadastrado para vincular "' + rawDesc + '":',
-                        sugEan
-                    );
-                    if (!term || !term.trim()) return;
-                    const q = term.trim().toUpperCase();
-                    try {
-                        let prod = null;
-                        const rDirect = await fetch('/api/produto/' + encodeURIComponent(q), { credentials: 'same-origin' });
-                        if (rDirect.ok) {
-                            const d = await rDirect.json();
-                            prod = d.product || d;
-                        } else {
-                            const rList = await fetch('/api/produtos', { credentials: 'same-origin' });
-                            if (rList.ok) {
-                                const listData = await rList.json();
-                                const arr = Array.isArray(listData) ? listData : (listData.products || []);
-                                prod = arr.find(p =>
-                                    String(p.id || '').toUpperCase() === q ||
-                                    String(p.ean || '').trim() === q ||
-                                    String(p.name || '').toUpperCase().includes(q)
-                                );
-                            }
-                        }
-                        if (!prod || !prod.id) {
-                            alert('Produto n\u00e3o encontrado no cat\u00e1logo para: ' + q);
-                            return;
-                        }
-                        const rRes = await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'same-origin',
-                            body: JSON.stringify({
-                                action: 'CADASTRADO',
-                                sku: prod.id,
-                                ean: prod.ean || sugEan,
-                                name: prod.name || rawDesc
-                            })
-                        });
-                        if (!rRes.ok) {
-                            const errOut = await rRes.json().catch(() => ({}));
-                            alert(errOut.error || 'Falha ao vincular produto existente.');
-                            return;
-                        }
-                        modal.remove();
-                        await this.refreshEstoquistaPendingQueue();
-                        document.getElementById('btn-open-estoquista-queue')?.click();
-                    } catch (e) {
-                        alert('Erro ao vincular: ' + (e.message || e));
-                    }
-                });
-                parentRow.insertBefore(linkBtn, regBtn.nextSibling);
+                linkBtn.addEventListener('click', () => openLinkExistingModal(reqId, sugEan, rawDesc));
+                parentRow.insertBefore(linkBtn, discardBtn || regBtn.nextSibling);
             }
         });
 
