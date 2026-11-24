@@ -1369,10 +1369,9 @@ if ('serviceWorker' in navigator) {
                         <input
                             type="text"
                             id="new-product-ean"
-                            readonly
                             class="flex-1 min-w-0 border rounded p-2 text-sm font-mono font-bold bg-gray-100"
                             placeholder="BIPAR CÓDIGO"
-                        >
+                         inputmode="numeric" pattern="[0-9]*" autocomplete="off">
 
                         <button
                             id="btn-new-product-scanner"

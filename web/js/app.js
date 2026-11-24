@@ -865,6 +865,74 @@ class KippeApplication {
             if (e.target === modal) modal.remove();
         });
 
+        modal.querySelectorAll('[data-pr-register]').forEach(regBtn => {
+            const reqId = regBtn.getAttribute('data-pr-register');
+            const sugEan = regBtn.getAttribute('data-pr-ean') || '';
+            const rawDesc = regBtn.getAttribute('data-pr-desc') || '';
+            const parentRow = regBtn.parentElement;
+            if (parentRow && !parentRow.querySelector('[data-pr-link-existing]')) {
+                const linkBtn = document.createElement('button');
+                linkBtn.type = 'button';
+                linkBtn.setAttribute('data-pr-link-existing', reqId);
+                linkBtn.className = 'bg-emerald-600 text-white text-[10px] font-black uppercase py-2.5 px-2.5 rounded-lg shadow active:scale-95';
+                linkBtn.style.cssText = 'background:#059669;color:#FFFFFF;font-size:10px;font-weight:900;padding:10px 8px;border-radius:8px;white-space:nowrap;';
+                linkBtn.textContent = 'VINCULAR EXISTENTE';
+                linkBtn.addEventListener('click', async () => {
+                    const term = window.prompt(
+                        'Digite o SKU (ex: SKU000041) ou EAN do produto j\u00e1 cadastrado para vincular "' + rawDesc + '":',
+                        sugEan
+                    );
+                    if (!term || !term.trim()) return;
+                    const q = term.trim().toUpperCase();
+                    try {
+                        let prod = null;
+                        const rDirect = await fetch('/api/produto/' + encodeURIComponent(q), { credentials: 'same-origin' });
+                        if (rDirect.ok) {
+                            const d = await rDirect.json();
+                            prod = d.product || d;
+                        } else {
+                            const rList = await fetch('/api/produtos', { credentials: 'same-origin' });
+                            if (rList.ok) {
+                                const listData = await rList.json();
+                                const arr = Array.isArray(listData) ? listData : (listData.products || []);
+                                prod = arr.find(p =>
+                                    String(p.id || '').toUpperCase() === q ||
+                                    String(p.ean || '').trim() === q ||
+                                    String(p.name || '').toUpperCase().includes(q)
+                                );
+                            }
+                        }
+                        if (!prod || !prod.id) {
+                            alert('Produto n\u00e3o encontrado no cat\u00e1logo para: ' + q);
+                            return;
+                        }
+                        const rRes = await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                action: 'CADASTRADO',
+                                sku: prod.id,
+                                ean: prod.ean || sugEan,
+                                name: prod.name || rawDesc
+                            })
+                        });
+                        if (!rRes.ok) {
+                            const errOut = await rRes.json().catch(() => ({}));
+                            alert(errOut.error || 'Falha ao vincular produto existente.');
+                            return;
+                        }
+                        modal.remove();
+                        await this.refreshEstoquistaPendingQueue();
+                        document.getElementById('btn-open-estoquista-queue')?.click();
+                    } catch (e) {
+                        alert('Erro ao vincular: ' + (e.message || e));
+                    }
+                });
+                parentRow.insertBefore(linkBtn, regBtn.nextSibling);
+            }
+        });
+
         modal.querySelectorAll('[data-pr-register]').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const reqId = btn.getAttribute('data-pr-register');
@@ -2366,6 +2434,115 @@ class KippeApplication {
             document.getElementById(
                 'new-product-category'
             );
+
+        if (eanInput) {
+            eanInput.removeAttribute('readonly');
+            eanInput.disabled = false;
+            eanInput.setAttribute('inputmode', 'numeric');
+            eanInput.setAttribute('pattern', '[0-9]*');
+            eanInput.setAttribute('enterkeyhint', 'done');
+            eanInput.placeholder = 'Digite ou bipe o EAN (0-9)';
+            const eanRow = eanInput.parentElement;
+            if (eanRow && !eanRow.querySelector('#btn-new-product-keypad')) {
+                const keyBtn = document.createElement('button');
+                keyBtn.type = 'button';
+                keyBtn.id = 'btn-new-product-keypad';
+                keyBtn.className = 'bg-slate-700 text-white px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider active:scale-95 shrink-0';
+                keyBtn.style.cssText = 'background:#334155;color:#FFFFFF;padding:10px 10px;border-radius:12px;font-size:10px;font-weight:900;white-space:nowrap;';
+                keyBtn.textContent = 'TECLADO';
+                keyBtn.addEventListener('click', () => {
+                    eanInput.removeAttribute('readonly');
+                    eanInput.setAttribute('inputmode', 'numeric');
+                    eanInput.focus();
+                    eanInput.select();
+                });
+                eanRow.appendChild(keyBtn);
+            }
+        }
+
+        const goToStockEntryForSku = async (targetSku, targetEan, targetName) => {
+            if (this._pendingProductRequest?.reqId) {
+                const reqId = this._pendingProductRequest.reqId;
+                this._pendingProductRequest = null;
+                await fetch(`/api/receiving/pending/${reqId}/resolve-product`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        action: 'CADASTRADO',
+                        sku: targetSku,
+                        ean: targetEan || '',
+                        name: targetName || ''
+                    })
+                }).catch(() => null);
+                modal?.classList.add('hidden');
+                await this.refreshEstoquistaPendingQueue();
+                document.getElementById('btn-open-estoquista-queue')?.click();
+                return;
+            }
+            modal?.classList.add('hidden');
+            if (typeof this.fetchAndRenderSku === 'function') {
+                await this.fetchAndRenderSku(targetSku);
+            }
+            const receiveTrigger =
+                document.getElementById('btn-open-receive') ||
+                document.querySelector('[data-action="receive"], #btn-receive-product');
+            if (receiveTrigger) {
+                receiveTrigger.click();
+            } else {
+                const recModal = document.getElementById('receive-modal');
+                const recSku = document.getElementById('receive-sku');
+                if (recSku) recSku.value = targetSku;
+                recModal?.classList.remove('hidden');
+            }
+        };
+
+        if (errorPanel && !errorPanel.dataset.existingSkuObserver) {
+            errorPanel.dataset.existingSkuObserver = '1';
+            const obs = new MutationObserver(() => {
+                const txt = errorPanel.textContent || '';
+                const m = txt.match(/\[([A-Z0-9-]+)\]\s*([^.\n]+)/i);
+                let actionBtn = errorPanel.querySelector('#btn-link-existing-and-receive');
+                if (!m) {
+                    actionBtn?.remove();
+                    return;
+                }
+                const foundSku = m[1].trim().toUpperCase();
+                const foundName = m[2].trim();
+                if (!actionBtn) {
+                    actionBtn = document.createElement('button');
+                    actionBtn.type = 'button';
+                    actionBtn.id = 'btn-link-existing-and-receive';
+                    actionBtn.style.cssText = 'margin-top:10px;width:100%;background:#124191;color:#FFFFFF;padding:10px 12px;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;display:block;';
+                    errorPanel.appendChild(actionBtn);
+                }
+                actionBtn.textContent = 'VINCULAR AO ' + foundSku + ' E DAR ENTRADA';
+                actionBtn.onclick = async () => {
+                    actionBtn.disabled = true;
+                    actionBtn.textContent = 'ABRINDO ENTRADA...';
+                    await goToStockEntryForSku(foundSku, eanInput?.value.trim() || '', foundName);
+                };
+            });
+            obs.observe(errorPanel, { childList: true, subtree: true, characterData: true });
+        }
+
+        if (successPanel && !successPanel.querySelector('#btn-new-prod-direct-receive')) {
+            const directRecBtn = document.createElement('button');
+            directRecBtn.type = 'button';
+            directRecBtn.id = 'btn-new-prod-direct-receive';
+            directRecBtn.style.cssText = 'margin-top:10px;width:100%;background:#059669;color:#FFFFFF;padding:11px 12px;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;display:block;';
+            directRecBtn.textContent = 'DAR ENTRADA NESTE PRODUTO AGORA';
+            directRecBtn.addEventListener('click', async () => {
+                const m = (successPanel.textContent || '').match(/\b(SKU[0-9A-Z-]+)\b/i);
+                const createdSku = m ? m[1].toUpperCase() : '';
+                if (createdSku) {
+                    await goToStockEntryForSku(createdSku, eanInput?.value.trim() || '', nameInput?.value.trim() || '');
+                } else {
+                    modal?.classList.add('hidden');
+                }
+            });
+            successPanel.appendChild(directRecBtn);
+        }
 
         form?.classList.remove(
             'hidden'
