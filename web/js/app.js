@@ -1727,11 +1727,11 @@ class KippeApplication {
         const isConferente = roleUpper === 'CONFERENTE';
         [
             'btn-module-putaway',
-            'btn-module-replenishment',
             'btn-module-reports',
         ].forEach((modId) => {
             document.getElementById(modId)?.classList.toggle('hidden', isConferente);
         });
+        document.getElementById('btn-module-replenishment')?.classList.remove('hidden');
         document.getElementById('btn-module-validity')?.classList.remove('hidden');
         document.getElementById('btn-module-receiving-audit')?.classList.remove('hidden');
 
@@ -1739,17 +1739,21 @@ class KippeApplication {
         if (inboundLabel) {
             inboundLabel.textContent = isConferente ? '1. CONFERÊNCIA NF' : '1. RECEBER';
         }
+        const repLabel = document.querySelector('#btn-module-replenishment h3');
+        if (repLabel) {
+            repLabel.textContent = isConferente ? '2. ABASTECER' : '3. ABASTECER';
+        }
         const scanLabel = document.querySelector('#btn-module-scan h3');
         if (scanLabel) {
-            scanLabel.textContent = isConferente ? '2. CONSULTA EAN' : '4. CONSULTA';
+            scanLabel.textContent = isConferente ? '3. CONSULTA EAN' : '4. CONSULTA';
         }
         const validityLabel = document.querySelector('#btn-module-validity h3');
         if (validityLabel) {
-            validityLabel.textContent = isConferente ? '3. VALIDADE' : '6. VALIDADE';
+            validityLabel.textContent = isConferente ? '4. VALIDADE' : '6. VALIDADE';
         }
         const auditLabel = document.querySelector('#btn-module-receiving-audit h3');
         if (auditLabel) {
-            auditLabel.textContent = isConferente ? '4. RECEBIMENTOS' : '7. RECEBIMENTOS';
+            auditLabel.textContent = isConferente ? '5. RECEBIMENTOS' : '7. RECEBIMENTOS';
         }
 
         if (allowed && typeof this.refreshEstoquistaPendingQueue === 'function') {

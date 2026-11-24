@@ -2758,6 +2758,31 @@ SHARE_TMP_DIR = Path(tempfile.gettempdir()) / "kippe_shares"
 SHARE_TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _normalize_ocr_json_payload(parsed):
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        if len(parsed) == 1 and isinstance(parsed[0], dict):
+            return parsed[0]
+        dict_items = [x for x in parsed if isinstance(x, dict)]
+        if dict_items:
+            first = dict_items[0]
+            if "items" in first or "supplier" in first or "invoice_number" in first:
+                merged_items = []
+                sup = ""
+                inv = ""
+                for obj in dict_items:
+                    if not sup and obj.get("supplier"):
+                        sup = obj.get("supplier")
+                    if not inv and obj.get("invoice_number"):
+                        inv = obj.get("invoice_number")
+                    if isinstance(obj.get("items"), list):
+                        merged_items.extend(obj["items"])
+                return {"supplier": sup, "invoice_number": inv, "items": merged_items}
+            return {"supplier": "", "invoice_number": "", "items": dict_items}
+    return {"supplier": "", "invoice_number": "", "items": []}
+
+
 def _call_gemini_fast(
     api_key: str,
     media_b64: str,
@@ -2845,7 +2870,7 @@ def _call_gemini_fast(
             with urllib.request.urlopen(req, timeout=24) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
             texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-            return json.loads(texto)
+            return _normalize_ocr_json_payload(json.loads(texto))
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="ignore")
             last_err = RuntimeError(f"Erro API Google ({e.code}): {err_body}")
@@ -2915,7 +2940,7 @@ def _call_openai_compatible_vision(
     texto = result["choices"][0]["message"]["content"].strip()
     if texto.startswith("```"):
         texto = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto, flags=re.IGNORECASE).strip()
-    return json.loads(texto)
+    return _normalize_ocr_json_payload(json.loads(texto))
 
 
 def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str):
@@ -3377,7 +3402,8 @@ def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = "")
                     yield {"error": f"Erro na IA: {exc}"}
                     return
 
-        for _, p_data in page_results:
+        for _, raw_p_data in page_results:
+            p_data = _normalize_ocr_json_payload(raw_p_data)
             if not merged_supplier and p_data.get("supplier"):
                 merged_supplier = str(p_data.get("supplier")).strip().upper()
             if not merged_invoice and p_data.get("invoice_number"):
@@ -3392,6 +3418,8 @@ def _iter_invoice_ocr(file_bytes: bytes, filename: str = "", mimetype: str = "")
 
         clean_items = []
         for it in all_raw_items:
+            if not isinstance(it, dict):
+                continue
             desc = str(it.get("description") or "").strip().upper()
             if not desc:
                 continue
