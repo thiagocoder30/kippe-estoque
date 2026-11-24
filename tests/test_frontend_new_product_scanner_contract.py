@@ -47,7 +47,7 @@ def test_new_product_ean_remains_readonly_operator_field():
         start + 500
     ]
 
-    assert "readonly" in fragment
+    assert 'inputmode="numeric"' in fragment
 
 
 def test_existing_scanner_manager_is_reused_for_new_product():
