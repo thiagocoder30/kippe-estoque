@@ -276,6 +276,7 @@ def connect_db(db_path: str = "data/estoque_producao.db") -> Any:
             db_url,
             row_factory=dict_row,
             prepare_threshold=None,
+            connect_timeout=10,
         )
         return PostgresConnectionAdapter(raw_conn)
 

@@ -3951,7 +3951,7 @@ def resolve_pending_product_request(req_id: int):
 
     data = request.json or {}
     action = str(data.get('action') or 'CADASTRADO').strip().upper()
-    created_sku = str(data.get('sku') or '').strip()
+    created_sku = str(data.get('sku') or data.get('created_sku') or '').strip()
     ean = str(data.get('ean') or '').strip()
     catalog_name = str(data.get('name') or '').strip()
     now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')

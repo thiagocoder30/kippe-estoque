@@ -4895,17 +4895,21 @@ class KippeApplication {
                     if (this._pendingProductRequest) {
                         const pendingReq = this._pendingProductRequest;
                         this._pendingProductRequest = null;
+                        const resCtrl = new AbortController();
+                        const resTimer = setTimeout(() => resCtrl.abort(), 10000);
                         await fetch(`/api/receiving/pending/${pendingReq.reqId}/resolve-product`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'same-origin',
+                            signal: resCtrl.signal,
                             body: JSON.stringify({
                                 action: 'CADASTRADO',
+                                sku: product.id,
                                 created_sku: product.id,
-                                name: product.name || name,
+                                name: String(product.name || name).toUpperCase(),
                                 ean: product.ean || ean
                             })
-                        }).catch(() => {});
+                        }).catch(() => {}).finally(() => clearTimeout(resTimer));
                         this.refreshEstoquistaPendingQueue();
                     }
 

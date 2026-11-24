@@ -13,6 +13,9 @@ export class APIClient {
 
     async _request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
+        const timeoutMs = Number(options.timeoutMs || 20000);
+        const controller = new AbortController();
+        const timerId = setTimeout(() => controller.abort(), timeoutMs);
 
         const headers = {
             'Content-Type': 'application/json',
@@ -20,14 +23,25 @@ export class APIClient {
             ...options.headers,
         };
 
-        try {
-            const response = await fetch(url, {
-                ...options,
-                headers,
-                credentials: 'same-origin',
-            });
+        const fetchOptions = {
+            ...options,
+            headers,
+            credentials: 'same-origin',
+            signal: options.signal || controller.signal,
+        };
+        delete fetchOptions.timeoutMs;
 
-            const data = await response.json();
+        try {
+            const response = await fetch(url, fetchOptions);
+            const rawText = await response.text();
+            let data = {};
+            if (rawText) {
+                try {
+                    data = JSON.parse(rawText);
+                } catch (_) {
+                    data = { error: `Resposta inv\u00e1lida do servidor (HTTP ${response.status}).` };
+                }
+            }
 
             if (!response.ok) {
                 throw new Error(
@@ -37,12 +51,17 @@ export class APIClient {
 
             return data;
         } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error('Tempo limite excedido (20s). Verifique sua conex\u00e3o e tente novamente.');
+            }
             console.error(
                 `[API ERROR] ${options.method || 'GET'} ${url}`,
                 error
             );
 
             throw error;
+        } finally {
+            clearTimeout(timerId);
         }
     }
 
