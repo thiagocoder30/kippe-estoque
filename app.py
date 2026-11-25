@@ -4062,6 +4062,7 @@ def list_receiving_pending():
         return jsonify({'error': 'Autorização negada: perfil sem acesso à fila de armazenagem.'}), 403
 
     conn = _get_kippe_db()
+    batch_rows = []
     try:
         conf_rows = conn.execute(
             "SELECT * FROM receiving_pending_queue WHERE status = 'PENDENTE' ORDER BY id DESC"
@@ -4069,8 +4070,36 @@ def list_receiving_pending():
         prod_rows = conn.execute(
             "SELECT * FROM product_registration_requests WHERE status = 'PENDENTE' ORDER BY id DESC"
         ).fetchall()
+        try:
+            batch_rows = conn.execute(
+                "SELECT product_sku, batch_code, expiration_date FROM batches ORDER BY id DESC LIMIT 500"
+            ).fetchall()
+        except Exception:
+            try:
+                batch_rows = conn.execute(
+                    "SELECT sku AS product_sku, batch_code, expiration_date FROM batches ORDER BY id DESC LIMIT 500"
+                ).fetchall()
+            except Exception:
+                batch_rows = []
     finally:
         conn.close()
+
+    latest_batch_by_sku = {}
+    for b in batch_rows:
+        b_sku = str(b['product_sku'] or '').strip().upper()
+        if not b_sku or b_sku in latest_batch_by_sku:
+            continue
+        b_code = str(b['batch_code'] or '').strip().upper()
+        b_exp = str(b['expiration_date'] or '').strip()
+        if '/' in b_exp and len(b_exp) == 10:
+            parts = b_exp.split('/')
+            if len(parts[2]) == 4:
+                b_exp = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+        if b_code or b_exp:
+            latest_batch_by_sku[b_sku] = {
+                'batch_code': b_code,
+                'expiration_date': b_exp[:10] if b_exp else '',
+            }
 
     conferences = []
     for r in conf_rows:
@@ -4078,6 +4107,14 @@ def list_receiving_pending():
             parsed_items = json.loads(r['items_json'] or '[]')
         except Exception:
             parsed_items = []
+        for it in parsed_items:
+            it_sku = str(it.get('sku') or '').strip().upper()
+            if it_sku and not it_sku.startswith('TEMP-') and it_sku in latest_batch_by_sku:
+                ref = latest_batch_by_sku[it_sku]
+                if not str(it.get('batch_code') or '').strip() and ref['batch_code']:
+                    it['batch_code'] = ref['batch_code']
+                if not str(it.get('expiration_date') or '').strip() and ref['expiration_date']:
+                    it['expiration_date'] = ref['expiration_date']
         conferences.append({
             'id': int(r['id']),
             'supplier': r['supplier'],
@@ -4231,12 +4268,13 @@ def sync_pending_queue_item_meta():
         for p_cf in pending_confs:
             cf_sup = _norm_catalog_text(p_cf['supplier'] or '')
             cf_inv = str(p_cf['invoice_number'] or '').strip()
+            same_doc = True
             if sup_norm and cf_sup and cf_sup != sup_norm:
-                continue
+                same_doc = False
             if inv_num and cf_inv:
                 cf_invs = [x.strip() for x in cf_inv.split(',') if x.strip()]
                 if inv_num not in cf_invs and cf_inv != inv_num:
-                    continue
+                    same_doc = False
             try:
                 cf_items = json.loads(p_cf['items_json'] or '[]')
             except Exception:
@@ -4247,7 +4285,7 @@ def sync_pending_queue_item_meta():
                 it_norm = _norm_catalog_text(it.get('name') or it.get('catalog_name') or '')
                 match_sku = bool(sku and it_sku == sku)
                 match_desc = bool(desc_norm and it_norm == desc_norm)
-                if match_sku or match_desc:
+                if match_sku or (same_doc and match_desc):
                     if sku and (not it_sku or it_sku.startswith('TEMP-')):
                         it['sku'] = sku
                         changed = True

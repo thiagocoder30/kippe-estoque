@@ -1340,6 +1340,7 @@ class KippeApplication {
                 };
                 this._pendingProductRequest = ctx;
                 this._lastReceivingContext = { ...ctx };
+                this._returnToEstoquistaQueueAfterPutaway = true;
                 modal.remove();
                 await this.openNewProductRegistration(ean);
                 const nameInput = document.getElementById('new-product-name');
