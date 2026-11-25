@@ -2874,6 +2874,7 @@ def _call_gemini_fast(
     attempts = [
         ("gemini-2.5-flash", {"thinkingBudget": 0}),
         ("gemini-2.5-flash-lite", None),
+        ("gemini-2.0-flash", None),
         ("gemini-flash-lite-latest", None),
     ]
 
@@ -2908,7 +2909,7 @@ def _call_gemini_fast(
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=25) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
             texto = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return _normalize_ocr_json_payload(json.loads(texto))
@@ -2984,6 +2985,50 @@ def _call_openai_compatible_vision(
     return _normalize_ocr_json_payload(json.loads(texto))
 
 
+_GROQ_VISION_MODELS_CACHE = {"ts": 0.0, "models": []}
+
+
+def _discover_groq_vision_models(groq_key: str):
+    now = time.time()
+    if _GROQ_VISION_MODELS_CACHE["models"] and (now - _GROQ_VISION_MODELS_CACHE["ts"]) < 3600:
+        return _GROQ_VISION_MODELS_CACHE["models"]
+
+    excluded = ("whisper", "tts", "guard", "safeguard", "embed", "rerank", "playai", "orpheus", "moderation")
+    vision_keywords = ("vision", "-vl", "scout", "maverick", "kimi", "qwen", "llama-4", "llama-3.2", "gemma-3", "pixtral")
+    text_only_known = ("llama-3.1-8b", "llama-3.3-70b", "mixtral", "deepseek-r1", "gemma2-9b")
+
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/models",
+        headers={
+            "Authorization": f"Bearer {groq_key}",
+            "User-Agent": "KippeWMS/1.0",
+        },
+        method="GET",
+    )
+    discovered = []
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        for item in payload.get("data") or []:
+            mid = str(item.get("id") or "").strip()
+            low = mid.lower()
+            if not mid or any(bad in low for bad in excluded):
+                continue
+            if any(tok in low for tok in text_only_known):
+                continue
+            score = 0 if any(vk in low for vk in vision_keywords) else 1
+            discovered.append((score, mid))
+    except Exception:
+        discovered = []
+
+    discovered.sort(key=lambda x: (x[0], x[1]))
+    models = [mid for _, mid in discovered[:5]]
+    if models:
+        _GROQ_VISION_MODELS_CACHE["ts"] = now
+        _GROQ_VISION_MODELS_CACHE["models"] = models
+    return models
+
+
 def _render_pdf_pages_for_vision(pdf_b64: str, max_pages: int = 3):
     try:
         import base64, io
@@ -3005,7 +3050,6 @@ def _render_pdf_pages_for_vision(pdf_b64: str, max_pages: int = 3):
 
 
 def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str):
-    image_pages = []
     if mime_type == "application/pdf":
         image_pages = _render_pdf_pages_for_vision(media_b64, max_pages=3)
         if not image_pages:
@@ -3016,7 +3060,10 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
     diag_notes = []
     groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
     if groq_key:
-        for g_model in ("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"):
+        groq_models = _discover_groq_vision_models(groq_key)
+        if not groq_models:
+            diag_notes.append("Nenhum modelo multimodal ativo retornado pelo Groq")
+        for g_model in groq_models:
             try:
                 merged = {"supplier": "", "invoice_number": "", "items": []}
                 for pg_b64 in image_pages:
@@ -3037,25 +3084,32 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
                         merged["items"].extend(res["items"])
                 return merged, None
             except Exception as exc:
-                diag_notes.append(str(exc))
+                diag_notes.append(f"{g_model}: {exc}")
                 continue
-
     else:
         diag_notes.append("GROQ_API_KEY não detectada no servidor")
 
     mistral_key = (os.getenv("MISTRAL_API_KEY") or "").strip()
     if mistral_key:
         try:
-            res = _call_openai_compatible_vision(
-                "Mistral",
-                "https://api.mistral.ai/v1/chat/completions",
-                mistral_key,
-                "pixtral-12b-2409",
-                prompt,
-                media_b64,
-                mime_type,
-            )
-            return res, None
+            merged = {"supplier": "", "invoice_number": "", "items": []}
+            for pg_b64 in image_pages:
+                res = _call_openai_compatible_vision(
+                    "Mistral",
+                    "https://api.mistral.ai/v1/chat/completions",
+                    mistral_key,
+                    "pixtral-12b-2409",
+                    prompt,
+                    pg_b64,
+                    "image/jpeg",
+                )
+                if not merged["supplier"] and res.get("supplier"):
+                    merged["supplier"] = res["supplier"]
+                if not merged["invoice_number"] and res.get("invoice_number"):
+                    merged["invoice_number"] = res["invoice_number"]
+                if isinstance(res.get("items"), list):
+                    merged["items"].extend(res["items"])
+            return merged, None
         except Exception as exc:
             diag_notes.append(str(exc))
 
