@@ -5366,17 +5366,13 @@ class KippeApplication {
         );
 
         document.getElementById('btn-module-inbound')?.addEventListener('click', () => {
-            const roleUpper = String(this.currentOperator?.role || '').trim().toUpperCase();
-            if (roleUpper === 'CONFERENTE') {
-                document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
-                document.getElementById('conference-view')?.classList.remove('hidden');
-                window.scrollTo(0, 0);
-                if (window.ConferenceFeature && typeof window.ConferenceFeature.mount === 'function') {
-                    window.ConferenceFeature.mount();
-                }
-                return;
+            methodModal?.classList.add('hidden');
+            document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById('conference-view')?.classList.remove('hidden');
+            window.scrollTo(0, 0);
+            if (window.ConferenceFeature && typeof window.ConferenceFeature.mount === 'function') {
+                window.ConferenceFeature.mount();
             }
-            methodModal?.classList.remove('hidden');
         });
         document.getElementById('close-inbound-method')?.addEventListener('click', () => methodModal?.classList.add('hidden'));
         document.getElementById('close-receive-modal')?.addEventListener('click', () => modalReceive?.classList.add('hidden'));
@@ -5575,6 +5571,27 @@ class KippeApplication {
 
                         this.lastReceivingResult =
                             receiving;
+                    }
+
+                    if (this._lastReceivingContext) {
+                        if (this._lastReceivingContext.reqId) {
+                            this._returnToEstoquistaQueueAfterPutaway = true;
+                        }
+                        try {
+                            await fetch('/api/receiving/pending/sync-item-meta', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    sku: sku,
+                                    desc: this._lastReceivingContext.desc || '',
+                                    supplier: supplier || this._lastReceivingContext.supplier || '',
+                                    invoice_number: invoiceId || this._lastReceivingContext.invoice_number || '',
+                                    batch_code: batchCode || '',
+                                    expiration_date: expirationDate || '',
+                                }),
+                            });
+                        } catch (_syncErr) {}
                     }
 
                     document.getElementById(
@@ -7621,12 +7638,18 @@ class KippeApplication {
             'btn-putaway-success-finalize'
         )?.addEventListener(
             'click',
-            () => {
+            async () => {
                 document.getElementById(
                     'putaway-success-modal'
                 )?.classList.add(
                     'hidden'
                 );
+
+                const shouldReturnQueue = Boolean(
+                    this._returnToEstoquistaQueueAfterPutaway || this._lastReceivingContext?.reqId
+                );
+                this._returnToEstoquistaQueueAfterPutaway = false;
+                this._lastReceivingContext = null;
 
                 this.assistedPutaway =
                     false;
@@ -7673,6 +7696,11 @@ class KippeApplication {
                 )?.classList.remove(
                     'hidden'
                 );
+
+                if (shouldReturnQueue) {
+                    await this.refreshEstoquistaPendingQueue();
+                    document.getElementById('btn-open-estoquista-queue')?.click();
+                }
             }
         );
 
@@ -8712,7 +8740,23 @@ class KippeApplication {
         this._receivingAuditWired = true;
         this._receivingAuditStatus = 'ALL';
 
-        const openAuditView = async () => {
+        const syncAuditTabsUI = (targetStatus) => {
+            this._receivingAuditStatus = targetStatus || 'ALL';
+            document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(b => {
+                const st = b.getAttribute('data-audit-status');
+                const active = st === this._receivingAuditStatus;
+                if (active) {
+                    b.style.background = st === 'DIVERGENCIA' ? '#DC2626' : '#124191';
+                    b.style.color = '#FFFFFF';
+                } else {
+                    b.style.background = st === 'DIVERGENCIA' ? '#FEF2F2' : '#F1F5F9';
+                    b.style.color = st === 'DIVERGENCIA' ? '#B91C1C' : '#475569';
+                }
+            });
+        };
+
+        const openAuditView = async (initialStatus = 'ALL') => {
+            syncAuditTabsUI(initialStatus);
             document.querySelectorAll('main > section[id$="-view"]').forEach(el => el.classList.add('hidden'));
             document.getElementById('receiving-audit-view')?.classList.remove('hidden');
             const resetBtn = document.getElementById('btn-reset-receiving-audit');
@@ -8723,7 +8767,8 @@ class KippeApplication {
             await this.loadReceivingAudit();
         };
 
-        document.getElementById('btn-module-receiving-audit')?.addEventListener('click', openAuditView);
+        document.getElementById('btn-module-receiving-audit')?.addEventListener('click', () => openAuditView('ALL'));
+        document.getElementById('btn-module-divergences-history')?.addEventListener('click', () => openAuditView('DIVERGENCIA'));
         document.getElementById('btn-back-receiving-audit')?.addEventListener('click', () => {
             if (typeof window.showHome === 'function') {
                 window.showHome();
@@ -8766,12 +8811,7 @@ class KippeApplication {
 
         document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(btn => {
             btn.addEventListener('click', () => {
-                this._receivingAuditStatus = btn.getAttribute('data-audit-status') || 'ALL';
-                document.querySelectorAll('#receiving-audit-status-tabs [data-audit-status]').forEach(b => {
-                    const active = b === btn;
-                    b.style.background = active ? '#124191' : '#F1F5F9';
-                    b.style.color = active ? '#FFFFFF' : '#475569';
-                });
+                syncAuditTabsUI(btn.getAttribute('data-audit-status') || 'ALL');
                 this.loadReceivingAudit();
             });
         });
@@ -8856,15 +8896,24 @@ class KippeApplication {
                 }).join('');
 
                 const divHtml = (rec.divergences || []).length > 0 ? `
-                    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px;">
+                    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;">
                         <p style="font-size:9px;font-weight:900;color:#991B1B;margin:0;text-transform:uppercase;">⚠️ Divergências Formalizadas (${rec.divergences.length})</p>
-                        ${rec.divergences.map(d => `
-                            <p style="font-size:10px;color:#7F1D1D;font-weight:700;margin:0;">
-                                • ${d.product_name}: Esperado <strong>${d.expected_qty}</strong> / Conferido <strong>${d.counted_qty}</strong>
-                                (${d.divergence_qty > 0 ? '+' : ''}${d.divergence_qty}) — <span style="text-transform:uppercase;">${d.reason}</span>
-                                ${d.notes ? `(${d.notes})` : ''}
-                            </p>
-                        `).join('')}
+                        ${rec.divergences.map(d => {
+                            const st = String(d.status || 'REGISTRADA').toUpperCase();
+                            const badge = st === 'CANHOTO_RETIDO'
+                                ? `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:8px;font-weight:900;">📌 CANHOTO RETIDO · SALDO: ${d.pending_qty}</span>`
+                                : st === 'COMPLEMENTO_RECEBIDO'
+                                    ? `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-size:8px;font-weight:900;">✅ COMPLEMENTO RECEBIDO</span>`
+                                    : `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:8px;font-weight:900;">REGISTRADA</span>`;
+                            return `
+                                <div style="font-size:10px;color:#7F1D1D;font-weight:700;margin:0;line-height:1.35;">
+                                    • ${d.product_name}: Esperado <strong>${d.expected_qty}</strong> / Conferido <strong>${d.counted_qty}</strong>
+                                    (${d.divergence_qty > 0 ? '+' : ''}${d.divergence_qty}) — <span style="text-transform:uppercase;">${d.reason}</span>
+                                    ${d.notes ? `(${d.notes})` : ''}
+                                    <div style="margin-top:3px;">${badge}</div>
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
                 ` : '';
 

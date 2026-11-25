@@ -4206,6 +4206,70 @@ def resolve_pending_product_request(req_id: int):
     return jsonify({'ok': True, 'status': new_status, 'sku': created_sku}), 200
 
 
+@app.route('/api/receiving/pending/sync-item-meta', methods=['POST'])
+def sync_pending_queue_item_meta():
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+    sku = str(data.get('sku') or '').strip().upper()
+    desc_norm = _norm_catalog_text(data.get('desc') or '')
+    sup_norm = _norm_catalog_text(data.get('supplier') or '')
+    inv_num = str(data.get('invoice_number') or '').strip()
+    batch_code = str(data.get('batch_code') or '').strip().upper()
+    expiration_date = str(data.get('expiration_date') or '').strip()
+
+    if not batch_code and not expiration_date:
+        return jsonify({'ok': True, 'updated': 0}), 200
+
+    conn = _get_kippe_db()
+    updated_rows = 0
+    try:
+        pending_confs = conn.execute(
+            "SELECT id, supplier, invoice_number, items_json FROM receiving_pending_queue WHERE status = 'PENDENTE'"
+        ).fetchall()
+        for p_cf in pending_confs:
+            cf_sup = _norm_catalog_text(p_cf['supplier'] or '')
+            cf_inv = str(p_cf['invoice_number'] or '').strip()
+            if sup_norm and cf_sup and cf_sup != sup_norm:
+                continue
+            if inv_num and cf_inv:
+                cf_invs = [x.strip() for x in cf_inv.split(',') if x.strip()]
+                if inv_num not in cf_invs and cf_inv != inv_num:
+                    continue
+            try:
+                cf_items = json.loads(p_cf['items_json'] or '[]')
+            except Exception:
+                continue
+            changed = False
+            for it in cf_items:
+                it_sku = str(it.get('sku') or '').strip().upper()
+                it_norm = _norm_catalog_text(it.get('name') or it.get('catalog_name') or '')
+                match_sku = bool(sku and it_sku == sku)
+                match_desc = bool(desc_norm and it_norm == desc_norm)
+                if match_sku or match_desc:
+                    if sku and (not it_sku or it_sku.startswith('TEMP-')):
+                        it['sku'] = sku
+                        changed = True
+                    if batch_code:
+                        it['batch_code'] = batch_code
+                        changed = True
+                    if expiration_date:
+                        it['expiration_date'] = expiration_date
+                        changed = True
+            if changed:
+                conn.execute(
+                    "UPDATE receiving_pending_queue SET items_json = ? WHERE id = ?",
+                    (json.dumps(cf_items, ensure_ascii=False), p_cf['id']),
+                )
+                updated_rows += 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({'ok': True, 'updated': updated_rows}), 200
+
+
 @app.route('/api/receiving/pending/<int:queue_id>/approve', methods=['POST'])
 def approve_pending_conference(queue_id: int):
     if not _has_valid_session():
@@ -4359,6 +4423,9 @@ def search_receiving_audit():
             'divergence_qty': int(d['divergence_qty'] or 0),
             'reason': d['reason'] or '',
             'notes': d['notes'] or '',
+            'status': str(d['status'] or 'REGISTRADA').upper(),
+            'pending_qty': int(d['pending_qty'] or 0),
+            'resolved_at': str(d['resolved_at'] or ''),
             'operator_name': d['operator_name'] or d['operator_id'] or '',
             'created_at': d['created_at'] or '',
         })
@@ -4478,7 +4545,10 @@ def search_receiving_audit():
 
     filtered = []
     for rec in records:
-        if status_filter not in ('', 'ALL', 'TODOS') and rec['status'] != status_filter:
+        if status_filter in ('DIVERGENCIA', 'DIVERGENCIAS'):
+            if not rec.get('divergences'):
+                continue
+        elif status_filter not in ('', 'ALL', 'TODOS') and rec['status'] != status_filter:
             continue
         if query_text:
             haystack_parts = [

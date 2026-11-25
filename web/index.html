@@ -367,6 +367,10 @@ if ('serviceWorker' in navigator) {
                     <div class="bg-[#124191] text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg></div>
                     <h3 class="font-black text-[#124191] text-[11px] text-center">7. RECEBIMENTOS</h3>
                 </button>
+                <button class="bg-white rounded-xl p-4 shadow-sm border border-red-100 flex flex-col items-center justify-center active:scale-95" id="btn-module-divergences-history" type="button">
+                    <div class="bg-red-600 text-white p-3 rounded-full mb-2 w-12 h-12 flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>
+                    <h3 class="font-black text-red-700 text-[11px] text-center">8. DIVERGÊNCIAS</h3>
+                </button>
                 
             </div>
 
@@ -1301,9 +1305,9 @@ if ('serviceWorker' in navigator) {
 
                 <div id="receiving-audit-status-tabs" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
                     <button type="button" data-audit-status="ALL" style="padding:7px 4px;border-radius:8px;border:none;font-size:9px;font-weight:900;text-transform:uppercase;background:#124191;color:#FFFFFF;">TODOS</button>
+                    <button type="button" data-audit-status="DIVERGENCIA" style="padding:7px 4px;border-radius:8px;border:none;font-size:9px;font-weight:900;text-transform:uppercase;background:#FEF2F2;color:#B91C1C;">DIVERGÊNCIAS</button>
                     <button type="button" data-audit-status="PENDENTE" style="padding:7px 4px;border-radius:8px;border:none;font-size:9px;font-weight:900;text-transform:uppercase;background:#F1F5F9;color:#475569;">PENDENTE</button>
                     <button type="button" data-audit-status="APROVADO" style="padding:7px 4px;border-radius:8px;border:none;font-size:9px;font-weight:900;text-transform:uppercase;background:#F1F5F9;color:#475569;">APROVADO</button>
-                    <button type="button" data-audit-status="REJEITADO" style="padding:7px 4px;border-radius:8px;border:none;font-size:9px;font-weight:900;text-transform:uppercase;background:#F1F5F9;color:#475569;">REJEITADO</button>
                 </div>
 
                 <div id="receiving-audit-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;"></div>
