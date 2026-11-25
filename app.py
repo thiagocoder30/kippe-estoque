@@ -4253,7 +4253,6 @@ def approve_pending_conference(queue_id: int):
             return jsonify({'error': 'Nenhum item válido com quantidade > 0 para aprovar.'}), 400
 
         all_products_cache = container.product_repository.get_all()
-        all_products_cache = container.product_repository.get_all()
         committed = []
         for idx_pos, (sku, qty, it) in enumerate(resolved_items):
             ov = item_overrides.get(str(idx_pos)) or {}
@@ -4270,7 +4269,6 @@ def approve_pending_conference(queue_id: int):
                 manufacturing_date=manufacturing_date,
                 origin_document=item_inv if item_inv else 'CONFERENCE',
                 operator_id=op_id or 'SYSTEM',
-                products_cache=all_products_cache,
                 products_cache=all_products_cache,
             )
             if not res.is_success:
