@@ -4,6 +4,14 @@
  */
 
 const ConferenceFeature = (() => {
+
+if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css')) {
+  const s = document.createElement('style');
+  s.id = 'kippe-spin-css';
+  s.textContent = '@keyframes kippe-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+  document.head.appendChild(s);
+}
+
   const STORAGE_KEY = 'kippe_conference_state';
   const LEARNED_MAP_KEY = 'kippe_ocr_ean_map';
 
@@ -2500,7 +2508,25 @@ ${unlinkedItems.length} item(ns) sem cadastro foram encaminhados automaticamente
       }
     });
 
-    document.getElementById('btn-conference-finalize')?.addEventListener('click', finalize);
+    document.getElementById('btn-conference-finalize')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    const originalHTML = btn.innerHTML;
+    const originalBg = btn.style.background;
+    btn.disabled = true;
+    btn.innerHTML = '<span style="display:inline-block;animation:kippe-spin 1s linear infinite;margin-right:8px;">⏳</span> PROCESSANDO...';
+    btn.style.background = '#9CA3AF';
+    try {
+      await finalize();
+    } catch (err) {
+      console.error('Erro em finalize:', err);
+      await window.kippeModalAlert('❌ Erro: ' + (err.message || err), 'FALHA AO FINALIZAR');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+      btn.style.background = originalBg || '';
+    }
+});
     
     // Botão cancelar do Quick Create
     document.getElementById('qc-cancel')?.addEventListener('click', () => {
