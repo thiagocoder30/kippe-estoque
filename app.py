@@ -2857,6 +2857,7 @@ def _call_gemini_fast(
         "- 'description': Copie a descrição INTEIRA da coluna DESCRIÇÃO desde a PRIMEIRA letra até a última (NUNCA corte o início como 'IOGURTE', 'IOG.', 'LEITE', 'QUEIJO'), MANTENDO OBRIGATORIAMENTE gramatura, volume e multiplicador de caixa "
         "(ex: 'MILHO CONSERVA 24X170G LATA STELLA DORO', 'BACON PALETA COM PELE FREE CARNE APX.11KG COD.251').\n"
         "- 'unit': Sigla exata da coluna UN / UNID daquela linha (ex: 'KG', 'CX', 'FD', 'UN', 'PCT', 'LT').\n"
+        "- ORTOGRAFIA EM PORTUGUÊS: Leia cada letra com atenção redobrada para não trocar vogais ou consoantes de marcas e produtos brasileiros (ex: 'RICOKO', 'BISCOITO', 'MACARRAO', 'IOGURTE').\n"
         "- ORIENTAÇÃO DA IMAGEM: A foto pode estar em retrato ou paisagem (rotacionada 90°/180°/270°). Leia seguindo o alinhamento real das colunas da tabela.\n"
         "- 'quantity': Número exato da coluna principal QUANT. / QUANTIDADE daquela linha (mantenha decimais se houver, ex: 20.000 ou 11.45). NUNCA use a coluna 'QUANT. AUX', 'QTD. VOL' ou 'VOLUMES' como quantidade.\n"
         "- 'aux_volumes': Se existir uma coluna 'QUANT. AUX' ou 'VOLUMES' na linha, extraia esse número inteiro (caso contrário, 0).\n"
@@ -3042,7 +3043,7 @@ def _render_pdf_pages_for_vision(pdf_b64: str, max_pages: int = 3):
         doc = fitz.open(stream=base64.b64decode(pdf_b64), filetype="pdf")
         total = min(len(doc), max_pages)
         for idx in range(total):
-            pix = doc.load_page(idx).get_pixmap(dpi=160, alpha=False)
+            pix = doc.load_page(idx).get_pixmap(dpi=210, alpha=False)
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             pages.append(_prepare_page_b64(img, is_last_page=(idx == len(doc) - 1)))
         doc.close()
@@ -3095,7 +3096,7 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
 
     mistral_key = (os.getenv("MISTRAL_API_KEY") or "").strip()
     if mistral_key:
-        for m_model in ("mistral-small-latest", "ministral-14b-latest", "pixtral-12b-2409"):
+        for m_model in ("mistral-medium-latest", "mistral-large-latest", "ministral-14b-latest", "mistral-small-latest"):
             try:
                 merged = {"supplier": "", "invoice_number": "", "items": []}
                 for pg_idx, pg_b64 in enumerate(image_pages):
@@ -3176,10 +3177,10 @@ def _prepare_page_b64(img: Image.Image, is_last_page: bool = True) -> str:
     image = ImageOps.autocontrast(image, cutoff=0.5)
     image = ImageEnhance.Sharpness(image).enhance(1.35)
     resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
-    image.thumbnail((2200, 2200), resample_filter)
+    image.thumbnail((2600, 2600), resample_filter)
 
     buf = io.BytesIO()
-    image.save(buf, format='JPEG', quality=88, optimize=True)
+    image.save(buf, format='JPEG', quality=92, optimize=True)
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 

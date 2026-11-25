@@ -886,6 +886,27 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
       }
     });
 
+    const modalTitleEl = el('h3', { className: 'font-black text-sm mt-0.5 uppercase leading-tight break-words' }, target.raw_ocr_name || target.name);
+    const descEditInput = el('input', {
+      type: 'text',
+      value: (target.raw_ocr_name || target.name || '').toUpperCase(),
+      className: 'w-full h-9 bg-amber-50/60 border border-amber-300 rounded-lg px-2.5 text-xs font-black uppercase text-gray-800 outline-none focus:bg-white focus:border-[#124191]',
+      oninput: (e) => {
+        const cleanVal = e.target.value.toUpperCase();
+        target.name = cleanVal;
+        target.raw_ocr_name = cleanVal;
+        modalTitleEl.textContent = cleanVal || 'PRODUTO SEM DESCRIÇÃO';
+        save();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          const words = normalizeDesc(cleanVal).split(' ').filter(w => w.length >= 3).slice(0, 3);
+          if (words.length > 0 && !inputEl.value.trim()) {
+            runLiveSearch(words.join(' '));
+          }
+        }, 250);
+      }
+    });
+
     const modal = el('div', {
       id: 'conf-manual-link-modal',
       className: 'fixed inset-0 z-[210] bg-black/80 flex items-center justify-center p-4',
@@ -895,7 +916,7 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
         el('div', { className: 'p-4 bg-[#124191] text-white flex items-start justify-between gap-2' }, [
           el('div', { className: 'min-w-0 flex-1' }, [
             el('div', { className: 'text-[9px] font-black uppercase tracking-wider text-blue-200' }, 'VINCULAR EAN / PRODUTO'),
-            el('h3', { className: 'font-black text-sm mt-0.5 uppercase leading-tight break-words' }, target.raw_ocr_name || target.name),
+            modalTitleEl,
             el('div', { className: 'text-[10px] font-bold text-blue-200 mt-1 uppercase' }, `QUANTIDADE NA NF: ${target.expected} UN`)
           ]),
           el('button', {
@@ -907,6 +928,12 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
         ]),
 
         el('div', { className: 'p-4 space-y-3 overflow-y-auto' }, [
+          el('div', {}, [
+            el('label', { className: 'block text-[10px] font-black text-amber-800 uppercase mb-1' },
+              '✏️ DESCRIÇÃO LIDA NA NF (CORRIJA SE HOUVER ERRO)'
+            ),
+            descEditInput
+          ]),
           el('div', {}, [
             el('label', { className: 'block text-[10px] font-black text-gray-500 uppercase mb-1' },
               'BIPE O CÓDIGO DE BARRAS OU DIGITE EAN / NOME'
