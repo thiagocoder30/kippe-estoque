@@ -2954,6 +2954,7 @@ def _call_openai_compatible_vision(
         "model": model_name,
         "temperature": 0.0,
         "max_tokens": 1400,
+        **({"reasoning_effort": "none"} if "qwen3.8" in model_name.lower() else {}),
         "response_format": {"type": "json_object"},
         "messages": [{
             "role": "user",
@@ -3094,14 +3095,44 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
 
     mistral_key = (os.getenv("MISTRAL_API_KEY") or "").strip()
     if mistral_key:
+        for m_model in ("mistral-small-latest", "ministral-14b-latest", "pixtral-12b-2409"):
+            try:
+                merged = {"supplier": "", "invoice_number": "", "items": []}
+                for pg_idx, pg_b64 in enumerate(image_pages):
+                    if pg_idx > 0:
+                        time.sleep(1.5)
+                    res = _call_openai_compatible_vision(
+                        "Mistral",
+                        "https://api.mistral.ai/v1/chat/completions",
+                        mistral_key,
+                        m_model,
+                        prompt,
+                        pg_b64,
+                        "image/jpeg",
+                    )
+                    if not merged["supplier"] and res.get("supplier"):
+                        merged["supplier"] = res["supplier"]
+                    if not merged["invoice_number"] and res.get("invoice_number"):
+                        merged["invoice_number"] = res["invoice_number"]
+                    if isinstance(res.get("items"), list):
+                        merged["items"].extend(res["items"])
+                return merged, None
+            except Exception as exc:
+                diag_notes.append(f"Mistral({m_model}): {exc}")
+                continue
+
+    openrouter_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+    if openrouter_key:
         try:
             merged = {"supplier": "", "invoice_number": "", "items": []}
-            for pg_b64 in image_pages:
+            for pg_idx, pg_b64 in enumerate(image_pages):
+                if pg_idx > 0:
+                    time.sleep(2.0)
                 res = _call_openai_compatible_vision(
-                    "Mistral",
-                    "https://api.mistral.ai/v1/chat/completions",
-                    mistral_key,
-                    "pixtral-12b-2409",
+                    "OpenRouter",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    openrouter_key,
+                    "openrouter/free",
                     prompt,
                     pg_b64,
                     "image/jpeg",
@@ -3114,7 +3145,7 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
                     merged["items"].extend(res["items"])
             return merged, None
         except Exception as exc:
-            diag_notes.append(str(exc))
+            diag_notes.append(f"OpenRouter: {exc}")
 
     return None, " | ".join(diag_notes)
 
