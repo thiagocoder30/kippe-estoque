@@ -534,7 +534,10 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
     if (divEl) divEl.textContent = counts.div;
 
     const btn = document.getElementById('btn-conference-finalize');
-    if (btn) btn.disabled = state.items.length === 0 || counts.div > 0 || counts.pending > 0;
+    if (btn) {
+      btn.disabled = state.items.length === 0;
+      btn.style.opacity = state.items.length === 0 ? '0.5' : '1';
+    }
   }
 
   function showDetailsModal(foundData, callback, defaults = {}) {
