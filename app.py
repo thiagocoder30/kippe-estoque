@@ -3840,6 +3840,19 @@ def _get_kippe_db():
             except Exception:
                 pass
 
+    if is_postgres_enabled():
+        for _rls_tbl in (
+            'categories', 'products', 'batches', 'operators', 'transactions',
+            'operational_audit_events', 'sku_sequences', 'sku_aliases',
+            'sku_pack_defaults', 'receiving_pending_queue',
+            'product_registration_requests', 'institutional_audit_log',
+            'receiving_divergences', 'conference_audit_log',
+        ):
+            try:
+                conn.execute(f'ALTER TABLE public.{_rls_tbl} ENABLE ROW LEVEL SECURITY')
+            except Exception:
+                pass
+
     conn.execute('''
         CREATE TABLE IF NOT EXISTS conference_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4240,6 +4253,7 @@ def approve_pending_conference(queue_id: int):
             return jsonify({'error': 'Nenhum item válido com quantidade > 0 para aprovar.'}), 400
 
         all_products_cache = container.product_repository.get_all()
+        all_products_cache = container.product_repository.get_all()
         committed = []
         for idx_pos, (sku, qty, it) in enumerate(resolved_items):
             ov = item_overrides.get(str(idx_pos)) or {}
@@ -4256,6 +4270,7 @@ def approve_pending_conference(queue_id: int):
                 manufacturing_date=manufacturing_date,
                 origin_document=item_inv if item_inv else 'CONFERENCE',
                 operator_id=op_id or 'SYSTEM',
+                products_cache=all_products_cache,
                 products_cache=all_products_cache,
             )
             if not res.is_success:
@@ -5156,8 +5171,7 @@ def receive_complement(div_id: int):
         return jsonify({'error': 'Operador não autenticado.'}), 401
 
     data = request.json or {}
-    raw_qty = float(data.get('quantity') or 0)
-    qty = int(raw_qty) if raw_qty.is_integer() else round(raw_qty, 3)
+    qty = int(round(float(data.get('quantity') or 0)))
     if qty <= 0:
         return jsonify({'error': 'Quantidade deve ser maior que zero.'}), 400
 
@@ -5174,7 +5188,7 @@ def receive_complement(div_id: int):
         if not row:
             return jsonify({'error': 'Divergencia nao encontrada ou nao esta em canhoto retido.'}), 404
 
-        pending_before = int(row['pending_qty'])
+        pending_before = int(row['pending_qty'] or 0)
         if qty > pending_before:
             return jsonify({'error': f'Qtd recebida ({qty}) maior que saldo ({pending_before}).'}), 400
 
