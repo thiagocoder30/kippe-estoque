@@ -2953,7 +2953,7 @@ def _call_openai_compatible_vision(
     payload = {
         "model": model_name,
         "temperature": 0.0,
-        "max_tokens": 4096,
+        "max_tokens": 1400,
         "response_format": {"type": "json_object"},
         "messages": [{
             "role": "user",
@@ -2993,8 +2993,8 @@ def _discover_groq_vision_models(groq_key: str):
     if _GROQ_VISION_MODELS_CACHE["models"] and (now - _GROQ_VISION_MODELS_CACHE["ts"]) < 3600:
         return _GROQ_VISION_MODELS_CACHE["models"]
 
-    excluded = ("whisper", "tts", "guard", "safeguard", "embed", "rerank", "playai", "orpheus", "moderation")
-    vision_keywords = ("vision", "-vl", "scout", "maverick", "kimi", "qwen", "llama-4", "llama-3.2", "gemma-3", "pixtral")
+    excluded = ("whisper", "tts", "guard", "safeguard", "embed", "rerank", "playai", "orpheus", "moderation", "allam", "gpt-oss", "qwq", "qwen3-32b")
+    vision_keywords = ("vision", "-vl", "scout", "maverick", "kimi", "qwen3.8", "qwen2.5-vl", "qwen-vl", "llama-4", "llama-3.2-11b", "llama-3.2-90b", "gemma-3", "pixtral")
     text_only_known = ("llama-3.1-8b", "llama-3.3-70b", "mixtral", "deepseek-r1", "gemma2-9b")
 
     req = urllib.request.Request(
@@ -3016,8 +3016,9 @@ def _discover_groq_vision_models(groq_key: str):
                 continue
             if any(tok in low for tok in text_only_known):
                 continue
-            score = 0 if any(vk in low for vk in vision_keywords) else 1
-            discovered.append((score, mid))
+            if not any(vk in low for vk in vision_keywords):
+                continue
+            discovered.append((0, mid))
     except Exception:
         discovered = []
 
@@ -3066,7 +3067,9 @@ def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str)
         for g_model in groq_models:
             try:
                 merged = {"supplier": "", "invoice_number": "", "items": []}
-                for pg_b64 in image_pages:
+                for pg_idx, pg_b64 in enumerate(image_pages):
+                    if pg_idx > 0:
+                        time.sleep(2.5)
                     res = _call_openai_compatible_vision(
                         "Groq",
                         "https://api.groq.com/openai/v1/chat/completions",
