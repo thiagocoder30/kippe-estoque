@@ -2872,8 +2872,8 @@ def _call_gemini_fast(
     )
 
     attempts = [
-        ("gemini-3.8-flash", {"thinkingLevel": "low"}),
-        ("gemini-3-flash-preview", {"thinkingLevel": "low"}),
+        ("gemini-2.5-flash", {"thinkingBudget": 0}),
+        ("gemini-2.5-flash-lite", None),
         ("gemini-flash-lite-latest", None),
     ]
 
@@ -2984,28 +2984,62 @@ def _call_openai_compatible_vision(
     return _normalize_ocr_json_payload(json.loads(texto))
 
 
+def _render_pdf_pages_for_vision(pdf_b64: str, max_pages: int = 3):
+    try:
+        import base64, io
+        import fitz  # PyMuPDF
+    except Exception:
+        return []
+    pages = []
+    try:
+        doc = fitz.open(stream=base64.b64decode(pdf_b64), filetype="pdf")
+        total = min(len(doc), max_pages)
+        for idx in range(total):
+            pix = doc.load_page(idx).get_pixmap(dpi=160, alpha=False)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            pages.append(_prepare_page_b64(img, is_last_page=(idx == len(doc) - 1)))
+        doc.close()
+    except Exception:
+        return []
+    return pages
+
+
 def _try_secondary_vision_providers(prompt: str, media_b64: str, mime_type: str):
+    image_pages = []
     if mime_type == "application/pdf":
-        return None, "PDF nativo suportado apenas no provedor principal"
+        image_pages = _render_pdf_pages_for_vision(media_b64, max_pages=3)
+        if not image_pages:
+            return None, "PDF nativo suportado apenas no provedor principal (sem renderizador PDF)"
+    else:
+        image_pages = [media_b64]
 
     diag_notes = []
     groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
     if groq_key:
-        for g_model in ("meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct"):
+        for g_model in ("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"):
             try:
-                res = _call_openai_compatible_vision(
-                    "Groq",
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    groq_key,
-                    g_model,
-                    prompt,
-                    media_b64,
-                    mime_type,
-                )
-                return res, None
+                merged = {"supplier": "", "invoice_number": "", "items": []}
+                for pg_b64 in image_pages:
+                    res = _call_openai_compatible_vision(
+                        "Groq",
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        groq_key,
+                        g_model,
+                        prompt,
+                        pg_b64,
+                        "image/jpeg",
+                    )
+                    if not merged["supplier"] and res.get("supplier"):
+                        merged["supplier"] = res["supplier"]
+                    if not merged["invoice_number"] and res.get("invoice_number"):
+                        merged["invoice_number"] = res["invoice_number"]
+                    if isinstance(res.get("items"), list):
+                        merged["items"].extend(res["items"])
+                return merged, None
             except Exception as exc:
                 diag_notes.append(str(exc))
                 continue
+
     else:
         diag_notes.append("GROQ_API_KEY não detectada no servidor")
 
