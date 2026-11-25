@@ -2570,40 +2570,209 @@ def conference_finalize():
     if not _has_valid_session():
         return jsonify({'error': 'Operador não autenticado.'}), 401
 
-    data = request.json or {}
-    items = data.get('items', [])
-    ctx_supplier = str(data.get('supplier') or '').strip()
-    ctx_invoice = str(data.get('invoice_number') or '').strip()
+    try:
+        data = request.json or {}
+        items = data.get('items', [])
+        ctx_supplier = str(data.get('supplier') or '').strip()
+        ctx_invoice = str(data.get('invoice_number') or '').strip()
 
-    if not items or not isinstance(items, list):
-        return jsonify({'error': 'Nenhum item para finalizar.'}), 400
+        if not items or not isinstance(items, list):
+            return jsonify({'error': 'Nenhum item para finalizar.'}), 400
 
-    op_id, op_name, op_role = _get_active_operator_context()
-    op_id = op_id or 'SYSTEM'
-    force_duplicate = bool(data.get('force', False))
-    divergences_payload = data.get('divergences') or []
-    invoice_list = [str(x).strip() for x in (data.get('invoices') or []) if str(x).strip()]
-    if not invoice_list and ctx_invoice:
-        invoice_list = [x.strip() for x in ctx_invoice.split(',') if x.strip()]
+        op_id, op_name, op_role = _get_active_operator_context()
+        op_id = op_id or 'SYSTEM'
+        force_duplicate = bool(data.get('force', False))
+        divergences_payload = data.get('divergences') or []
+        invoice_list = [str(x).strip() for x in (data.get('invoices') or []) if str(x).strip()]
+        if not invoice_list and ctx_invoice:
+            invoice_list = [x.strip() for x in ctx_invoice.split(',') if x.strip()]
 
-    if invoice_list and not force_duplicate:
-        for inv_chk in invoice_list:
-            dup_info = _check_invoice_duplicate_records(ctx_supplier, inv_chk)
-            if dup_info.get('duplicate'):
-                return jsonify({
-                    'duplicate': True,
-                    'duplicate_invoice': inv_chk,
-                    'error': dup_info.get('message') or f"A NF {inv_chk} já foi registrada anteriormente.",
-                }), 409
+        if invoice_list and not force_duplicate:
+            for inv_chk in invoice_list:
+                dup_info = _check_invoice_duplicate_records(ctx_supplier, inv_chk)
+                if dup_info.get('duplicate'):
+                    return jsonify({
+                        'duplicate': True,
+                        'duplicate_invoice': inv_chk,
+                        'error': dup_info.get('message') or f"A NF {inv_chk} já foi registrada anteriormente.",
+                    }), 409
 
-    expanded_items = _expand_multinf_allocations(items, ctx_invoice)
-    combined_invoice_label = ", ".join(invoice_list) if invoice_list else ctx_invoice
-    has_unlinked = any(
-        not str(it.get('sku') or '').strip() or str(it.get('sku') or '').strip().startswith('TEMP-')
-        for it in expanded_items
-    )
+        expanded_items = _expand_multinf_allocations(items, ctx_invoice)
+        combined_invoice_label = ", ".join(invoice_list) if invoice_list else ctx_invoice
+        has_unlinked = any(
+            not str(it.get('sku') or '').strip() or str(it.get('sku') or '').strip().startswith('TEMP-')
+            for it in expanded_items
+        )
 
-    if AccessControl.is_conference_only(op_role) or has_unlinked:
+        if AccessControl.is_conference_only(op_role) or has_unlinked:
+            div_saved = _persist_receiving_divergences(
+                supplier=ctx_supplier,
+                default_invoice=combined_invoice_label,
+                divergences=divergences_payload,
+                op_id=op_id,
+                op_name=op_name,
+            )
+            now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+            conn_q = _get_kippe_db()
+            try:
+                cur_q = conn_q.execute(
+                    '''
+                    INSERT INTO receiving_pending_queue (
+                        supplier, invoice_number, submitted_by_id, submitted_by_name,
+                        status, items_json, created_at
+                    ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
+                    ''',
+                    (
+                        ctx_supplier or 'PADRAO',
+                        combined_invoice_label,
+                        op_id,
+                        op_name,
+                        json.dumps(expanded_items, ensure_ascii=False),
+                        now_iso,
+                    ),
+                )
+                conn_q.commit()
+                q_id = int(cur_q.lastrowid)
+            finally:
+                conn_q.close()
+
+            _record_audit_event(
+                "CONFERENCE_QUEUED",
+                "RECEBIMENTO",
+                f"Conferência enviada para armazenagem: {ctx_supplier or 'PADRAO'} · NF {combined_invoice_label or 'S/N'} ({len(expanded_items)} lançamentos)",
+                target_ref=f"NF-{combined_invoice_label or q_id}",
+            )
+            return jsonify({
+                'queued': True,
+                'queue_id': q_id,
+                'submitted_items': len(expanded_items),
+                'divergences_recorded': div_saved,
+                'message': 'Conferência enviada para cadastro/armazenagem do Estoquista.',
+            }), 202
+
+        if AccessControl.is_conference_only(op_role):
+            now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+            conn_q = _get_kippe_db()
+            try:
+                cur_q = conn_q.execute(
+                    '''
+                    INSERT INTO receiving_pending_queue (
+                        supplier, invoice_number, submitted_by_id, submitted_by_name,
+                        status, items_json, created_at
+                    ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
+                    ''',
+                    (
+                        ctx_supplier or 'PADRAO',
+                        ctx_invoice,
+                        op_id,
+                        op_name,
+                        json.dumps(items, ensure_ascii=False),
+                        now_iso,
+                    ),
+                )
+                conn_q.commit()
+                q_id = int(cur_q.lastrowid)
+            finally:
+                conn_q.close()
+
+            _record_audit_event(
+                "CONFERENCE_QUEUED",
+                "RECEBIMENTO",
+                f"Conferência enviada para armazenagem: {ctx_supplier or 'PADRAO'} · NF {ctx_invoice or 'S/N'} ({len(items)} itens)",
+                target_ref=f"NF-{ctx_invoice or q_id}",
+            )
+            return jsonify({
+                'queued': True,
+                'queue_id': q_id,
+                'submitted_items': len(items),
+                'message': 'Conferência enviada para cadastro/armazenagem do Estoquista.',
+            }), 202
+    
+        force_duplicate = bool(data.get('force', False))
+        if ctx_invoice and not force_duplicate:
+            try:
+                conn_chk = _get_kippe_db()
+                sup_norm_chk = _norm_catalog_text(ctx_supplier)
+                skus_chk = [str(it.get('sku') or '').strip() for it in items if it.get('sku')]
+                dups = []
+                for s_chk in skus_chk:
+                    row_dup = conn_chk.execute(
+                        "SELECT sku, quantity, created_at FROM conference_audit_log WHERE invoice_number = ? AND sku = ? AND (? = '' OR supplier_norm = ?) LIMIT 1",
+                        (ctx_invoice, s_chk, sup_norm_chk, sup_norm_chk)
+                    ).fetchone()
+                    if row_dup:
+                        dups.append(f"{row_dup['sku']} ({row_dup['quantity']} UN em {row_dup['created_at'][:10]})")
+                conn_chk.close()
+                if dups:
+                    return jsonify({
+                        'duplicate': True,
+                        'error': f"A NF {ctx_invoice} já possui lançamento registrado para: {', '.join(dups)}. Deseja lançar novamente?"
+                    }), 409
+            except Exception:
+                pass
+
+        results = []
+        errors = []
+    
+        # ─── Otimização: carrega todos os produtos UMA VEZ (evita get_all() por item) ───
+        all_products_cache = container.product_repository.get_all()
+        product_by_id = {p.id: p for p in all_products_cache}
+
+        for item in expanded_items:
+            sku = str(item.get('sku') or '').strip()
+            quantity = item.get('quantity', 0)
+            batch_code = str(item.get('batch_code') or '').strip() or f"LOTE-{__import__('datetime').date.today().isoformat().replace('-', '')}"
+            expiration_date = str(item.get('expiration_date') or '').strip()
+            manufacturing_date = str(item.get('manufacturing_date') or '').strip()
+            supplier = str(item.get('supplier') or ctx_supplier or 'PADRAO').strip()
+            item_invoice = str(item.get('invoice_number') or combined_invoice_label or '').strip()
+        
+            if not sku:
+                errors.append({'sku': None, 'error': 'SKU vazio'})
+                continue
+            if not isinstance(quantity, int) or quantity <= 0:
+                errors.append({'sku': sku, 'error': f'Quantidade inválida: {quantity}'})
+                continue
+            if not expiration_date:
+                errors.append({'sku': sku, 'error': 'Data de validade obrigatória'})
+                continue
+        
+            # Busca produto no cache (sem query)
+            product = product_by_id.get(sku)
+            if not product:
+                errors.append({'sku': sku, 'error': 'Produto não cadastrado'})
+                continue
+        
+            # Chama o use case padrão de entrada
+            try:
+                result = container.receive_use_case.execute(
+                    identifier=sku,
+                    quantity=quantity,
+                    batch_code=batch_code,
+                    expiration_date=expiration_date,
+                    supplier=supplier,
+                    manufacturing_date=manufacturing_date,
+                    origin_document=item_invoice if item_invoice else 'CONFERENCE',
+                    operator_id=op_id,
+                    products_cache=all_products_cache,
+                )
+                if result.is_success:
+                    results.append({'sku': sku, 'quantity': quantity, 'batch_code': batch_code})
+                    try:
+                        conn_log = _get_kippe_db()
+                        conn_log.execute(
+                            "INSERT INTO conference_audit_log (supplier_norm, invoice_number, sku, quantity, batch_code, expiration_date, operator_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (_norm_catalog_text(supplier), item_invoice, sku, quantity, batch_code, expiration_date, op_id, __import__('datetime').datetime.now().isoformat(timespec='seconds'))
+                        )
+                        conn_log.commit()
+                        conn_log.close()
+                    except Exception:
+                        pass
+                else:
+                    errors.append({'sku': sku, 'error': str(result.error)})
+            except Exception as exc:
+                errors.append({'sku': sku, 'error': str(exc)})
+    
         div_saved = _persist_receiving_divergences(
             supplier=ctx_supplier,
             default_invoice=combined_invoice_label,
@@ -2611,181 +2780,16 @@ def conference_finalize():
             op_id=op_id,
             op_name=op_name,
         )
-        now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
-        conn_q = _get_kippe_db()
-        try:
-            cur_q = conn_q.execute(
-                '''
-                INSERT INTO receiving_pending_queue (
-                    supplier, invoice_number, submitted_by_id, submitted_by_name,
-                    status, items_json, created_at
-                ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
-                ''',
-                (
-                    ctx_supplier or 'PADRAO',
-                    combined_invoice_label,
-                    op_id,
-                    op_name,
-                    json.dumps(expanded_items, ensure_ascii=False),
-                    now_iso,
-                ),
-            )
-            conn_q.commit()
-            q_id = int(cur_q.lastrowid)
-        finally:
-            conn_q.close()
-
-        _record_audit_event(
-            "CONFERENCE_QUEUED",
-            "RECEBIMENTO",
-            f"Conferência enviada para armazenagem: {ctx_supplier or 'PADRAO'} · NF {combined_invoice_label or 'S/N'} ({len(expanded_items)} lançamentos)",
-            target_ref=f"NF-{combined_invoice_label or q_id}",
-        )
         return jsonify({
-            'queued': True,
-            'queue_id': q_id,
-            'submitted_items': len(expanded_items),
+            'success': len(results),
+            'failed': len(errors),
             'divergences_recorded': div_saved,
-            'message': 'Conferência enviada para cadastro/armazenagem do Estoquista.',
-        }), 202
-
-    if AccessControl.is_conference_only(op_role):
-        now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
-        conn_q = _get_kippe_db()
-        try:
-            cur_q = conn_q.execute(
-                '''
-                INSERT INTO receiving_pending_queue (
-                    supplier, invoice_number, submitted_by_id, submitted_by_name,
-                    status, items_json, created_at
-                ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
-                ''',
-                (
-                    ctx_supplier or 'PADRAO',
-                    ctx_invoice,
-                    op_id,
-                    op_name,
-                    json.dumps(items, ensure_ascii=False),
-                    now_iso,
-                ),
-            )
-            conn_q.commit()
-            q_id = int(cur_q.lastrowid)
-        finally:
-            conn_q.close()
-
-        _record_audit_event(
-            "CONFERENCE_QUEUED",
-            "RECEBIMENTO",
-            f"Conferência enviada para armazenagem: {ctx_supplier or 'PADRAO'} · NF {ctx_invoice or 'S/N'} ({len(items)} itens)",
-            target_ref=f"NF-{ctx_invoice or q_id}",
-        )
-        return jsonify({
-            'queued': True,
-            'queue_id': q_id,
-            'submitted_items': len(items),
-            'message': 'Conferência enviada para cadastro/armazenagem do Estoquista.',
-        }), 202
-    
-    force_duplicate = bool(data.get('force', False))
-    if ctx_invoice and not force_duplicate:
-        try:
-            conn_chk = _get_kippe_db()
-            sup_norm_chk = _norm_catalog_text(ctx_supplier)
-            skus_chk = [str(it.get('sku') or '').strip() for it in items if it.get('sku')]
-            dups = []
-            for s_chk in skus_chk:
-                row_dup = conn_chk.execute(
-                    "SELECT sku, quantity, created_at FROM conference_audit_log WHERE invoice_number = ? AND sku = ? AND (? = '' OR supplier_norm = ?) LIMIT 1",
-                    (ctx_invoice, s_chk, sup_norm_chk, sup_norm_chk)
-                ).fetchone()
-                if row_dup:
-                    dups.append(f"{row_dup['sku']} ({row_dup['quantity']} UN em {row_dup['created_at'][:10]})")
-            conn_chk.close()
-            if dups:
-                return jsonify({
-                    'duplicate': True,
-                    'error': f"A NF {ctx_invoice} já possui lançamento registrado para: {', '.join(dups)}. Deseja lançar novamente?"
-                }), 409
-        except Exception:
-            pass
-
-    results = []
-    errors = []
-    
-    # ─── Otimização: carrega todos os produtos UMA VEZ (evita get_all() por item) ───
-    all_products_cache = container.product_repository.get_all()
-    product_by_id = {p.id: p for p in all_products_cache}
-
-    for item in expanded_items:
-        sku = str(item.get('sku') or '').strip()
-        quantity = item.get('quantity', 0)
-        batch_code = str(item.get('batch_code') or '').strip() or f"LOTE-{__import__('datetime').date.today().isoformat().replace('-', '')}"
-        expiration_date = str(item.get('expiration_date') or '').strip()
-        manufacturing_date = str(item.get('manufacturing_date') or '').strip()
-        supplier = str(item.get('supplier') or ctx_supplier or 'PADRAO').strip()
-        item_invoice = str(item.get('invoice_number') or combined_invoice_label or '').strip()
-        
-        if not sku:
-            errors.append({'sku': None, 'error': 'SKU vazio'})
-            continue
-        if not isinstance(quantity, int) or quantity <= 0:
-            errors.append({'sku': sku, 'error': f'Quantidade inválida: {quantity}'})
-            continue
-        if not expiration_date:
-            errors.append({'sku': sku, 'error': 'Data de validade obrigatória'})
-            continue
-        
-        # Busca produto no cache (sem query)
-        product = product_by_id.get(sku)
-        if not product:
-            errors.append({'sku': sku, 'error': 'Produto não cadastrado'})
-            continue
-        
-        # Chama o use case padrão de entrada
-        try:
-            result = container.receive_use_case.execute(
-                identifier=sku,
-                quantity=quantity,
-                batch_code=batch_code,
-                expiration_date=expiration_date,
-                supplier=supplier,
-                manufacturing_date=manufacturing_date,
-                origin_document=item_invoice if item_invoice else 'CONFERENCE',
-                operator_id=op_id,
-                products_cache=all_products_cache,
-            )
-            if result.is_success:
-                results.append({'sku': sku, 'quantity': quantity, 'batch_code': batch_code})
-                try:
-                    conn_log = _get_kippe_db()
-                    conn_log.execute(
-                        "INSERT INTO conference_audit_log (supplier_norm, invoice_number, sku, quantity, batch_code, expiration_date, operator_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        (_norm_catalog_text(supplier), item_invoice, sku, quantity, batch_code, expiration_date, op_id, __import__('datetime').datetime.now().isoformat(timespec='seconds'))
-                    )
-                    conn_log.commit()
-                    conn_log.close()
-                except Exception:
-                    pass
-            else:
-                errors.append({'sku': sku, 'error': str(result.error)})
-        except Exception as exc:
-            errors.append({'sku': sku, 'error': str(exc)})
-    
-    div_saved = _persist_receiving_divergences(
-        supplier=ctx_supplier,
-        default_invoice=combined_invoice_label,
-        divergences=divergences_payload,
-        op_id=op_id,
-        op_name=op_name,
-    )
-    return jsonify({
-        'success': len(results),
-        'failed': len(errors),
-        'divergences_recorded': div_saved,
-        'results': results,
-        'errors': errors,
-    }), 200 if not errors else 207
+            'results': results,
+            'errors': errors,
+        }), 200 if not errors else 207
+    except Exception as _fin_exc:
+        app.logger.exception('Erro em /api/conference/finalize')
+        return jsonify({'error': f'Erro interno ao finalizar conferência: {_fin_exc}'}), 500
 
 
 
@@ -3812,6 +3816,8 @@ def _get_kippe_db():
         )
     ''')
     # ─── Migração Sprint 5: Canhoto Retido e Entrega Complementar ───
+    if is_postgres_enabled():
+        conn.commit()
     for col_name, col_type, col_default in [
         ('status', 'TEXT', "'REGISTRADA'"),
         ('pending_qty', 'INTEGER', '0'),
@@ -3819,39 +3825,21 @@ def _get_kippe_db():
         ('resolved_at', 'TEXT', 'NULL'),
     ]:
         try:
-            conn.execute(
-                f'ALTER TABLE receiving_divergences ADD COLUMN {col_name} {col_type} DEFAULT {col_default}'
-            )
+            if is_postgres_enabled():
+                conn.execute(
+                    f'ALTER TABLE receiving_divergences ADD COLUMN IF NOT EXISTS {col_name} {col_type} DEFAULT {col_default}'
+                )
+                conn.commit()
+            else:
+                conn.execute(
+                    f'ALTER TABLE receiving_divergences ADD COLUMN {col_name} {col_type} DEFAULT {col_default}'
+                )
         except Exception as exc:
+            if is_postgres_enabled():
+                conn.rollback()
             msg = str(exc).lower()
             if 'duplicate' not in msg and 'already exists' not in msg:
                 raise
-
-    if is_postgres_enabled():
-        for _rls_tbl in (
-            'categories', 'products', 'batches', 'operators', 'transactions',
-            'operational_audit_events', 'sku_sequences', 'sku_aliases',
-            'sku_pack_defaults', 'receiving_pending_queue',
-            'product_registration_requests', 'institutional_audit_log',
-            'receiving_divergences', 'conference_audit_log',
-        ):
-            try:
-                conn.execute(f'ALTER TABLE public.{_rls_tbl} ENABLE ROW LEVEL SECURITY')
-            except Exception:
-                pass
-
-    if is_postgres_enabled():
-        for _rls_tbl in (
-            'categories', 'products', 'batches', 'operators', 'transactions',
-            'operational_audit_events', 'sku_sequences', 'sku_aliases',
-            'sku_pack_defaults', 'receiving_pending_queue',
-            'product_registration_requests', 'institutional_audit_log',
-            'receiving_divergences', 'conference_audit_log',
-        ):
-            try:
-                conn.execute(f'ALTER TABLE public.{_rls_tbl} ENABLE ROW LEVEL SECURITY')
-            except Exception:
-                pass
 
     conn.execute('''
         CREATE TABLE IF NOT EXISTS conference_audit_log (
@@ -3866,6 +3854,20 @@ def _get_kippe_db():
             created_at TEXT NOT NULL
         )
     ''')
+    if is_postgres_enabled():
+        conn.commit()
+        for _rls_tbl in (
+            'categories', 'products', 'batches', 'operators', 'transactions',
+            'operational_audit_events', 'sku_sequences', 'sku_aliases',
+            'sku_pack_defaults', 'receiving_pending_queue',
+            'product_registration_requests', 'institutional_audit_log',
+            'receiving_divergences', 'conference_audit_log',
+        ):
+            try:
+                conn.execute(f'ALTER TABLE public.{_rls_tbl} ENABLE ROW LEVEL SECURITY')
+                conn.commit()
+            except Exception:
+                conn.rollback()
     conn.commit()
     return conn
 
