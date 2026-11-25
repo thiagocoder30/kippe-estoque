@@ -910,10 +910,11 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
     const modal = el('div', {
       id: 'conf-manual-link-modal',
       className: 'fixed inset-0 z-[210] bg-black/80 flex items-center justify-center p-4',
+      style: 'position:fixed;inset:0;z-index:210;display:flex;align-items:center;justify-content:center;padding:12px;',
       onclick: (e) => { if (e.target === modal) closeModal(); }
     }, [
-      el('div', { className: 'bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[88vh]' }, [
-        el('div', { className: 'p-4 bg-[#124191] text-white flex items-start justify-between gap-2' }, [
+      el('div', { className: 'bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[88vh]', style: 'width:100%;max-width:24rem;max-height:85dvh;display:flex;flex-direction:column;overflow:hidden;' }, [
+        el('div', { className: 'p-4 bg-[#124191] text-white flex items-start justify-between gap-2', style: 'flex-shrink:0;padding:12px 16px;' }, [
           el('div', { className: 'min-w-0 flex-1' }, [
             el('div', { className: 'text-[9px] font-black uppercase tracking-wider text-blue-200' }, 'VINCULAR EAN / PRODUTO'),
             modalTitleEl,
@@ -927,7 +928,7 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
           }, '✕')
         ]),
 
-        el('div', { className: 'p-4 space-y-3 overflow-y-auto' }, [
+        el('div', { className: 'p-4 space-y-3 overflow-y-auto', style: 'flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px;' }, [
           el('div', {}, [
             el('label', { className: 'block text-[10px] font-black text-amber-800 uppercase mb-1' },
               '✏️ DESCRIÇÃO LIDA NA NF (CORRIJA SE HOUVER ERRO)'
@@ -981,7 +982,7 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
               }, '+ CADASTRAR PRODUTO NOVO (NÃO EXISTE NO SISTEMA)')
         ]),
 
-        el('div', { className: 'p-4 bg-gray-50 border-t border-gray-200 flex gap-2' }, [
+        el('div', { className: 'p-4 bg-gray-50 border-t border-gray-200 flex gap-2', style: 'flex-shrink:0;padding:12px 16px;' }, [
           el('button', {
             type: 'button',
             className: 'flex-1 bg-white border border-gray-300 text-gray-700 font-bold py-2 rounded-lg text-xs uppercase active:scale-95',
