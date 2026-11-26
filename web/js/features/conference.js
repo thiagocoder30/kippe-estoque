@@ -1301,52 +1301,89 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
     const card = document.createElement('div');
     card.style.cssText = 'background:#fff;border-radius:16px;width:100%;max-width:440px;max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.4);';
     card.innerHTML = `
-      <div style="background:#DC2626;color:#fff;padding:14px 16px;">
-        <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;">Divergencia Identificada</h3>
-        <p style="font-size:10px;color:#FEE2E2;margin:2px 0 0;">${divergentItems.length} item(ns) com quantidade diferente</p>
+      <div style="background:#DC2626;color:#fff;padding:14px 16px;flex-shrink:0;">
+        <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;">Divergência Identificada</h3>
+        <p style="font-size:10px;color:#FEE2E2;margin:2px 0 0;">${divergentItems.length} item(ns) · O estoque receberá apenas a quantidade física conferida</p>
       </div>
-      <div id="kippe-div-list" style="padding:14px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;"></div>
-      <div style="padding:12px 14px;background:#F8FAFC;border-top:1px solid #E2E8F0;display:flex;gap:8px;">
+      <div id="kippe-div-list" style="padding:14px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;"></div>
+      <div style="padding:12px 14px;background:#F8FAFC;border-top:1px solid #E2E8F0;display:flex;gap:8px;flex-shrink:0;">
         <button type="button" id="kippe-div-cancel" style="flex:1;height:40px;background:#fff;color:#475569;border:1px solid #CBD5E1;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">Cancelar</button>
-        <button type="button" id="kippe-div-confirm" style="flex:2;height:40px;background:#DC2626;color:#fff;border:none;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">Confirmar Divergencias</button>
+        <button type="button" id="kippe-div-confirm" style="flex:2;height:40px;background:#DC2626;color:#fff;border:none;border-radius:10px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">Confirmar Divergências</button>
       </div>
     `;
     modal.appendChild(card);
     document.body.appendChild(modal);
 
-    const reasons = divergentItems.map(it => ({
-      sku: it.sku,
-      name: it.name || it.sku,
-      expected_qty: it.expected || 0,
-      counted_qty: it.scanned || 0,
-      reason: 'FALTA',
-      notes: '',
-      canhoto_retido: true,
-    }));
+    const SHORTAGE_OUTCOMES = [
+      { id: 'CANHOTO_RETIDO', label: '📌 Reter Canhoto (Entrega Complementar)', bg: '#FEF3C7', border: '#FCD34D', color: '#92400E', askAmount: false },
+      { id: 'RESSARCIDO_NO_ATO', label: '💵 Ressarcido no Ato (Pago pelo Entregador)', bg: '#DCFCE7', border: '#86EFAC', color: '#166534', askAmount: true, amtLabel: 'Valor Ressarcido (R$)' },
+      { id: 'ABATIMENTO_BOLETO', label: '🧾 Abatimento no Boleto / Nota de Crédito', bg: '#DBEAFE', border: '#93C5FD', color: '#1E40AF', askAmount: true, amtLabel: 'Valor a Abater no Boleto (R$, opc.)' },
+      { id: 'REFATURAMENTO_NF', label: '🔄 NF Será Refaturada (Retirar Item da NF)', bg: '#F3E8FF', border: '#D8B4FE', color: '#6B21A8', askAmount: false },
+    ];
+
+    const SURPLUS_OUTCOMES = [
+      { id: 'SOBRA_DEVOLVIDA', label: '↩️ Sobra Devolvida ao Entregador', bg: '#F1F5F9', border: '#CBD5E1', color: '#334155', askAmount: false },
+      { id: 'BONIFICACAO_ACEITA', label: '🎁 Aceita como Bonificação (Sem Custo)', bg: '#DCFCE7', border: '#86EFAC', color: '#166534', askAmount: false },
+      { id: 'REFATURAMENTO_NF', label: '🔄 NF Será Refaturada / Complementada', bg: '#F3E8FF', border: '#D8B4FE', color: '#6B21A8', askAmount: false },
+    ];
+
+    const reasons = divergentItems.map(it => {
+      const isSurplus = ((it.scanned || 0) - (it.expected || 0)) > 0;
+      const defSettlement = isSurplus ? 'SOBRA_DEVOLVIDA' : 'CANHOTO_RETIDO';
+      return {
+        sku: it.sku,
+        name: it.name || it.sku,
+        expected_qty: it.expected || 0,
+        counted_qty: it.scanned || 0,
+        reason: isSurplus ? 'OUTRO' : 'FALTA',
+        notes: '',
+        canhoto_retido: !isSurplus,
+        settlement_type: defSettlement,
+        settlement_amount: 0,
+      };
+    });
 
     const list = document.getElementById('kippe-div-list');
     divergentItems.forEach((it, idx) => {
       const diff = (it.scanned || 0) - (it.expected || 0);
-      const diffLabel = diff > 0 ? '+' + diff + ' sobrando' : Math.abs(diff) + ' faltando';
-      const diffColor = diff > 0 ? '#D97706' : '#DC2626';
+      const isSurplus = diff > 0;
+      const diffLabel = isSurplus ? '+' + diff + ' sobrando' : Math.abs(diff) + ' faltando';
+      const diffColor = isSurplus ? '#D97706' : '#DC2626';
+      const outcomes = isSurplus ? SURPLUS_OUTCOMES : SHORTAGE_OUTCOMES;
+      const defReason = isSurplus ? 'OUTRO' : 'FALTA';
+
       const itemDiv = document.createElement('div');
       itemDiv.style.cssText = 'background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:10px;';
       itemDiv.innerHTML = `
         <p style="font-size:11px;font-weight:900;color:#7F1D1D;margin:0 0 4px;text-transform:uppercase;">${it.name || it.sku}</p>
         <p style="font-size:10px;color:#991B1B;margin:0 0 8px;">
-          Esperado: <strong>${it.expected || 0}</strong> | Conferido: <strong>${it.scanned || 0}</strong> | <span style="color:${diffColor};font-weight:900;">${diffLabel}</span>
+          NF: <strong>${it.expected || 0}</strong> | Físico: <strong>${it.scanned || 0}</strong> | <span style="color:${diffColor};font-weight:900;">${diffLabel}</span>
         </p>
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
           ${['FALTA', 'AVARIA', 'PRECO', 'OUTRO'].map(r => `
             <button type="button" data-reason="${r}" data-idx="${idx}"
-              style="padding:5px 8px;font-size:9px;font-weight:900;text-transform:uppercase;border-radius:6px;cursor:pointer;border:1px solid #FCA5A5;background:${r === 'FALTA' ? '#DC2626' : '#fff'};color:${r === 'FALTA' ? '#fff' : '#991B1B'};">${r}</button>
+              style="padding:5px 8px;font-size:9px;font-weight:900;text-transform:uppercase;border-radius:6px;cursor:pointer;border:1px solid #FCA5A5;background:${r === defReason ? '#DC2626' : '#fff'};color:${r === defReason ? '#fff' : '#991B1B'};">${r}</button>
           `).join('')}
         </div>
-        <input type="text" data-notes="${idx}" placeholder="Observacoes (opcional)" style="width:100%;box-sizing:border-box;padding:7px 9px;background:#fff;border:1px solid #FCA5A5;border-radius:6px;font-size:11px;outline:none;">
-        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;padding:8px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;cursor:pointer;">
-          <input type="checkbox" data-canhoto="${idx}" checked style="width:16px;height:16px;">
-          <span style="font-size:10px;font-weight:800;color:#92400E;text-transform:uppercase;">Reter canhoto (aguardando fornecedor)</span>
-        </label>
+        <div style="margin-bottom:8px;">
+          <label style="display:block;font-size:9px;font-weight:900;color:#7F1D1D;text-transform:uppercase;margin-bottom:4px;">Desfecho Operacional / Financeiro</label>
+          <select data-settlement="${idx}"
+            style="width:100%;height:36px;box-sizing:border-box;padding:0 8px;background:#FEF3C7;border:1.5px solid #FCD34D;border-radius:8px;font-size:10.5px;font-weight:900;color:#92400E;outline:none;">
+            ${outcomes.map(o => `<option value="${o.id}">${o.label}</option>`).join('')}
+          </select>
+        </div>
+        <div data-amt-wrap="${idx}" style="display:none;margin-bottom:8px;background:#FFFFFF;border:1px solid #CBD5E1;border-radius:8px;padding:8px;">
+          <label data-amt-label="${idx}" style="display:block;font-size:9px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Valor Ressarcido (R$)</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="number" step="0.01" min="0" data-amt-input="${idx}" placeholder="0,00"
+              style="flex:1;height:34px;box-sizing:border-box;padding:0 8px;border:1px solid #CBD5E1;border-radius:6px;font-size:12px;font-weight:900;color:#0F172A;outline:none;">
+            <button type="button" data-pay-tag="${idx}" data-pay-val="PAGO EM DINHEIRO"
+              style="height:34px;padding:0 8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:6px;font-size:9px;font-weight:900;color:#334155;cursor:pointer;">DINHEIRO</button>
+            <button type="button" data-pay-tag="${idx}" data-pay-val="PAGO VIA PIX"
+              style="height:34px;padding:0 8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:6px;font-size:9px;font-weight:900;color:#334155;cursor:pointer;">PIX</button>
+          </div>
+        </div>
+        <input type="text" data-notes="${idx}" placeholder="Observações (ex: motorista João, recibo, nova NF...)" style="width:100%;box-sizing:border-box;padding:7px 9px;background:#fff;border:1px solid #FCA5A5;border-radius:6px;font-size:11px;outline:none;">
       `;
       list.appendChild(itemDiv);
     });
@@ -1366,21 +1403,51 @@ if (typeof document !== 'undefined' && !document.getElementById('kippe-spin-css'
       });
     });
 
-    list.querySelectorAll('[data-notes]').forEach(inp => {
-      inp.addEventListener('input', () => {
-        reasons[parseInt(inp.getAttribute('data-notes'), 10)].notes = inp.value;
+    list.querySelectorAll('[data-settlement]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const idx = parseInt(sel.getAttribute('data-settlement'), 10);
+        const val = sel.value;
+        reasons[idx].settlement_type = val;
+        reasons[idx].canhoto_retido = (val === 'CANHOTO_RETIDO');
+
+        const allOutcomes = [...SHORTAGE_OUTCOMES, ...SURPLUS_OUTCOMES];
+        const cfg = allOutcomes.find(o => o.id === val) || SHORTAGE_OUTCOMES[0];
+        sel.style.background = cfg.bg;
+        sel.style.borderColor = cfg.border;
+        sel.style.color = cfg.color;
+
+        const amtWrap = list.querySelector(`[data-amt-wrap="${idx}"]`);
+        const amtLabel = list.querySelector(`[data-amt-label="${idx}"]`);
+        if (amtWrap) {
+          amtWrap.style.display = cfg.askAmount ? 'block' : 'none';
+          if (amtLabel && cfg.amtLabel) amtLabel.textContent = cfg.amtLabel;
+        }
       });
     });
 
-    list.querySelectorAll('[data-canhoto]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const idx = parseInt(cb.getAttribute('data-canhoto'), 10);
-        reasons[idx].canhoto_retido = cb.checked;
-        const label = cb.parentElement;
-        label.style.background = cb.checked ? '#FEF3C7' : '#F8FAFC';
-        label.style.borderColor = cb.checked ? '#FCD34D' : '#E2E8F0';
-        const span = label.querySelector('span');
-        span.style.color = cb.checked ? '#92400E' : '#64748B';
+    list.querySelectorAll('[data-amt-input]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const idx = parseInt(inp.getAttribute('data-amt-input'), 10);
+        reasons[idx].settlement_amount = parseFloat(String(inp.value || '0').replace(',', '.')) || 0;
+      });
+    });
+
+    list.querySelectorAll('[data-pay-tag]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-pay-tag'), 10);
+        const tag = btn.getAttribute('data-pay-val') || '';
+        const noteInp = list.querySelector(`[data-notes="${idx}"]`);
+        if (noteInp) {
+          const cur = (noteInp.value || '').trim();
+          noteInp.value = cur ? `${cur} · ${tag}` : tag;
+          reasons[idx].notes = noteInp.value;
+        }
+      });
+    });
+
+    list.querySelectorAll('[data-notes]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        reasons[parseInt(inp.getAttribute('data-notes'), 10)].notes = inp.value;
       });
     });
 

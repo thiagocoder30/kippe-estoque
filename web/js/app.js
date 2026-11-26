@@ -8973,12 +8973,20 @@ class KippeApplication {
                     <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;">
                         <p style="font-size:9px;font-weight:900;color:#991B1B;margin:0;text-transform:uppercase;">⚠️ Divergências Formalizadas (${rec.divergences.length})</p>
                         ${rec.divergences.map(d => {
-                            const st = String(d.status || 'REGISTRADA').toUpperCase();
-                            const badge = st === 'CANHOTO_RETIDO'
-                                ? `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:8px;font-weight:900;">📌 CANHOTO RETIDO · SALDO: ${d.pending_qty}</span>`
-                                : st === 'COMPLEMENTO_RECEBIDO'
-                                    ? `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-size:8px;font-weight:900;">✅ COMPLEMENTO RECEBIDO</span>`
-                                    : `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:8px;font-weight:900;">REGISTRADA</span>`;
+                            const st = String(d.settlement_type || d.status || 'REGISTRADA').toUpperCase();
+                            const amtNum = Number(d.settlement_amount || 0);
+                            const amtTag = amtNum > 0 ? ` · R$ ${amtNum.toFixed(2).replace('.', ',')}` : '';
+                            const badgeMap = {
+                                'CANHOTO_RETIDO': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:8px;font-weight:900;">📌 CANHOTO RETIDO · SALDO: ${d.pending_qty}</span>`,
+                                'COMPLEMENTO_RECEBIDO': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-size:8px;font-weight:900;">✅ COMPLEMENTO RECEBIDO</span>`,
+                                'RESOLVIDA': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-size:8px;font-weight:900;">✅ CANHOTO LIBERADO</span>`,
+                                'RESSARCIDO_NO_ATO': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-size:8px;font-weight:900;">💵 RESSARCIDO NO ATO${amtTag}</span>`,
+                                'ABATIMENTO_BOLETO': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#DBEAFE;color:#1E40AF;border:1px solid #93C5FD;font-size:8px;font-weight:900;">🧾 ABATIMENTO NO BOLETO${amtTag}</span>`,
+                                'REFATURAMENTO_NF': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE;font-size:8px;font-weight:900;">🔄 NF REFATURADA / SUBSTITUÍDA</span>`,
+                                'SOBRA_DEVOLVIDA': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#F1F5F9;color:#334155;border:1px solid #CBD5E1;font-size:8px;font-weight:900;">↩️ SOBRA DEVOLVIDA</span>`,
+                                'BONIFICACAO_ACEITA': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#CCFBF1;color:#115E59;border:1px solid #5EEAD4;font-size:8px;font-weight:900;">🎁 BONIFICAÇÃO ACEITA</span>`,
+                            };
+                            const badge = badgeMap[st] || `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:8px;font-weight:900;">REGISTRADA</span>`;
                             return `
                                 <div style="font-size:10px;color:#7F1D1D;font-weight:700;margin:0;line-height:1.35;">
                                     • ${d.product_name}: Esperado <strong>${d.expected_qty}</strong> / Conferido <strong>${d.counted_qty}</strong>

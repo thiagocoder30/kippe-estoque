@@ -2494,22 +2494,49 @@ def _persist_receiving_divergences(
             reason = str(d.get('reason') or 'DIVERGENCIA_NAO_ESPECIFICADA').strip().upper()
             notes = str(d.get('notes') or '').strip()
 
-            canhoto_retido = bool(d.get('canhoto_retido', default_canhoto_retido))
-            status_val = 'CANHOTO_RETIDO' if canhoto_retido else 'REGISTRADA'
-            pending_qty_val = max(0, exp_q - cnt_q) if canhoto_retido else 0
+            allowed_settlements = {
+                'CANHOTO_RETIDO',
+                'RESSARCIDO_NO_ATO',
+                'ABATIMENTO_BOLETO',
+                'REFATURAMENTO_NF',
+                'SOBRA_DEVOLVIDA',
+                'BONIFICACAO_ACEITA',
+                'REGISTRADA',
+            }
+            raw_settlement = str(d.get('settlement_type') or '').strip().upper()
+            if raw_settlement in allowed_settlements:
+                settlement_type = raw_settlement
+            else:
+                canhoto_retido = bool(d.get('canhoto_retido', default_canhoto_retido))
+                settlement_type = 'CANHOTO_RETIDO' if canhoto_retido else 'REGISTRADA'
+
+            try:
+                raw_amt = str(d.get('settlement_amount') or '0').replace(',', '.').strip()
+                settlement_amount = max(0.0, round(float(raw_amt or 0.0), 2))
+            except Exception:
+                settlement_amount = 0.0
+
+            if settlement_type == 'CANHOTO_RETIDO' and diff_q < 0:
+                status_val = 'CANHOTO_RETIDO'
+                pending_qty_val = max(0, exp_q - cnt_q)
+            else:
+                status_val = settlement_type
+                pending_qty_val = 0
 
             conn.execute(
                 'INSERT INTO receiving_divergences ('
                 'supplier, supplier_norm, invoice_number, sku, product_name, '
                 'expected_qty, counted_qty, divergence_qty, reason, notes, '
                 'operator_id, operator_name, created_at, '
-                'status, pending_qty, parent_divergence_id, resolved_at'
-                ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)',
+                'status, pending_qty, parent_divergence_id, resolved_at, '
+                'settlement_type, settlement_amount'
+                ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)',
                 (
                     sup_clean, sup_norm, inv_num, sku, pname,
                     exp_q, cnt_q, diff_q, reason, notes,
                     op_id or 'SYSTEM', op_name or op_id or 'SYSTEM', now_iso,
                     status_val, pending_qty_val,
+                    settlement_type, settlement_amount,
                 ),
             )
             saved_count += 1
@@ -3956,6 +3983,8 @@ def _get_kippe_db():
         ('pending_qty', 'INTEGER', '0'),
         ('parent_divergence_id', 'INTEGER', 'NULL'),
         ('resolved_at', 'TEXT', 'NULL'),
+        ('settlement_type', 'TEXT', "'CANHOTO_RETIDO'"),
+        ('settlement_amount', 'REAL', '0'),
     ]:
         try:
             if is_postgres_enabled():
