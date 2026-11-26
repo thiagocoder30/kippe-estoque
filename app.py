@@ -58,6 +58,16 @@ def _has_valid_session():
     return 'operator_id' in session
 
 
+def _now_brt_iso() -> str:
+    from datetime import datetime, timezone, timedelta
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("America/Sao_Paulo")
+    except Exception:
+        tz = timezone(timedelta(hours=-3))
+    return datetime.now(tz).isoformat(timespec="seconds")
+
+
 @app.route('/')
 def index():
     return send_from_directory('web', 'index.html')
@@ -228,7 +238,7 @@ def _record_audit_event(
         actor_id = str(actor_id or "SYSTEM").strip()
         actor_name = str(actor_name or actor_id or "SYSTEM").strip()
         actor_role = str(actor_role or "SYSTEM").strip().upper()
-        now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+        now_iso = _now_brt_iso()
         conn = _get_kippe_db()
         try:
             conn.execute(
@@ -2463,7 +2473,7 @@ def _persist_receiving_divergences(
     if not divergences or not isinstance(divergences, list):
         return 0
 
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
     sup_clean = str(supplier or 'PADRAO').strip().upper()
     sup_norm = _norm_catalog_text(sup_clean)
     saved_count = 0
@@ -2612,7 +2622,7 @@ def conference_finalize():
                 op_id=op_id,
                 op_name=op_name,
             )
-            now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+            now_iso = _now_brt_iso()
             conn_q = _get_kippe_db()
             try:
                 cur_q = conn_q.execute(
@@ -2651,7 +2661,7 @@ def conference_finalize():
             }), 202
 
         if AccessControl.is_conference_only(op_role):
-            now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+            now_iso = _now_brt_iso()
             conn_q = _get_kippe_db()
             try:
                 cur_q = conn_q.execute(
@@ -2762,7 +2772,7 @@ def conference_finalize():
                         conn_log = _get_kippe_db()
                         conn_log.execute(
                             "INSERT INTO conference_audit_log (supplier_norm, invoice_number, sku, quantity, batch_code, expiration_date, operator_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                            (_norm_catalog_text(supplier), item_invoice, sku, quantity, batch_code, expiration_date, op_id, __import__('datetime').datetime.now().isoformat(timespec='seconds'))
+                            (_norm_catalog_text(supplier), item_invoice, sku, quantity, batch_code, expiration_date, op_id, _now_brt_iso())
                         )
                         conn_log.commit()
                         conn_log.close()
@@ -4120,7 +4130,7 @@ def create_product_registration_request():
     pack_factor = max(1, int(float(data.get('pack_factor') or 1)))
     batch_code = str(data.get('batch_code') or '').strip().upper()
     expiration_date = str(data.get('expiration_date') or '').strip()
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
 
     conn = _get_kippe_db()
     try:
@@ -4291,7 +4301,7 @@ def resolve_pending_product_request(req_id: int):
     created_sku = str(data.get('sku') or data.get('created_sku') or '').strip()
     ean = str(data.get('ean') or '').strip()
     catalog_name = str(data.get('name') or '').strip()
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
 
     conn = _get_kippe_db()
     try:
@@ -4443,7 +4453,7 @@ def approve_pending_conference(queue_id: int):
     data = request.json or {}
     sku_overrides = data.get('sku_overrides') or {}
     item_overrides = data.get('item_overrides') or {}
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
 
     conn = _get_kippe_db()
     try:
@@ -4792,7 +4802,7 @@ def reject_pending_conference(queue_id: int):
     if not AccessControl.can_approve_receiving(op_role):
         return jsonify({'error': 'Autorização negada.'}), 403
 
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
     conn = _get_kippe_db()
     try:
         row = conn.execute("SELECT status FROM receiving_pending_queue WHERE id = ?", (queue_id,)).fetchone()
@@ -4830,7 +4840,7 @@ def save_catalog_alias():
     ean = str(data.get('ean') or '').strip()
     catalog_name = str(data.get('name') or '').strip()
     pack_factor = max(1, int(data.get('pack_factor') or 1))
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
 
     explicit_factor = bool(data.get('explicit_factor', False))
     conn = _get_kippe_db()
@@ -5000,7 +5010,7 @@ def create_product_registration_requests_batch():
     if not req_items or not isinstance(req_items, list):
         return jsonify({'ok': True, 'created': 0}), 200
 
-    now_iso = __import__('datetime').datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
     conn = _get_kippe_db()
     created_count = 0
     try:
@@ -5408,7 +5418,7 @@ def receive_complement(div_id: int):
 
     op_id, op_name, _ = _get_active_operator_context()
     dt_mod = __import__('datetime')
-    now_iso = dt_mod.datetime.now().isoformat(timespec='seconds')
+    now_iso = _now_brt_iso()
 
     conn = _get_kippe_db()
     try:

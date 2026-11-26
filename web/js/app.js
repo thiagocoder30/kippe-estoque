@@ -1,3 +1,30 @@
+window.formatBrtDateTime = function(iso) {
+    if (!iso) return '-';
+    const raw = String(iso).trim();
+    if (!raw) return '-';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const [y, m, d] = raw.split('-');
+        return `${d}/${m}/${y}`;
+    }
+    let normalized = raw.replace(' ', 'T');
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(normalized)) {
+        normalized += 'Z';
+    }
+    const dt = new Date(normalized);
+    if (Number.isNaN(dt.getTime())) {
+        return raw.replace('T', ' ').slice(0, 16);
+    }
+    return new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).format(dt).replace(',', '');
+};
+
 import { APIClient } from './api.js';
 import { ScannerManager } from './scanner.js';
 
@@ -1934,7 +1961,7 @@ class KippeApplication {
                             ${item.category}
                         </span>
                         <span style="font-size:9px;font-weight:700;color:#64748B;font-variant-numeric:tabular-nums;">
-                            ${(item.created_at || '').replace('T', ' ')}
+                            ${window.formatBrtDateTime(item.created_at)}
                         </span>
                     </div>
                     <p style="font-size:11px;font-weight:800;color:#0F172A;margin:0;line-height:1.35;">
@@ -8873,7 +8900,7 @@ class KippeApplication {
                 return '<span style="padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-size:9px;font-weight:900;text-transform:uppercase;white-space:nowrap;">⏳ AGUARDANDO</span>';
             };
 
-            const fmtDate = (iso) => (iso || '').replace('T', ' ').slice(0, 16) || '-';
+            const fmtDate = (iso) => window.formatBrtDateTime(iso);
 
             listEl.innerHTML = records.map(rec => {
                 const borderLeftColor = rec.status === 'APROVADO' ? '#16A34A' : rec.status === 'REJEITADO' ? '#DC2626' : '#D97706';
