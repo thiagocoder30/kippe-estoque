@@ -4855,11 +4855,16 @@ def search_receiving_audit():
     finally:
         conn.close()
 
+    all_divs_norm = []
     div_by_key = {}
     for d in div_rows:
-        key = (_norm_catalog_text(d['supplier'] or ''), str(d['invoice_number'] or '').strip())
-        div_by_key.setdefault(key, []).append({
+        sup_norm_d = _norm_catalog_text(d['supplier'] or '')
+        inv_str_d = str(d['invoice_number'] or '').strip()
+        d_obj = {
             'id': int(d['id']),
+            'supplier': str(d['supplier'] or '').strip(),
+            'supplier_norm': sup_norm_d,
+            'invoice_number': inv_str_d,
             'sku': d['sku'],
             'product_name': d['product_name'] or d['sku'],
             'expected_qty': int(d['expected_qty'] or 0),
@@ -4874,7 +4879,26 @@ def search_receiving_audit():
             'resolved_at': str(d['resolved_at'] or ''),
             'operator_name': d['operator_name'] or d['operator_id'] or '',
             'created_at': d['created_at'] or '',
-        })
+        }
+        all_divs_norm.append(d_obj)
+        key = (sup_norm_d, inv_str_d)
+        div_by_key.setdefault(key, []).append(d_obj)
+
+    matched_div_ids = set()
+
+    def _collect_matching_divs(sup_norm_target: str, inv_raw_target: str) -> list:
+        inv_clean = str(inv_raw_target or '').strip()
+        inv_tokens = {x.strip() for x in inv_clean.split(',') if x.strip()}
+        out_list = []
+        for dobj in all_divs_norm:
+            if dobj['supplier_norm'] != sup_norm_target:
+                continue
+            d_inv = dobj['invoice_number']
+            d_tokens = {x.strip() for x in d_inv.split(',') if x.strip()}
+            if d_inv == inv_clean or (inv_tokens and (d_inv in inv_tokens or bool(inv_tokens & d_tokens))):
+                out_list.append(dobj)
+                matched_div_ids.add(dobj['id'])
+        return out_list
 
     req_by_key = {}
     for pr in req_rows:
@@ -4941,7 +4965,7 @@ def search_receiving_audit():
             'total_items': len(norm_items),
             'total_units': total_units,
             'items': norm_items,
-            'divergences': div_by_key.get(key, []),
+            'divergences': _collect_matching_divs(key[0], inv),
             'product_requests': req_by_key.get(key, []),
         })
 
@@ -4970,7 +4994,7 @@ def search_receiving_audit():
             'total_items': 0,
             'total_units': 0,
             'items': [],
-            'divergences': div_by_key.get(key, []),
+            'divergences': _collect_matching_divs(sup_norm, inv),
             'product_requests': req_by_key.get(key, []),
         })
         qty = int(lg['quantity'] or 0)
@@ -4988,6 +5012,37 @@ def search_receiving_audit():
         grp['total_units'] += qty
 
     records.extend(direct_grouped.values())
+
+    # Garante que nenhuma divergência fique órfã caso o número de NF difira
+    orphan_groups = {}
+    for dobj in all_divs_norm:
+        if dobj['id'] in matched_div_ids:
+            continue
+        okey = (dobj['supplier_norm'], dobj['invoice_number'])
+        ogrp = orphan_groups.setdefault(okey, {
+            'protocol': f"DIV-{dobj['id']:04d}",
+            'queue_id': None,
+            'source': 'DIVERGENCE',
+            'supplier': dobj['supplier'] or 'NÃO INFORMADO',
+            'invoice_number': dobj['invoice_number'] or 'S/N',
+            'status': 'APROVADO',
+            'submitted_by_id': '',
+            'submitted_by_name': dobj['operator_name'] or 'OPERADOR',
+            'created_at': dobj['created_at'] or '',
+            'resolved_at': dobj['resolved_at'] or '',
+            'resolved_by_id': '',
+            'resolved_by_name': '',
+            'notes': 'Registro de divergência formalizada',
+            'total_items': 0,
+            'total_units': 0,
+            'items': [],
+            'divergences': [],
+            'product_requests': [],
+        })
+        ogrp['divergences'].append(dobj)
+        ogrp['total_items'] += 1
+        ogrp['total_units'] += int(dobj['counted_qty'] or 0)
+    records.extend(orphan_groups.values())
 
     filtered = []
     for rec in records:

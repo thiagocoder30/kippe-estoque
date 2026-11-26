@@ -694,6 +694,9 @@ class KippeApplication {
             hideAllViews();
             document.getElementById('home-module-view')?.classList.remove('hidden');
             window.scrollTo(0, 0);
+            if (this.currentOperator?.id && typeof this.refreshEstoquistaPendingQueue === 'function') {
+                this.refreshEstoquistaPendingQueue();
+            }
         };
         window.showHome = showHome;
 
@@ -2448,7 +2451,7 @@ class KippeApplication {
             auditLabel.textContent = isConferente ? '5. RECEBIMENTOS' : '7. RECEBIMENTOS';
         }
 
-        if (allowed && typeof this.refreshEstoquistaPendingQueue === 'function') {
+        if (this.currentOperator?.id && typeof this.refreshEstoquistaPendingQueue === 'function') {
             this.refreshEstoquistaPendingQueue();
         } else {
             document.getElementById('estoquista-pending-card')?.remove();
@@ -8948,6 +8951,119 @@ class KippeApplication {
 
             const fmtDate = (iso) => window.formatBrtDateTime(iso);
 
+            window.openQuickComplementFromAudit = (divId, sku, prodName, nfNum, supplier, pendingMax) => {
+                const isEstoquistaModal = this.canManageCatalog();
+                document.getElementById('kippe-complement-modal')?.remove();
+                const compOverlay = document.createElement('div');
+                compOverlay.id = 'kippe-complement-modal';
+                compOverlay.style.cssText = 'position:fixed;inset:0;z-index:10075;background:rgba(15,23,42,0.8);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px;';
+                const defExp = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+                const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                compOverlay.innerHTML = `
+                    <div style="background:#FFFFFF;border-radius:16px;width:100%;max-width:390px;overflow:hidden;box-shadow:0 24px 48px rgba(15,23,42,0.45);border:1px solid #E2E8F0;">
+                        <div style="background:#EA580C;color:#FFFFFF;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <div style="font-size:9px;font-weight:900;text-transform:uppercase;color:#FFEDD5;">CANHOTO RETIDO · NF ${esc(nfNum)}</div>
+                                <h3 style="font-size:13px;font-weight:900;margin:2px 0 0;text-transform:uppercase;">RECEBER COMPLEMENTO</h3>
+                            </div>
+                            <button type="button" id="close-audit-comp-modal" style="background:rgba(255,255,255,0.2);border:none;color:#FFFFFF;width:30px;height:30px;border-radius:8px;font-weight:900;cursor:pointer;">✕</button>
+                        </div>
+                        <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
+                            <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:10px;">
+                                <p style="font-size:11px;font-weight:900;color:#0F172A;margin:0;text-transform:uppercase;">${esc(prodName)}</p>
+                                <p style="font-size:10px;font-weight:700;color:#64748B;margin:3px 0 0;">${esc(supplier)}</p>
+                                <p style="font-size:10px;font-weight:900;color:#C2410C;margin:4px 0 0;">SALDO PENDENTE DO CANHOTO: ${pendingMax}</p>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9.5px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Quantidade Recebida Agora</label>
+                                <input type="number" id="audit-comp-qty" value="${pendingMax}" min="1" max="${pendingMax}"
+                                    style="width:100%;height:38px;border:1.5px solid #CBD5E1;border-radius:9px;padding:0 10px;font-size:14px;font-weight:900;color:#0F172A;box-sizing:border-box;">
+                            </div>
+                            ${isEstoquistaModal ? `
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <div>
+                                    <label style="display:block;font-size:9px;font-weight:900;color:#475569;text-transform:uppercase;margin-bottom:4px;">Lote (Opcional)</label>
+                                    <input type="text" id="audit-comp-batch" placeholder="AUTO"
+                                        style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:11px;font-weight:800;text-transform:uppercase;box-sizing:border-box;">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:9px;font-weight:900;color:#475569;text-transform:uppercase;margin-bottom:4px;">Validade</label>
+                                    <input type="date" id="audit-comp-exp" value="${defExp}"
+                                        style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:11px;font-weight:800;box-sizing:border-box;">
+                                </div>
+                            </div>
+                            ` : `
+                            <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;font-size:10px;font-weight:700;color:#1E40AF;line-height:1.35;">
+                                Ao confirmar, o saldo do canhoto será abatido e o item seguirá para a fila de armazenagem do Estoquista.
+                            </div>
+                            `}
+                            <div id="audit-comp-err" style="display:none;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:10px;font-weight:800;padding:8px;border-radius:8px;"></div>
+                            <button type="button" id="confirm-audit-comp-btn"
+                                style="width:100%;background:#16A34A;color:#FFFFFF;border:none;border-radius:10px;padding:12px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                ${isEstoquistaModal ? '✅ CONFIRMAR ENTRADA & ABATER SALDO' : '✅ REGISTRAR COMPLEMENTO & ENVIAR P/ ESTOQUISTA'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(compOverlay);
+
+                const closeOv = () => compOverlay.remove();
+                document.getElementById('close-audit-comp-modal')?.addEventListener('click', closeOv);
+                compOverlay.addEventListener('click', (e) => { if (e.target === compOverlay) closeOv(); });
+
+                document.getElementById('confirm-audit-comp-btn')?.addEventListener('click', async (ev) => {
+                    const submitBtn = ev.currentTarget;
+                    const errBox = document.getElementById('audit-comp-err');
+                    const qtyVal = Number(document.getElementById('audit-comp-qty')?.value || 0);
+                    const batchVal = (document.getElementById('audit-comp-batch')?.value || '').trim();
+                    const expVal = (document.getElementById('audit-comp-exp')?.value || '').trim();
+
+                    if (qtyVal <= 0 || qtyVal > pendingMax) {
+                        if (errBox) {
+                            errBox.textContent = `Informe uma quantidade entre 1 e ${pendingMax}.`;
+                            errBox.style.display = 'block';
+                        }
+                        return;
+                    }
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'PROCESSANDO...';
+                    try {
+                        const r = await fetch(`/api/receiving/divergences/${divId}/complement`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                sku,
+                                quantity: qtyVal,
+                                batch_code: batchVal,
+                                expiration_date: expVal,
+                            }),
+                        });
+                        const out = await r.json().catch(() => ({}));
+                        if (!r.ok) {
+                            if (errBox) {
+                                errBox.textContent = out.error || 'Falha ao registrar complemento.';
+                                errBox.style.display = 'block';
+                            }
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = isEstoquistaModal ? '✅ CONFIRMAR ENTRADA & ABATER SALDO' : '✅ REGISTRAR COMPLEMENTO & ENVIAR P/ ESTOQUISTA';
+                            return;
+                        }
+                        closeOv();
+                        await this.loadReceivingAudit();
+                        await this.refreshEstoquistaPendingQueue();
+                    } catch (err) {
+                        if (errBox) {
+                            errBox.textContent = 'Erro de rede: ' + (err.message || err);
+                            errBox.style.display = 'block';
+                        }
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = isEstoquistaModal ? '✅ CONFIRMAR ENTRADA & ABATER SALDO' : '✅ REGISTRAR COMPLEMENTO & ENVIAR P/ ESTOQUISTA';
+                    }
+                });
+            };
+
             window.openReclassifyDivergenceModal = (btn) => {
                 const divId = btn.getAttribute('data-div-id');
                 const prodName = btn.getAttribute('data-div-name') || '';
@@ -9261,19 +9377,28 @@ class KippeApplication {
                                     ${d.notes ? `(${d.notes})` : ''}
                                     <div style="margin-top:5px;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
                                         ${badge}
-                                        ${st !== 'COMPLEMENTO_RECEBIDO' ? `
-                                            <button type="button"
-                                                data-div-id="${d.id}"
-                                                data-div-name="${safeProdAttr}"
-                                                data-div-nf="${safeNfAttr}"
-                                                data-div-current="${st}"
-                                                data-div-amount="${amtNum}"
-                                                data-div-diff="${Number(d.divergence_qty || 0)}"
-                                                onclick="window.openReclassifyDivergenceModal(this)"
-                                                style="background:#FFFFFF;color:#124191;border:1px solid #BFDBFE;border-radius:6px;padding:3px 8px;font-size:8.5px;font-weight:900;text-transform:uppercase;cursor:pointer;">
-                                                ✏️ ALTERAR DESFECHO
-                                            </button>
-                                        ` : ''}
+                                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                                            ${st === 'CANHOTO_RETIDO' && Number(d.pending_qty || 0) > 0 ? `
+                                                <button type="button"
+                                                    onclick="window.openQuickComplementFromAudit('${d.id}', '${String(d.sku || '').replace(/'/g, '')}', '${safeProdAttr.replace(/'/g, '')}', '${safeNfAttr.replace(/'/g, '')}', '${String(rec.supplier || '').replace(/"/g, '&quot;').replace(/'/g, '')}', ${Number(d.pending_qty || 0)})"
+                                                    style="background:#EA580C;color:#FFFFFF;border:none;border-radius:6px;padding:4px 8px;font-size:8.5px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                                    📦 RECEBER COMPLEMENTO
+                                                </button>
+                                            ` : ''}
+                                            ${st !== 'COMPLEMENTO_RECEBIDO' ? `
+                                                <button type="button"
+                                                    data-div-id="${d.id}"
+                                                    data-div-name="${safeProdAttr}"
+                                                    data-div-nf="${safeNfAttr}"
+                                                    data-div-current="${st}"
+                                                    data-div-amount="${amtNum}"
+                                                    data-div-diff="${Number(d.divergence_qty || 0)}"
+                                                    onclick="window.openReclassifyDivergenceModal(this)"
+                                                    style="background:#FFFFFF;color:#124191;border:1px solid #BFDBFE;border-radius:6px;padding:3px 8px;font-size:8.5px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                                    ✏️ ALTERAR DESFECHO
+                                                </button>
+                                            ` : ''}
+                                        </div>
                                     </div>
                                 </div>
                             `;
