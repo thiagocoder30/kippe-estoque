@@ -715,21 +715,27 @@ class KippeApplication {
     }
 
     async refreshEstoquistaPendingQueue() {
-        if (!this.canManageCatalog()) return;
+        const isEstoquista = this.canManageCatalog();
         try {
             const [res, divRes] = await Promise.all([
-                fetch('/api/receiving/pending', { credentials: 'same-origin' }),
+                isEstoquista
+                    ? fetch('/api/receiving/pending', { credentials: 'same-origin' })
+                    : Promise.resolve(null),
                 fetch('/api/receiving/divergences/pending', { credentials: 'same-origin' }).catch(() => null),
             ]);
-            if (!res.ok) return;
-            const data = await res.json();
+            if (isEstoquista && (!res || !res.ok)) return;
+            const data = (isEstoquista && res)
+                ? await res.json()
+                : { pending_conferences_count: 0, pending_products_count: 0, conferences: [], product_requests: [] };
             const divData = (divRes && divRes.ok) ? await divRes.json().catch(() => ({})) : {};
             const canhotoGroups = Array.isArray(divData.pending) ? divData.pending : [];
             const pendingCanhotosCount = Number(divData.total_nfs || canhotoGroups.length || 0);
             data.canhotos_retidos = canhotoGroups;
             data.pending_canhotos_count = pendingCanhotosCount;
 
-            const totalPending = (data.pending_conferences_count || 0) + (data.pending_products_count || 0) + pendingCanhotosCount;
+            const totalPending = isEstoquista
+                ? ((data.pending_conferences_count || 0) + (data.pending_products_count || 0) + pendingCanhotosCount)
+                : pendingCanhotosCount;
 
             let card = document.getElementById('estoquista-pending-card');
             const homeView = document.getElementById('home-module-view');
@@ -743,26 +749,46 @@ class KippeApplication {
             if (!card) {
                 card = document.createElement('div');
                 card.id = 'estoquista-pending-card';
-                card.style.cssText = 'background:#FFFBEB;border:2px solid #F59E0B;border-radius:14px;padding:12px 14px;box-shadow:0 2px 6px rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:space-between;gap:10px;';
+                card.style.cssText = isEstoquista
+                    ? 'background:#FFFBEB;border:2px solid #F59E0B;border-radius:14px;padding:12px 14px;box-shadow:0 2px 6px rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:space-between;gap:10px;'
+                    : 'background:#FFF7ED;border:2px solid #F97316;border-radius:14px;padding:12px 14px;box-shadow:0 2px 6px rgba(234,88,12,0.15);display:flex;align-items:center;justify-content:space-between;gap:10px;';
                 homeView.insertBefore(card, homeView.children[1] || null);
             }
 
-            const canhotoTag = pendingCanhotosCount > 0 ? ` · ${pendingCanhotosCount} canhoto(s) retido(s)` : '';
-            card.innerHTML = `
-                <div>
-                    <span class="inline-block bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                        PENDÊNCIAS DO ESTOQUISTA
-                    </span>
-                    <p class="text-xs font-black text-gray-800 mt-1">
-                        ${data.pending_conferences_count || 0} conferência(s) · ${data.pending_products_count || 0} produto(s) novo(s)${canhotoTag}
-                    </p>
-                    <p class="text-[10px] text-gray-600">Aguardando cadastro, armazenagem ou complemento</p>
-                </div>
-                <button type="button" id="btn-open-estoquista-queue"
-                    class="bg-[#124191] text-white text-[10px] font-black uppercase px-3 py-2.5 rounded-lg shadow active:scale-95 shrink-0">
-                    REVISAR
-                </button>
-            `;
+            if (isEstoquista) {
+                const canhotoTag = pendingCanhotosCount > 0 ? ` · ${pendingCanhotosCount} canhoto(s) retido(s)` : '';
+                card.innerHTML = `
+                    <div>
+                        <span class="inline-block bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                            PENDÊNCIAS DO ESTOQUISTA
+                        </span>
+                        <p class="text-xs font-black text-gray-800 mt-1">
+                            ${data.pending_conferences_count || 0} conferência(s) · ${data.pending_products_count || 0} produto(s) novo(s)${canhotoTag}
+                        </p>
+                        <p class="text-[10px] text-gray-600">Aguardando cadastro, armazenagem ou complemento</p>
+                    </div>
+                    <button type="button" id="btn-open-estoquista-queue"
+                        class="bg-[#124191] text-white text-[10px] font-black uppercase px-3 py-2.5 rounded-lg shadow active:scale-95 shrink-0">
+                        REVISAR
+                    </button>
+                `;
+            } else {
+                card.innerHTML = `
+                    <div>
+                        <span style="display:inline-block;background:#EA580C;color:#FFFFFF;font-size:9px;font-weight:900;padding:2px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:0.04em;">
+                            📌 CANHOTOS RETIDOS NA DOCA
+                        </span>
+                        <p class="text-xs font-black text-gray-800 mt-1">
+                            ${pendingCanhotosCount} canhoto(s) retido(s) aguardando complemento
+                        </p>
+                        <p class="text-[10px] text-gray-600">Conferir entrega faltante e liberar canhoto</p>
+                    </div>
+                    <button type="button" id="btn-open-estoquista-queue"
+                        style="background:#EA580C;color:#FFFFFF;font-size:10px;font-weight:900;text-transform:uppercase;padding:10px 12px;border-radius:9px;border:none;flex-shrink:0;cursor:pointer;">
+                        CONFERIR
+                    </button>
+                `;
+            }
 
             document.getElementById('btn-open-estoquista-queue')?.addEventListener('click', () => {
                 this.openEstoquistaQueueModal(data);
@@ -935,12 +961,20 @@ class KippeApplication {
             </div>
         `).join('') || '<div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:10px;padding:12px;text-align:center;font-size:11px;font-weight:700;color:#64748B;">Nenhuma conferência aguardando armazenagem.</div>';
 
+        const isEstoquistaModal = this.canManageCatalog();
+        const modalHeaderBg = isEstoquistaModal ? '#124191' : '#EA580C';
+        const modalTitleText = isEstoquistaModal ? 'Fila do Estoquista / Armazenagem' : 'Canhotos Retidos / Complementos';
+        const modalSubText = isEstoquistaModal ? 'Cadastros solicitados e entradas conferidas' : 'Conferência de saldo faltante na doca';
+        const sectionTitleCanhoto = isEstoquistaModal
+            ? `3. Canhotos Retidos / Complementos (${canhotoList.length})`
+            : `Canhotos Retidos Aguardando Entrega (${canhotoList.length})`;
+
         modal.innerHTML = `
             <div style="background:#FFFFFF;border-radius:16px;box-shadow:0 24px 48px rgba(15,23,42,0.4);width:100%;max-width:440px;max-height:88dvh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #E2E8F0;">
-                <div style="background:#124191;color:#FFFFFF;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0;">
+                <div style="background:${modalHeaderBg};color:#FFFFFF;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0;">
                     <div style="min-width:0;">
-                        <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:0.03em;">Fila do Estoquista / Armazenagem</h3>
-                        <p style="font-size:10px;color:#BFDBFE;margin:2px 0 0;">Cadastros solicitados e entradas conferidas</p>
+                        <h3 style="font-size:13px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:0.03em;">${modalTitleText}</h3>
+                        <p style="font-size:10px;color:rgba(255,255,255,0.85);margin:2px 0 0;">${modalSubText}</p>
                     </div>
                     <button type="button" id="close-estoquista-queue"
                         style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#FFFFFF;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;">
@@ -949,6 +983,7 @@ class KippeApplication {
                 </div>
 
                 <div style="padding:14px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;-webkit-overflow-scrolling:touch;">
+                    ${isEstoquistaModal ? `
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <h4 style="font-size:10px;font-weight:900;text-transform:uppercase;color:#475569;margin:0;letter-spacing:0.04em;">
@@ -966,11 +1001,12 @@ class KippeApplication {
                         </div>
                         <div style="display:flex;flex-direction:column;gap:10px;">${confHtml}</div>
                     </div>
+                    ` : ''}
 
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <h4 style="font-size:10px;font-weight:900;text-transform:uppercase;color:#9A3412;margin:0;letter-spacing:0.04em;">
-                                3. Canhotos Retidos / Complementos (${canhotoList.length})
+                                ${sectionTitleCanhoto}
                             </h4>
                         </div>
                         <div style="display:flex;flex-direction:column;gap:10px;">${canhotoHtml}</div>
@@ -1497,6 +1533,7 @@ class KippeApplication {
                                 <input type="number" id="comp-qty-input" value="${pendingMax}" min="0.001" max="${pendingMax}" step="any"
                                     style="width:100%;height:38px;border:1.5px solid #CBD5E1;border-radius:9px;padding:0 10px;font-size:14px;font-weight:900;color:#0F172A;box-sizing:border-box;">
                             </div>
+                            ${isEstoquistaModal ? `
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                                 <div>
                                     <label style="display:block;font-size:9px;font-weight:900;color:#475569;text-transform:uppercase;margin-bottom:4px;">Lote (Opcional)</label>
@@ -1509,10 +1546,15 @@ class KippeApplication {
                                         style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:11px;font-weight:800;box-sizing:border-box;">
                                 </div>
                             </div>
+                            ` : `
+                            <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;font-size:10px;font-weight:700;color:#1E40AF;line-height:1.35;">
+                                Ao confirmar, o saldo do canhoto será abatido e o item seguirá para a fila de armazenagem do Estoquista.
+                            </div>
+                            `}
                             <div id="comp-err-box" style="display:none;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:10px;font-weight:800;padding:8px;border-radius:8px;"></div>
                             <button type="button" id="confirm-comp-submit"
                                 style="width:100%;background:#16A34A;color:#FFFFFF;border:none;border-radius:10px;padding:12px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;margin-top:2px;">
-                                ✅ CONFIRMAR ENTRADA & ABATER SALDO
+                                ${isEstoquistaModal ? '✅ CONFIRMAR ENTRADA & ABATER SALDO' : '✅ REGISTRAR COMPLEMENTO & ENVIAR P/ ESTOQUISTA'}
                             </button>
                         </div>
                     </div>
@@ -1563,9 +1605,13 @@ class KippeApplication {
                         }
                         closeComp();
                         modal.remove();
-                        const statusMsg = out.canhoto_liberado
-                            ? `✅ Canhoto liberado! Saldo pendente da NF ${nfNum} zerado e +${qtyVal} lançado no estoque.`
-                            : `✅ Complemento de +${qtyVal} lançado! Saldo restante no canhoto: ${out.pending_after}.`;
+                        const statusMsg = out.queued_for_storage
+                            ? (out.canhoto_liberado
+                                ? `✅ Canhoto liberado! Saldo pendente da NF ${nfNum} zerado e +${qtyVal} enviado para a fila de armazenagem do Estoquista.`
+                                : `✅ Complemento de +${qtyVal} enviado para a fila do Estoquista! Saldo restante no canhoto: ${out.pending_after}.`)
+                            : (out.canhoto_liberado
+                                ? `✅ Canhoto liberado! Saldo pendente da NF ${nfNum} zerado e +${qtyVal} lançado no estoque.`
+                                : `✅ Complemento de +${qtyVal} lançado! Saldo restante no canhoto: ${out.pending_after}.`);
                         if (window.kippeModalAlert) {
                             await window.kippeModalAlert(statusMsg, 'COMPLEMENTO RECEBIDO');
                         } else {

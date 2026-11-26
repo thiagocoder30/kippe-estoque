@@ -5416,9 +5416,11 @@ def receive_complement(div_id: int):
     if qty <= 0:
         return jsonify({'error': 'Quantidade deve ser maior que zero.'}), 400
 
-    op_id, op_name, _ = _get_active_operator_context()
+    op_id, op_name, op_role = _get_active_operator_context()
+    is_conf_only = AccessControl.is_conference_only(op_role)
     dt_mod = __import__('datetime')
     now_iso = _now_brt_iso()
+    queued_id = None
 
     conn = _get_kippe_db()
     try:
@@ -5434,7 +5436,36 @@ def receive_complement(div_id: int):
             return jsonify({'error': f'Qtd recebida ({qty}) maior que saldo ({pending_before}).'}), 400
 
         sku = str(data.get('sku') or row['sku'] or '').strip()
-        if sku and not sku.startswith('TEMP-'):
+        if is_conf_only:
+            comp_item = {
+                'sku': sku or f'TEMP-COMP-{div_id}',
+                'name': row['product_name'] or sku or 'COMPLEMENTO CANHOTO',
+                'quantity': qty,
+                'scanned': qty,
+                'expected': qty,
+                'batch_code': str(data.get('batch_code') or '').strip().upper(),
+                'expiration_date': str(data.get('expiration_date') or '').strip(),
+                'is_complement': True,
+                'divergence_id': div_id,
+            }
+            cur_q = conn.execute(
+                '''
+                INSERT INTO receiving_pending_queue (
+                    supplier, invoice_number, submitted_by_id, submitted_by_name,
+                    status, items_json, created_at
+                ) VALUES (?, ?, ?, ?, 'PENDENTE', ?, ?)
+                ''',
+                (
+                    row['supplier'] or 'PADRAO',
+                    f"{row['invoice_number'] or 'S/N'} (COMPLEMENTO)",
+                    op_id or 'SYSTEM',
+                    op_name or op_id or 'Conferente',
+                    json.dumps([comp_item], ensure_ascii=False),
+                    now_iso,
+                ),
+            )
+            queued_id = int(cur_q.lastrowid)
+        elif sku and not sku.startswith('TEMP-'):
             prod = container.product_repository.get_by_id(sku)
             if prod:
                 batch_code = str(data.get('batch_code') or '').strip().upper() or f"COMP-{row['invoice_number'] or div_id}-{dt_mod.date.today().strftime('%Y%m%d')}"
@@ -5500,6 +5531,8 @@ def receive_complement(div_id: int):
             'pending_after': pending_after,
             'status': new_status,
             'canhoto_liberado': pending_after == 0,
+            'queued_for_storage': is_conf_only,
+            'queue_id': queued_id,
         }), 200
     finally:
         conn.close()
