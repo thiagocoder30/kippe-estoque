@@ -9061,23 +9061,175 @@ class KippeApplication {
                 });
             };
 
+            window.openAdjustQueueItemModal = (btn) => {
+                const queueId = btn.getAttribute('data-queue-id');
+                const itemIdx = Number(btn.getAttribute('data-item-idx') || 0);
+                const itemName = btn.getAttribute('data-item-name') || '';
+                const currentQty = Number(btn.getAttribute('data-item-qty') || 0);
+                const nfNum = btn.getAttribute('data-rec-nf') || 'S/N';
+                const defaultNewQty = Math.max(0, currentQty - 1);
+
+                document.getElementById('kippe-adjust-qitem-modal')?.remove();
+                const overlay = document.createElement('div');
+                overlay.id = 'kippe-adjust-qitem-modal';
+                overlay.style.cssText = 'position:fixed;inset:0;z-index:10075;background:rgba(15,23,42,0.82);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:14px;';
+
+                const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                overlay.innerHTML = `
+                    <div style="background:#FFFFFF;border-radius:16px;width:100%;max-width:410px;overflow:hidden;box-shadow:0 24px 48px rgba(15,23,42,0.45);border:1px solid #E2E8F0;">
+                        <div style="background:#124191;color:#FFFFFF;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <div style="font-size:9px;font-weight:900;text-transform:uppercase;color:#BFDBFE;">AJUSTE PRÉ-ESTOQUE · NF ${esc(nfNum)}</div>
+                                <h3 style="font-size:13px;font-weight:900;margin:2px 0 0;text-transform:uppercase;">CORRIGIR QUANTIDADE FÍSICA</h3>
+                            </div>
+                            <button type="button" id="close-adj-qitem-modal" style="background:rgba(255,255,255,0.2);border:none;color:#FFFFFF;width:30px;height:30px;border-radius:8px;font-weight:900;cursor:pointer;">✕</button>
+                        </div>
+                        <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
+                            <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px;">
+                                <p style="font-size:11px;font-weight:900;color:#0F172A;margin:0;text-transform:uppercase;">${esc(itemName)}</p>
+                                <p style="font-size:9.5px;font-weight:700;color:#64748B;margin:3px 0 0;">Lançado inicialmente na conferência: <strong>${currentQty} UN</strong></p>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <div>
+                                    <label style="display:block;font-size:9px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Qtd na Nota (NF)</label>
+                                    <input type="number" min="0" id="adj-qitem-expected" value="${currentQty}"
+                                        style="width:100%;height:38px;border:1.5px solid #CBD5E1;border-radius:8px;padding:0 10px;font-size:13px;font-weight:900;box-sizing:border-box;">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:9px;font-weight:900;color:#166534;text-transform:uppercase;margin-bottom:4px;">Qtd Física Real</label>
+                                    <input type="number" min="0" id="adj-qitem-real" value="${defaultNewQty}"
+                                        style="width:100%;height:38px;border:1.5px solid #86EFAC;background:#F0FDF4;border-radius:8px;padding:0 10px;font-size:13px;font-weight:900;color:#14532D;box-sizing:border-box;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9.5px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Desfecho da Diferença</label>
+                                <select id="adj-qitem-settlement" style="width:100%;height:38px;border:1.5px solid #86EFAC;background:#DCFCE7;border-radius:9px;padding:0 8px;font-size:11px;font-weight:900;color:#166534;">
+                                    <option value="RESSARCIDO_NO_ATO" selected>💵 Ressarcido no Ato (Pago pelo Entregador)</option>
+                                    <option value="ABATIMENTO_BOLETO">🧾 Abatimento no Boleto / Nota de Crédito</option>
+                                    <option value="REFATURAMENTO_NF">🔄 NF Será Refaturada (Retirar Item da NF)</option>
+                                    <option value="CANHOTO_RETIDO">📌 Reter Canhoto (Entrega Complementar)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Valor Pago / Abatido (R$, Opcional)</label>
+                                <div style="display:flex;gap:6px;">
+                                    <input type="number" step="0.01" min="0" id="adj-qitem-amount" placeholder="0,00"
+                                        style="flex:1;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 10px;font-size:12px;font-weight:900;box-sizing:border-box;">
+                                    <button type="button" id="adj-tag-dinheiro" style="height:36px;padding:0 8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:7px;font-size:9px;font-weight:900;cursor:pointer;">DINHEIRO</button>
+                                    <button type="button" id="adj-tag-pix" style="height:36px;padding:0 8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:7px;font-size:9px;font-weight:900;cursor:pointer;">PIX</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Observação</label>
+                                <input type="text" id="adj-qitem-notes" placeholder="Ex: 1un faltando paga pelo entregador"
+                                    style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 10px;font-size:11px;box-sizing:border-box;">
+                            </div>
+                            <div id="adj-qitem-err" style="display:none;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:10px;font-weight:800;padding:8px;border-radius:8px;"></div>
+                            <button type="button" id="confirm-adj-qitem-btn" style="width:100%;background:#16A34A;color:#FFFFFF;border:none;border-radius:10px;padding:12px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                ✅ SALVAR QTD FÍSICA & REGISTRAR DIVERGÊNCIA
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                const closeOv = () => overlay.remove();
+                document.getElementById('close-adj-qitem-modal')?.addEventListener('click', closeOv);
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOv(); });
+
+                const appendNoteTag = (tag) => {
+                    const inp = document.getElementById('adj-qitem-notes');
+                    if (!inp) return;
+                    const cur = (inp.value || '').trim();
+                    inp.value = cur ? `${cur} · ${tag}` : tag;
+                };
+                document.getElementById('adj-tag-dinheiro')?.addEventListener('click', () => appendNoteTag('PAGO EM DINHEIRO'));
+                document.getElementById('adj-tag-pix')?.addEventListener('click', () => appendNoteTag('PAGO VIA PIX'));
+
+                document.getElementById('confirm-adj-qitem-btn')?.addEventListener('click', async (ev) => {
+                    const submitBtn = ev.currentTarget;
+                    const errBox = document.getElementById('adj-qitem-err');
+                    const expectedQty = Number(document.getElementById('adj-qitem-expected')?.value || 0);
+                    const newQty = Number(document.getElementById('adj-qitem-real')?.value || 0);
+                    const settlementType = document.getElementById('adj-qitem-settlement')?.value || 'RESSARCIDO_NO_ATO';
+                    const settlementAmount = Number(document.getElementById('adj-qitem-amount')?.value || 0);
+                    const notes = (document.getElementById('adj-qitem-notes')?.value || '').trim();
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'SALVANDO...';
+                    try {
+                        const r = await fetch(`/api/receiving/pending/${queueId}/adjust-item`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                item_index: itemIdx,
+                                expected_quantity: expectedQty,
+                                new_quantity: newQty,
+                                settlement_type: settlementType,
+                                settlement_amount: settlementAmount,
+                                notes,
+                            }),
+                        });
+                        const out = await r.json().catch(() => ({}));
+                        if (!r.ok) {
+                            if (errBox) {
+                                errBox.textContent = out.error || 'Falha ao ajustar item.';
+                                errBox.style.display = 'block';
+                            }
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = '✅ SALVAR QTD FÍSICA & REGISTRAR DIVERGÊNCIA';
+                            return;
+                        }
+                        closeOv();
+                        await this.loadReceivingAudit();
+                        await this.refreshEstoquistaPendingQueue();
+                    } catch (err) {
+                        if (errBox) {
+                            errBox.textContent = 'Erro de rede: ' + (err.message || err);
+                            errBox.style.display = 'block';
+                        }
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '✅ SALVAR QTD FÍSICA & REGISTRAR DIVERGÊNCIA';
+                    }
+                });
+            };
+
             listEl.innerHTML = records.map(rec => {
                 const borderLeftColor = rec.status === 'APROVADO' ? '#16A34A' : rec.status === 'REJEITADO' ? '#DC2626' : '#D97706';
-                const itemsHtml = (rec.items || []).map(it => {
+                const canAdjustPending = rec.source === 'QUEUE' && rec.status === 'PENDENTE' && Boolean(rec.queue_id);
+                const itemsHtml = (rec.items || []).map((it, itemIdx) => {
                     const meta = [
                         it.sku && !it.is_unlinked ? `SKU: ${it.sku}` : 'SEM CADASTRO PRÉVIO',
                         it.batch_code ? `Lote: ${it.batch_code}` : '',
                         it.expiration_date ? `Val: ${it.expiration_date}` : '',
                     ].filter(Boolean).join(' · ');
+                    const safeNameAttr = String(it.name || it.sku || '').replace(/"/g, '&quot;');
+                    const safeNfAttr = String(rec.invoice_number || '').replace(/"/g, '&quot;');
                     return `
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #F1F5F9;">
                             <div style="min-width:0;flex:1;">
                                 <p style="font-size:11px;font-weight:900;color:#1E293B;margin:0;line-height:1.3;word-break:break-word;">${it.name}</p>
                                 <p style="font-size:9px;font-weight:700;color:#64748B;margin:2px 0 0;">${meta}</p>
                             </div>
-                            <span style="flex-shrink:0;background:#EFF6FF;color:#124191;border:1px solid #BFDBFE;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:900;">
-                                ${it.quantity} UN
-                            </span>
+                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                                <span style="background:#EFF6FF;color:#124191;border:1px solid #BFDBFE;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:900;">
+                                    ${it.quantity} UN
+                                </span>
+                                ${canAdjustPending ? `
+                                    <button type="button"
+                                        data-queue-id="${rec.queue_id}"
+                                        data-item-idx="${itemIdx}"
+                                        data-item-name="${safeNameAttr}"
+                                        data-item-qty="${Number(it.quantity || 0)}"
+                                        data-rec-nf="${safeNfAttr}"
+                                        onclick="window.openAdjustQueueItemModal(this)"
+                                        style="background:#FFFBEB;color:#B45309;border:1px solid #FDE68A;border-radius:5px;padding:2px 6px;font-size:8px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                        ✏️ AJUSTAR QTD
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                     `;
                 }).join('');

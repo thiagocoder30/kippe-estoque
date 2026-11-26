@@ -4675,6 +4675,154 @@ def update_divergence_settlement(div_id: int):
     }), 200
 
 
+@app.route('/api/receiving/pending/<int:queue_id>/adjust-item', methods=['POST'])
+def adjust_pending_queue_item(queue_id: int):
+    """Corrige quantidade física de item em protocolo AGUARDANDO e registra divergência formal."""
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+    try:
+        item_idx = int(data.get('item_index'))
+        expected_qty = max(0, int(round(float(data.get('expected_quantity') or 0))))
+        new_qty = max(0, int(round(float(data.get('new_quantity') or 0))))
+    except Exception:
+        return jsonify({'error': 'Índices ou quantidades inválidas.'}), 400
+
+    allowed_settlements = {
+        'CANHOTO_RETIDO',
+        'RESSARCIDO_NO_ATO',
+        'ABATIMENTO_BOLETO',
+        'REFATURAMENTO_NF',
+        'SOBRA_DEVOLVIDA',
+        'BONIFICACAO_ACEITA',
+        'REGISTRADA',
+    }
+    settlement_type = str(data.get('settlement_type') or 'RESSARCIDO_NO_ATO').strip().upper()
+    if settlement_type not in allowed_settlements:
+        settlement_type = 'RESSARCIDO_NO_ATO'
+
+    try:
+        raw_amt = str(data.get('settlement_amount') or '0').replace(',', '.').strip()
+        settlement_amount = max(0.0, round(float(raw_amt or 0.0), 2))
+    except Exception:
+        settlement_amount = 0.0
+
+    extra_notes = str(data.get('notes') or '').strip()
+    op_id, op_name, _ = _get_active_operator_context()
+    now_iso = _now_brt_iso()
+
+    conn = _get_kippe_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM receiving_pending_queue WHERE id = ?",
+            (queue_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Protocolo pendente não encontrado.'}), 404
+        if str(row['status'] or '').upper() != 'PENDENTE':
+            return jsonify({'error': 'Este protocolo já foi efetivado ou encerrado.'}), 409
+
+        items = json.loads(row['items_json'] or '[]')
+        if item_idx < 0 or item_idx >= len(items):
+            return jsonify({'error': 'Item não encontrado no protocolo.'}), 404
+
+        target_it = dict(items[item_idx])
+        old_qty = int(target_it.get('quantity') or target_it.get('scanned') or 0)
+        item_sku = str(target_it.get('sku') or '').strip()
+        item_name = str(target_it.get('name') or item_sku or 'ITEM').strip()
+        item_inv = str(target_it.get('invoice_number') or row['invoice_number'] or 'S/N').strip()
+        supplier_raw = str(row['supplier'] or 'PADRAO').strip()
+        supplier_norm = _norm_catalog_text(supplier_raw)
+
+        if new_qty == 0:
+            items.pop(item_idx)
+        else:
+            target_it['quantity'] = new_qty
+            target_it['scanned'] = new_qty
+            items[item_idx] = target_it
+
+        conn.execute(
+            "UPDATE receiving_pending_queue SET items_json = ? WHERE id = ?",
+            (json.dumps(items, ensure_ascii=False), queue_id),
+        )
+
+        # Atualiza solicitação de cadastro pendente vinculada, se houver
+        try:
+            req_rows = conn.execute(
+                "SELECT id, raw_description, supplier, invoice_number FROM product_registration_requests WHERE status = 'PENDENTE'"
+            ).fetchall()
+            norm_item_name = _norm_catalog_text(item_name)
+            for pr in req_rows:
+                if _norm_catalog_text(pr['supplier'] or '') == supplier_norm and _norm_catalog_text(pr['raw_description'] or '') == norm_item_name:
+                    if new_qty > 0:
+                        conn.execute(
+                            "UPDATE product_registration_requests SET nf_qty = ? WHERE id = ?",
+                            (new_qty, pr['id']),
+                        )
+        except Exception:
+            pass
+
+        diff_q = new_qty - expected_qty
+        if diff_q != 0:
+            reason_val = 'FALTA' if diff_q < 0 else 'OUTRO'
+            if settlement_type == 'CANHOTO_RETIDO' and diff_q < 0:
+                status_val = 'CANHOTO_RETIDO'
+                pending_val = abs(diff_q)
+                resolved_at = None
+            else:
+                status_val = settlement_type
+                pending_val = 0
+                resolved_at = now_iso
+
+            conn.execute(
+                'INSERT INTO receiving_divergences ('
+                'supplier, supplier_norm, invoice_number, sku, product_name, '
+                'expected_qty, counted_qty, divergence_qty, reason, notes, '
+                'operator_id, operator_name, created_at, '
+                'status, pending_qty, parent_divergence_id, resolved_at, '
+                'settlement_type, settlement_amount'
+                ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)',
+                (
+                    supplier_raw.upper(),
+                    supplier_norm,
+                    item_inv,
+                    item_sku or 'SEM-SKU',
+                    item_name,
+                    expected_qty,
+                    new_qty,
+                    diff_q,
+                    reason_val,
+                    extra_notes,
+                    op_id or 'SYSTEM',
+                    op_name or op_id or 'SYSTEM',
+                    now_iso,
+                    status_val,
+                    pending_val,
+                    resolved_at,
+                    settlement_type,
+                    settlement_amount,
+                ),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    _record_audit_event(
+        "QUEUE_ITEM_ADJUSTED",
+        "RECEBIMENTO",
+        f"REC-{queue_id:04d} · {item_name}: qtd ajustada de {old_qty} para {new_qty} ({settlement_type})",
+        target_ref=f"REC-{queue_id:04d}",
+    )
+    return jsonify({
+        'ok': True,
+        'queue_id': queue_id,
+        'old_qty': old_qty,
+        'new_qty': new_qty,
+    }), 200
+
+
 @app.route('/api/receiving/audit', methods=['GET'])
 def search_receiving_audit():
     if not _has_valid_session():
@@ -4720,6 +4868,8 @@ def search_receiving_audit():
             'reason': d['reason'] or '',
             'notes': d['notes'] or '',
             'status': str(d['status'] or 'REGISTRADA').upper(),
+            'settlement_type': str((d['settlement_type'] if 'settlement_type' in d.keys() else d['status']) or 'REGISTRADA').upper(),
+            'settlement_amount': float((d['settlement_amount'] if 'settlement_amount' in d.keys() else 0) or 0),
             'pending_qty': int(d['pending_qty'] or 0),
             'resolved_at': str(d['resolved_at'] or ''),
             'operator_name': d['operator_name'] or d['operator_id'] or '',
