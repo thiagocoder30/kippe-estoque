@@ -4579,6 +4579,102 @@ def approve_pending_conference(queue_id: int):
     }), 200
 
 
+@app.route('/api/receiving/divergences/<int:div_id>/settlement', methods=['POST'])
+def update_divergence_settlement(div_id: int):
+    """Reclassifica o desfecho operacional/financeiro de uma divergência já registrada."""
+    if not _has_valid_session():
+        return jsonify({'error': 'Operador não autenticado.'}), 401
+
+    data = request.json or {}
+    allowed_settlements = {
+        'CANHOTO_RETIDO',
+        'RESSARCIDO_NO_ATO',
+        'ABATIMENTO_BOLETO',
+        'REFATURAMENTO_NF',
+        'SOBRA_DEVOLVIDA',
+        'BONIFICACAO_ACEITA',
+        'REGISTRADA',
+    }
+    settlement_type = str(data.get('settlement_type') or '').strip().upper()
+    if settlement_type not in allowed_settlements:
+        return jsonify({'error': 'Desfecho inválido.'}), 400
+
+    try:
+        raw_amt = str(data.get('settlement_amount') or '0').replace(',', '.').strip()
+        settlement_amount = max(0.0, round(float(raw_amt or 0.0), 2))
+    except Exception:
+        settlement_amount = 0.0
+
+    extra_note = str(data.get('notes') or '').strip()
+    op_id, op_name, _ = _get_active_operator_context()
+    now_iso = _now_brt_iso()
+
+    conn = _get_kippe_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM receiving_divergences WHERE id = ?",
+            (div_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Divergência não encontrada.'}), 404
+
+        missing_qty = max(0, int(row['expected_qty'] or 0) - int(row['counted_qty'] or 0))
+        if settlement_type == 'CANHOTO_RETIDO' and missing_qty > 0:
+            new_status = 'CANHOTO_RETIDO'
+            new_pending = missing_qty
+            resolved_at = None
+        else:
+            new_status = settlement_type
+            new_pending = 0
+            resolved_at = now_iso
+
+        old_notes = str(row['notes'] or '').strip()
+        tag_note = extra_note or f"Desfecho alterado para {settlement_type}"
+        merged_notes = f"{old_notes} · {tag_note}".lstrip(" ·")
+
+        conn.execute(
+            '''
+            UPDATE receiving_divergences
+               SET status = ?,
+                   settlement_type = ?,
+                   settlement_amount = ?,
+                   pending_qty = ?,
+                   resolved_at = ?,
+                   notes = ?
+             WHERE id = ?
+            ''',
+            (
+                new_status,
+                settlement_type,
+                settlement_amount,
+                new_pending,
+                resolved_at,
+                merged_notes,
+                div_id,
+            ),
+        )
+        conn.commit()
+        inv_num = str(row['invoice_number'] or div_id)
+        prod_name = str(row['product_name'] or row['sku'] or '')
+    finally:
+        conn.close()
+
+    _record_audit_event(
+        "DIVERGENCE_RECLASSIFIED",
+        "RECEBIMENTO",
+        f"Divergência #{div_id} ({prod_name} · NF {inv_num}) alterada para {settlement_type} por {op_name or op_id}",
+        target_ref=f"NF-{inv_num}",
+    )
+    return jsonify({
+        'ok': True,
+        'id': div_id,
+        'status': new_status,
+        'settlement_type': settlement_type,
+        'settlement_amount': settlement_amount,
+        'pending_qty': new_pending,
+    }), 200
+
+
 @app.route('/api/receiving/audit', methods=['GET'])
 def search_receiving_audit():
     if not _has_valid_session():

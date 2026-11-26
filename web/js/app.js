@@ -8948,6 +8948,119 @@ class KippeApplication {
 
             const fmtDate = (iso) => window.formatBrtDateTime(iso);
 
+            window.openReclassifyDivergenceModal = (btn) => {
+                const divId = btn.getAttribute('data-div-id');
+                const prodName = btn.getAttribute('data-div-name') || '';
+                const nfNum = btn.getAttribute('data-div-nf') || 'S/N';
+                const currentSt = btn.getAttribute('data-div-current') || 'CANHOTO_RETIDO';
+                const currentAmt = Number(btn.getAttribute('data-div-amount') || 0);
+                const diffVal = Number(btn.getAttribute('data-div-diff') || 0);
+
+                document.getElementById('kippe-reclassify-div-modal')?.remove();
+                const overlay = document.createElement('div');
+                overlay.id = 'kippe-reclassify-div-modal';
+                overlay.style.cssText = 'position:fixed;inset:0;z-index:10070;background:rgba(15,23,42,0.8);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:14px;';
+
+                const options = diffVal > 0 ? [
+                    { id: 'SOBRA_DEVOLVIDA', label: '↩️ Sobra Devolvida ao Entregador' },
+                    { id: 'BONIFICACAO_ACEITA', label: '🎁 Aceita como Bonificação' },
+                    { id: 'REFATURAMENTO_NF', label: '🔄 NF Será Refaturada / Complementada' },
+                ] : [
+                    { id: 'REFATURAMENTO_NF', label: '🔄 NF Será Refaturada (Retirar Item da NF)' },
+                    { id: 'ABATIMENTO_BOLETO', label: '🧾 Abatimento no Boleto / Nota de Crédito' },
+                    { id: 'RESSARCIDO_NO_ATO', label: '💵 Ressarcido no Ato pelo Entregador' },
+                    { id: 'CANHOTO_RETIDO', label: '📌 Reter Canhoto (Entrega Complementar)' },
+                ];
+
+                const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                overlay.innerHTML = `
+                    <div style="background:#FFFFFF;border-radius:16px;width:100%;max-width:400px;overflow:hidden;box-shadow:0 24px 48px rgba(15,23,42,0.45);border:1px solid #E2E8F0;">
+                        <div style="background:#124191;color:#FFFFFF;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <div style="font-size:9px;font-weight:900;text-transform:uppercase;color:#BFDBFE;">AUDITORIA DE DIVERGÊNCIA · NF ${esc(nfNum)}</div>
+                                <h3 style="font-size:13px;font-weight:900;margin:2px 0 0;text-transform:uppercase;">ALTERAR DESFECHO</h3>
+                            </div>
+                            <button type="button" id="close-reclassify-modal" style="background:rgba(255,255,255,0.2);border:none;color:#FFFFFF;width:30px;height:30px;border-radius:8px;font-weight:900;cursor:pointer;">✕</button>
+                        </div>
+                        <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
+                            <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px;">
+                                <p style="font-size:11px;font-weight:900;color:#0F172A;margin:0;text-transform:uppercase;">${esc(prodName)}</p>
+                                <p style="font-size:9.5px;font-weight:700;color:#64748B;margin:3px 0 0;">Status atual: <strong>${esc(currentSt)}</strong></p>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9.5px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Novo Desfecho</label>
+                                <select id="reclassify-settlement-sel" style="width:100%;height:38px;border:1.5px solid #CBD5E1;border-radius:9px;padding:0 8px;font-size:11px;font-weight:900;color:#0F172A;background:#FFFFFF;">
+                                    ${options.map(o => `<option value="${o.id}" ${o.id === currentSt ? 'selected' : ''}>${o.label}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9.5px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Valor Ressarcido / Abatido (R$, Opcional)</label>
+                                <input type="number" step="0.01" min="0" id="reclassify-amount-inp" value="${currentAmt > 0 ? currentAmt : ''}" placeholder="0,00"
+                                    style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 10px;font-size:12px;font-weight:900;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:9.5px;font-weight:900;color:#334155;text-transform:uppercase;margin-bottom:4px;">Observação / Motivo da Alteração</label>
+                                <input type="text" id="reclassify-note-inp" placeholder="Ex: Fornecedor irá refaturar a NF"
+                                    style="width:100%;height:36px;border:1px solid #CBD5E1;border-radius:8px;padding:0 10px;font-size:11px;box-sizing:border-box;">
+                            </div>
+                            <div id="reclassify-err-box" style="display:none;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:10px;font-weight:800;padding:8px;border-radius:8px;"></div>
+                            <button type="button" id="confirm-reclassify-btn" style="width:100%;background:#16A34A;color:#FFFFFF;border:none;border-radius:10px;padding:12px;font-size:11px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                ✅ SALVAR NOVO DESFECHO
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                const closeOverlay = () => overlay.remove();
+                document.getElementById('close-reclassify-modal')?.addEventListener('click', closeOverlay);
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
+
+                document.getElementById('confirm-reclassify-btn')?.addEventListener('click', async (ev) => {
+                    const submitBtn = ev.currentTarget;
+                    const errBox = document.getElementById('reclassify-err-box');
+                    const settlementType = document.getElementById('reclassify-settlement-sel')?.value || '';
+                    const settlementAmount = Number(document.getElementById('reclassify-amount-inp')?.value || 0);
+                    const notes = (document.getElementById('reclassify-note-inp')?.value || '').trim();
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'SALVANDO...';
+                    try {
+                        const r = await fetch(`/api/receiving/divergences/${divId}/settlement`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                settlement_type: settlementType,
+                                settlement_amount: settlementAmount,
+                                notes,
+                            }),
+                        });
+                        const out = await r.json().catch(() => ({}));
+                        if (!r.ok) {
+                            if (errBox) {
+                                errBox.textContent = out.error || 'Falha ao atualizar desfecho.';
+                                errBox.style.display = 'block';
+                            }
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = '✅ SALVAR NOVO DESFECHO';
+                            return;
+                        }
+                        closeOverlay();
+                        await this.loadReceivingAudit();
+                        await this.refreshEstoquistaPendingQueue();
+                    } catch (err) {
+                        if (errBox) {
+                            errBox.textContent = 'Erro de rede: ' + (err.message || err);
+                            errBox.style.display = 'block';
+                        }
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '✅ SALVAR NOVO DESFECHO';
+                    }
+                });
+            };
+
             listEl.innerHTML = records.map(rec => {
                 const borderLeftColor = rec.status === 'APROVADO' ? '#16A34A' : rec.status === 'REJEITADO' ? '#DC2626' : '#D97706';
                 const itemsHtml = (rec.items || []).map(it => {
@@ -8987,12 +9100,29 @@ class KippeApplication {
                                 'BONIFICACAO_ACEITA': `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#CCFBF1;color:#115E59;border:1px solid #5EEAD4;font-size:8px;font-weight:900;">🎁 BONIFICAÇÃO ACEITA</span>`,
                             };
                             const badge = badgeMap[st] || `<span style="display:inline-block;padding:2px 6px;border-radius:5px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;font-size:8px;font-weight:900;">REGISTRADA</span>`;
+                            const safeProdAttr = String(d.product_name || d.sku || '').replace(/"/g, '&quot;');
+                            const safeNfAttr = String(rec.invoice_number || '').replace(/"/g, '&quot;');
                             return `
                                 <div style="font-size:10px;color:#7F1D1D;font-weight:700;margin:0;line-height:1.35;">
                                     • ${d.product_name}: Esperado <strong>${d.expected_qty}</strong> / Conferido <strong>${d.counted_qty}</strong>
                                     (${d.divergence_qty > 0 ? '+' : ''}${d.divergence_qty}) — <span style="text-transform:uppercase;">${d.reason}</span>
                                     ${d.notes ? `(${d.notes})` : ''}
-                                    <div style="margin-top:3px;">${badge}</div>
+                                    <div style="margin-top:5px;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                                        ${badge}
+                                        ${st !== 'COMPLEMENTO_RECEBIDO' ? `
+                                            <button type="button"
+                                                data-div-id="${d.id}"
+                                                data-div-name="${safeProdAttr}"
+                                                data-div-nf="${safeNfAttr}"
+                                                data-div-current="${st}"
+                                                data-div-amount="${amtNum}"
+                                                data-div-diff="${Number(d.divergence_qty || 0)}"
+                                                onclick="window.openReclassifyDivergenceModal(this)"
+                                                style="background:#FFFFFF;color:#124191;border:1px solid #BFDBFE;border-radius:6px;padding:3px 8px;font-size:8.5px;font-weight:900;text-transform:uppercase;cursor:pointer;">
+                                                ✏️ ALTERAR DESFECHO
+                                            </button>
+                                        ` : ''}
+                                    </div>
                                 </div>
                             `;
                         }).join('')}
